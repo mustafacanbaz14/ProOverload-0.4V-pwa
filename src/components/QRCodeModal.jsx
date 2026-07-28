@@ -52,20 +52,20 @@ const QRCodeModal = memo(({ isOpen, onClose, fullData, onImportData }) => {
 
         <div className="p-4 space-y-4 overflow-y-auto hide-scrollbar text-xs">
           <div className="bg-cyan-950/20 border border-cyan-900/40 p-3 rounded-2xl">
-            <h4 className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider mb-1">Cihazlar Arası Aktarım</h4>
-            <p className="text-[10px] text-zinc-400 leading-relaxed font-mono">
+            <h4 className="text-[11px] font-bold text-cyan-400 uppercase tracking-wider mb-1">Cihazlar Arası Aktarım</h4>
+            <p className="text-[11px] text-zinc-400 leading-relaxed font-mono">
               Verilerinizi dosya indirmeden metin kodu şeklinde kopyalayıp yeni cihazınızda aşağıdaki alana yapıştırarak saniyeler içinde taşıyabilirsiniz.
             </p>
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">1. Bu Cihazın Aktarım Kodu</label>
-            <div className="bg-zinc-950 border border-zinc-800 p-2.5 rounded-xl font-mono text-[9px] text-zinc-400 break-all max-h-24 overflow-y-auto">
+            <label className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block">1. Bu Cihazın Aktarım Kodu</label>
+            <div className="bg-zinc-950 border border-zinc-800 p-2.5 rounded-xl font-mono text-[10px] text-zinc-400 break-all max-h-24 overflow-y-auto">
               {dataStr ? dataStr.substring(0, 160) + '...' : 'Veri hazırlanıyor...'}
             </div>
             <button
               onClick={handleCopy}
-              className="w-full bg-cyan-950/40 border border-cyan-900/50 text-cyan-400 active:bg-cyan-900/60 font-bold py-2.5 px-3 rounded-xl flex items-center justify-center space-x-2 uppercase tracking-wider text-[10px] transition-colors"
+              className="w-full bg-cyan-950/40 border border-cyan-900/50 text-cyan-400 active:bg-cyan-900/60 font-bold py-2.5 px-3 rounded-xl flex items-center justify-center space-x-2 uppercase tracking-wider text-[11px] transition-colors"
             >
               {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
               <span>{copied ? 'Kopyalandı!' : 'Aktarım Kodunu Kopyala'}</span>
@@ -73,23 +73,23 @@ const QRCodeModal = memo(({ isOpen, onClose, fullData, onImportData }) => {
           </div>
 
           <div className="border-t border-zinc-800 pt-3 space-y-2">
-            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">2. Yeni Cihaza Veri Yapıştır & Yükle</label>
+            <label className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block">2. Yeni Cihaza Veri Yapıştır & Yükle</label>
             <textarea
               rows="3"
               value={inputString}
               onChange={(e) => setInputString(e.target.value)}
               placeholder="Diğer cihazdan kopyaladığınız aktarım kodunu buraya yapıştırın..."
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 font-mono text-[9px] text-zinc-200 outline-none focus:border-cyan-600 transition-colors"
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 font-mono text-[10px] text-zinc-200 outline-none focus:border-cyan-600 transition-colors"
             />
             {importStatus === 'error' && (
-              <p className="text-[9px] text-red-400 font-mono">Geçersiz kod biçimi. Lütfen tam kopyaladığınızdan emin olun.</p>
+              <p className="text-[10px] text-red-400 font-mono">Geçersiz kod biçimi. Lütfen tam kopyaladığınızdan emin olun.</p>
             )}
             {importStatus === 'success' && (
-              <p className="text-[9px] text-emerald-400 font-mono">Veriler başarıyla aktarıldı!</p>
+              <p className="text-[10px] text-emerald-400 font-mono">Veriler başarıyla aktarıldı!</p>
             )}
             <button
               onClick={handleImportSubmit}
-              className="w-full bg-emerald-600 active:bg-emerald-700 text-white font-bold py-2.5 px-3 rounded-xl flex items-center justify-center space-x-2 uppercase tracking-wider text-[10px] transition-colors"
+              className="w-full bg-emerald-600 active:bg-emerald-700 text-white font-bold py-2.5 px-3 rounded-xl flex items-center justify-center space-x-2 uppercase tracking-wider text-[11px] transition-colors"
             >
               <Upload size={14} />
               <span>Veriyi Aktar & Yükle</span>

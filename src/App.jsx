@@ -780,6 +780,7 @@ export default function App() {
           setIsQRModalOpen={setIsQRModalOpen}
           workouts={workouts}
           nutritionHistory={nutritionHistory}
+          lastBackupDate={lastBackupDate}
         />
 
         {/* QR CODE MODAL */}
@@ -834,7 +835,7 @@ export default function App() {
               <h3 className="text-sm font-bold text-zinc-100 mb-2 uppercase tracking-wide border-b border-zinc-800 pb-3 flex items-center">
                 <BrainCircuit size={16} className="mr-2 text-cyan-500" /> Hazırbulunuşluk
               </h3>
-              <p className="text-[10px] text-zinc-400 mb-6 mt-2 leading-tight">Yüklenme şiddetini ve sakatlık riskini hesaplayabilmemiz için bugünkü mental ve fiziksel toparlanmanızı puanlayın.</p>
+              <p className="text-[11px] text-zinc-400 mb-6 mt-2 leading-tight">Yüklenme şiddetini ve sakatlık riskini hesaplayabilmemiz için bugünkü mental ve fiziksel toparlanmanızı puanlayın.</p>
 
               <div className="space-y-5 mb-8">
                 <div>
@@ -869,12 +870,12 @@ export default function App() {
 
               <div className="space-y-4 mb-6">
                 <div>
-                  <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Toplam Süre (Dakika)</label>
+                  <label className="block text-[11px] font-bold text-zinc-500 uppercase mb-1">Toplam Süre (Dakika)</label>
                   <input type="number" inputMode="decimal" value={activeWorkout?.duration || ''} onChange={e => setActiveWorkout(p => ({ ...p, duration: parseNumber(e.target.value) }))} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-emerald-400 font-mono text-sm outline-none focus:border-emerald-500 transition-colors" />
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Zorluk Derecesi (RPE)</label>
+                  <label className="block text-[11px] font-bold text-zinc-500 uppercase mb-1">Zorluk Derecesi (RPE)</label>
                   <div className="flex space-x-2 bg-zinc-950 p-3 rounded-xl border border-zinc-800">
                     {[1, 2, 3, 4, 5].map(star => (
                       <Star key={star} onClick={() => setActiveWorkout(prev => ({ ...prev, rating: star }))} fill={activeWorkout?.rating >= star ? "currentColor" : "none"} className={`transition-colors cursor-pointer ${activeWorkout?.rating >= star ? "text-yellow-500" : "text-zinc-700"}`} size={24} />
@@ -883,7 +884,7 @@ export default function App() {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Notlar (Pump, Tükeniş vb.)</label>
+                  <label className="block text-[11px] font-bold text-zinc-500 uppercase mb-1">Notlar (Pump, Tükeniş vb.)</label>
                   <textarea value={activeWorkout?.notes || ''} onChange={e => setActiveWorkout(p => ({ ...p, notes: e.target.value }))} rows="3" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-zinc-300 font-mono text-xs outline-none focus:border-emerald-500 transition-colors"></textarea>
                 </div>
               </div>
@@ -902,7 +903,7 @@ export default function App() {
             <div className="bg-zinc-900 w-full max-w-xs rounded-2xl border border-zinc-800 p-5 text-center space-y-4">
               <AlertCircle size={32} className="text-red-500 mx-auto" />
               <h4 className="text-xs font-bold text-zinc-100 uppercase tracking-wider">Silme Onayı</h4>
-              <p className="text-[10px] text-zinc-400 font-mono">Bu kaydı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.</p>
+              <p className="text-[11px] text-zinc-400 font-mono">Bu kaydı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.</p>
               <div className="flex space-x-2 pt-2">
                 <button onClick={() => setDeleteConfirm({ isOpen: false, type: null, id: null })} className="flex-1 bg-zinc-800 text-zinc-300 font-bold py-2.5 rounded-xl text-xs uppercase">İptal</button>
                 <button onClick={handleDeleteConfirmExecute} className="flex-1 bg-red-600 text-white font-bold py-2.5 rounded-xl text-xs uppercase shadow-lg shadow-red-900/30">Sil</button>
@@ -920,7 +921,7 @@ export default function App() {
             </div>
             <div className="p-4 border-b border-zinc-800 bg-zinc-950">
               {!isAddingCustom ? (
-                <button onClick={() => setIsAddingCustom(true)} className="w-full bg-zinc-900 active:bg-zinc-800 border border-zinc-800 text-cyan-500 font-bold py-3 rounded-xl text-[10px] uppercase tracking-wider flex justify-center items-center transition-colors">
+                <button onClick={() => setIsAddingCustom(true)} className="w-full bg-zinc-900 active:bg-zinc-800 border border-zinc-800 text-cyan-500 font-bold py-3 rounded-xl text-[11px] uppercase tracking-wider flex justify-center items-center transition-colors">
                   <Plus size={14} className="mr-2" /> Yeni Özel Hareket Ekle
                 </button>
               ) : (
@@ -928,8 +929,8 @@ export default function App() {
                   <input type="text" value={newCustomExercise} onChange={(e) => setNewCustomExercise(e.target.value)} placeholder="Hareket Adı (Örn: Cable Lateral Raise)" className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-zinc-100 font-mono text-xs outline-none focus:border-cyan-500 transition-colors" />
                   <div className="flex space-x-2">
                     <div className="flex-1">
-                      <label className="block text-[8px] font-bold text-zinc-500 uppercase mb-1">Kas Grubu</label>
-                      <select value={newExMuscle} onChange={e => setNewExMuscle(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-zinc-300 text-[10px] outline-none">
+                      <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Kas Grubu</label>
+                      <select value={newExMuscle} onChange={e => setNewExMuscle(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-zinc-300 text-[11px] outline-none">
                         <option value="Göğüs">Göğüs</option>
                         <option value="Sırt">Sırt</option>
                         <option value="Bacak">Bacak</option>
@@ -940,8 +941,8 @@ export default function App() {
                       </select>
                     </div>
                     <div className="flex-1">
-                      <label className="block text-[8px] font-bold text-zinc-500 uppercase mb-1">Mekanik</label>
-                      <select value={newExMechanics} onChange={e => setNewExMechanics(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-zinc-300 text-[10px] outline-none">
+                      <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Mekanik</label>
+                      <select value={newExMechanics} onChange={e => setNewExMechanics(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-zinc-300 text-[11px] outline-none">
                         <option value="Push">İtme (Push)</option>
                         <option value="Pull">Çekme (Pull)</option>
                         <option value="Legs">Bacak (Legs)</option>
@@ -951,7 +952,7 @@ export default function App() {
                     </div>
                   </div>
                   <div className="flex space-x-2 pt-2">
-                    <button onClick={() => { setIsAddingCustom(false); setNewCustomExercise(''); }} className="flex-1 text-zinc-500 bg-zinc-950 active:bg-zinc-800 rounded-lg text-[10px] uppercase font-bold py-2.5 transition-colors">İptal</button>
+                    <button onClick={() => { setIsAddingCustom(false); setNewCustomExercise(''); }} className="flex-1 text-zinc-500 bg-zinc-950 active:bg-zinc-800 rounded-lg text-[11px] uppercase font-bold py-2.5 transition-colors">İptal</button>
                     <button onClick={() => {
                       const newEx = (newCustomExercise || '').trim();
                       if (!newEx) return;
@@ -962,7 +963,7 @@ export default function App() {
                       setNewCustomExercise('');
                       setIsAddingCustom(false);
                       handleSelectExercise(newEx);
-                    }} className="flex-1 bg-cyan-600 active:bg-cyan-700 text-white rounded-lg text-[10px] uppercase font-bold py-2.5 transition-colors">Kaydet</button>
+                    }} className="flex-1 bg-cyan-600 active:bg-cyan-700 text-white rounded-lg text-[11px] uppercase font-bold py-2.5 transition-colors">Kaydet</button>
                   </div>
                 </div>
               )}
@@ -982,7 +983,7 @@ export default function App() {
                   <button key={ex} onClick={() => handleSelectExercise(ex)} className="w-full flex justify-between items-center px-5 py-4 border-b border-zinc-900 text-zinc-300 active:bg-zinc-900 transition-colors text-left">
                     <div>
                       <div className="text-xs font-bold font-mono">{ex}</div>
-                      <div className="text-[8px] text-zinc-500 uppercase tracking-widest mt-1">{muscle} &bull; {mechanics}</div>
+                      <div className="text-[10px] text-zinc-500 uppercase tracking-widest mt-1">{muscle} &bull; {mechanics}</div>
                     </div>
                     {getRecentExerciseData(ex) && <Activity size={14} className="text-cyan-600" />}
                   </button>

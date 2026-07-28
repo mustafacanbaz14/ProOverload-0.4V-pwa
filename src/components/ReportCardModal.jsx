@@ -146,35 +146,35 @@ const ReportCardModal = memo(({ isOpen, onClose, workouts = [], personalRecords 
             <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
               <div>
                 <span className="text-sm font-bold text-cyan-400 uppercase tracking-widest block">HYPERTROPHY LAB</span>
-                <span className="text-[9px] text-zinc-500 font-mono">Gelişim & Başarım Karnesi</span>
+                <span className="text-[10px] text-zinc-500 font-mono">Gelişim & Başarım Karnesi</span>
               </div>
               <Activity size={20} className="text-cyan-500" />
             </div>
 
             <div className="grid grid-cols-2 gap-2 text-xs font-mono">
               <div className="bg-zinc-900/80 p-2.5 rounded-xl border border-zinc-800">
-                <span className="text-[8px] text-zinc-500 uppercase font-bold block">Toplam Seans</span>
+                <span className="text-[10px] text-zinc-500 uppercase font-bold block">Toplam Seans</span>
                 <span className="text-cyan-400 font-bold text-lg">{totalSessions}</span>
               </div>
               <div className="bg-zinc-900/80 p-2.5 rounded-xl border border-zinc-800">
-                <span className="text-[8px] text-zinc-500 uppercase font-bold block">Kaldırılan Tonaj</span>
+                <span className="text-[10px] text-zinc-500 uppercase font-bold block">Kaldırılan Tonaj</span>
                 <span className="text-emerald-400 font-bold text-lg">{Math.round(totalTonnage / 1000)} Ton</span>
               </div>
               <div className="bg-zinc-900/80 p-2.5 rounded-xl border border-zinc-800">
-                <span className="text-[8px] text-zinc-500 uppercase font-bold block">Etkili Setler</span>
+                <span className="text-[10px] text-zinc-500 uppercase font-bold block">Etkili Setler</span>
                 <span className="text-amber-400 font-bold text-lg">{totalSets}</span>
               </div>
               <div className="bg-zinc-900/80 p-2.5 rounded-xl border border-zinc-800">
-                <span className="text-[8px] text-zinc-500 uppercase font-bold block">1RM Rekorları</span>
+                <span className="text-[10px] text-zinc-500 uppercase font-bold block">1RM Rekorları</span>
                 <span className="text-purple-400 font-bold text-lg">{prCount} Rekor</span>
               </div>
             </div>
 
             {/* Öne Çıkan Rekorlar */}
             <div className="space-y-1.5 pt-1">
-              <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider block">Öne Çıkan Güç Rekorları</span>
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Öne Çıkan Güç Rekorları</span>
               {Array.from(personalRecords ? personalRecords.entries() : []).slice(0, 3).map(([name, rec]) => (
-                <div key={name} className="bg-zinc-900/90 p-2 rounded-xl border border-zinc-800 flex justify-between items-center text-[10px] font-mono">
+                <div key={name} className="bg-zinc-900/90 p-2 rounded-xl border border-zinc-800 flex justify-between items-center text-[11px] font-mono">
                   <span className="text-zinc-200 font-bold truncate pr-2">{name}</span>
                   <span className="text-cyan-400 font-bold shrink-0">1RM: {rec.e1rm}kg</span>
                 </div>

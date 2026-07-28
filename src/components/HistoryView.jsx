@@ -22,19 +22,19 @@ const HistoryView = memo(({
       <div className="flex bg-zinc-900 p-1 rounded-2xl border border-zinc-800">
         <button
           onClick={() => setHistoryTab('workouts')}
-          className={`flex-1 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-colors ${historyTab === 'workouts' ? 'bg-cyan-600 text-white' : 'text-zinc-500'}`}
+          className={`flex-1 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-colors ${historyTab === 'workouts' ? 'bg-cyan-600 text-white' : 'text-zinc-500'}`}
         >
           Antrenmanlar ({workouts.length})
         </button>
         <button
           onClick={() => setHistoryTab('metrics')}
-          className={`flex-1 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-colors ${historyTab === 'metrics' ? 'bg-cyan-600 text-white' : 'text-zinc-500'}`}
+          className={`flex-1 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-colors ${historyTab === 'metrics' ? 'bg-cyan-600 text-white' : 'text-zinc-500'}`}
         >
           Ölçümler ({metricsHistory.length})
         </button>
         <button
           onClick={() => setHistoryTab('nutrition')}
-          className={`flex-1 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-colors ${historyTab === 'nutrition' ? 'bg-cyan-600 text-white' : 'text-zinc-500'}`}
+          className={`flex-1 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-colors ${historyTab === 'nutrition' ? 'bg-cyan-600 text-white' : 'text-zinc-500'}`}
         >
           Beslenme ({nutritionHistory.length})
         </button>
@@ -53,13 +53,13 @@ const HistoryView = memo(({
                   <div className="flex justify-between items-start border-b border-zinc-800 pb-2">
                     <div>
                       <h4 className="text-sm font-bold text-cyan-400">{w.name || 'Serbest Antrenman'}</h4>
-                      <div className="flex items-center space-x-2 text-[9px] font-mono text-zinc-500 mt-0.5">
+                      <div className="flex items-center space-x-2 text-[10px] font-mono text-zinc-500 mt-0.5">
                         <Calendar size={10} />
                         <input
                           type="date"
                           value={w.date}
                           onChange={(e) => handleEditOldWorkoutDate(w.id, e.target.value)}
-                          className="bg-transparent text-zinc-400 font-mono outline-none border-b border-dashed border-zinc-700 focus:border-cyan-500 text-[9px]"
+                          className="bg-transparent text-zinc-400 font-mono outline-none border-b border-dashed border-zinc-700 focus:border-cyan-500 text-[10px]"
                         />
                       </div>
                     </div>
@@ -88,22 +88,22 @@ const HistoryView = memo(({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-[9px] font-mono">
+                  <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
                     <div className="bg-zinc-950 p-2 rounded-xl border border-zinc-800/80">
-                      <span className="text-zinc-500 block text-[8px] uppercase font-bold">Toplam Hacim</span>
+                      <span className="text-zinc-500 block text-[10px] uppercase font-bold">Toplam Hacim</span>
                       <span className="text-zinc-200 font-bold">{tonnage} kg</span>
                     </div>
                     <div className="bg-zinc-950 p-2 rounded-xl border border-zinc-800/80">
-                      <span className="text-zinc-500 block text-[8px] uppercase font-bold">Etkili Set (RIR ≤ 3)</span>
+                      <span className="text-zinc-500 block text-[10px] uppercase font-bold">Etkili Set (RIR ≤ 3)</span>
                       <span className="text-cyan-400 font-bold">{effectiveSets} Set</span>
                     </div>
                   </div>
 
                   <div className="space-y-1.5 pt-1">
                     {(w.exercises || []).map((ex, i) => (
-                      <div key={i} className="text-[10px] font-mono text-zinc-300 bg-zinc-950/50 p-2 rounded-xl border border-zinc-800/50 flex justify-between items-center">
+                      <div key={i} className="text-[11px] font-mono text-zinc-300 bg-zinc-950/50 p-2 rounded-xl border border-zinc-800/50 flex justify-between items-center">
                         <span className="font-bold text-zinc-200 truncate pr-2">{ex.name}</span>
-                        <span className="text-zinc-400 text-[9px] shrink-0">
+                        <span className="text-zinc-400 text-[10px] shrink-0">
                           {(ex.sets || []).filter(isWorkingSet).map(s => `${s.weight}x${s.reps}`).join(' · ')}
                         </span>
                       </div>
@@ -137,7 +137,7 @@ const HistoryView = memo(({
                     </button>
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-2 text-[9px] font-mono text-zinc-300 pt-1">
+                <div className="grid grid-cols-3 gap-2 text-[10px] font-mono text-zinc-300 pt-1">
                   <div>Kilo: <strong className="text-cyan-400">{m.weight} kg</strong></div>
                   <div>Yağ: <strong className="text-cyan-400">%{m.bodyFat || '-'}</strong></div>
                   <div>Kol: <strong className="text-zinc-200">{m.measurements?.arm || '-'} cm</strong></div>
@@ -172,7 +172,7 @@ const HistoryView = memo(({
                     </button>
                   </div>
                 </div>
-                <div className="grid grid-cols-4 gap-2 text-[9px] font-mono text-zinc-300 pt-1">
+                <div className="grid grid-cols-4 gap-2 text-[10px] font-mono text-zinc-300 pt-1">
                   <div>Kalori: <strong className="text-cyan-400">{n.caloriesIn} kcal</strong></div>
                   <div>Protein: <strong className="text-emerald-400">{n.protein}g</strong></div>
                   <div>Karb: <strong className="text-amber-400">{n.carbs}g</strong></div>

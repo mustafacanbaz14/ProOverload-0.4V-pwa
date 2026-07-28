@@ -29,7 +29,7 @@ const Section = ({ icon, title, action, children }) => (
 
 const Field = ({ label, children }) => (
   <div>
-    <label className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider block mb-1.5">{label}</label>
+    <label className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider block mb-1.5">{label}</label>
     {children}
   </div>
 );
@@ -103,7 +103,7 @@ const MetricsView = memo(({
           latestMetrics && (
             <button
               onClick={fillFromLatest}
-              className="text-[9px] font-mono text-cyan-400 active:text-cyan-300 flex items-center border border-cyan-900/50 rounded-lg px-2 py-1"
+              className="text-[10px] font-mono text-cyan-400 active:text-cyan-300 flex items-center border border-cyan-900/50 rounded-lg px-2 py-1"
             >
               <History size={10} className="mr-1" /> Son ölçümden doldur
             </button>
@@ -116,7 +116,7 @@ const MetricsView = memo(({
           onChange={(e) => updateField('date', e.target.value)}
           className={inputClass}
         />
-        <p className="text-[9px] font-mono text-zinc-500 leading-relaxed">
+        <p className="text-[10px] font-mono text-zinc-500 leading-relaxed">
           {isExistingRecord
             ? 'Bu tarihte kayıt var — kaydettiğinde üzerine yazılır.'
             : 'Bu tarihte kayıt yok — kaydettiğinde yeni kayıt oluşur.'}
@@ -155,10 +155,10 @@ const MetricsView = memo(({
                 onClick={() => updateField('fatPreference', opt.key)}
                 className={`py-2 px-1 rounded-xl border text-center transition-colors ${selected ? 'bg-cyan-900/25 border-cyan-600' : 'bg-zinc-950 border-zinc-800'}`}
               >
-                <span className={`block text-[8px] font-bold uppercase tracking-wide ${selected ? 'text-cyan-400' : 'text-zinc-500'}`}>
+                <span className={`block text-[10px] font-bold uppercase tracking-wide ${selected ? 'text-cyan-400' : 'text-zinc-500'}`}>
                   {FAT_METHOD_LABELS[opt.key].replace(' Bazlı', '')}
                 </span>
-                <span className={`block text-[10px] font-mono mt-0.5 ${selected ? 'text-zinc-100' : 'text-zinc-500'}`}>
+                <span className={`block text-[11px] font-mono mt-0.5 ${selected ? 'text-zinc-100' : 'text-zinc-500'}`}>
                   {opt.key === 'manual' ? `%${parseNumber(form.bodyFat) || 0}` : (opt.value !== '-' ? `%${opt.value}` : '—')}
                 </span>
               </button>
@@ -184,7 +184,7 @@ const MetricsView = memo(({
               <button
                 key={m}
                 onClick={() => updateField('method', m)}
-                className={`flex-1 py-2 rounded-xl border text-[10px] font-bold uppercase tracking-wider transition-colors ${form.method === m ? 'bg-cyan-900/25 border-cyan-600 text-cyan-400' : 'bg-zinc-950 border-zinc-800 text-zinc-500'}`}
+                className={`flex-1 py-2 rounded-xl border text-[11px] font-bold uppercase tracking-wider transition-colors ${form.method === m ? 'bg-cyan-900/25 border-cyan-600 text-cyan-400' : 'bg-zinc-950 border-zinc-800 text-zinc-500'}`}
               >
                 {m} Bölge Kaliper
               </button>
@@ -194,7 +194,7 @@ const MetricsView = memo(({
           <div className="grid grid-cols-3 gap-2">
             {visibleSites.map(site => (
               <div key={site.key}>
-                <label className="text-[8px] font-mono text-zinc-500 uppercase block mb-1">{site.label}</label>
+                <label className="text-[10px] font-mono text-zinc-500 uppercase block mb-1">{site.label}</label>
                 <input
                   type="number" inputMode="decimal" step="0.5"
                   value={form.skinfolds?.[site.key] || ''}
@@ -218,13 +218,13 @@ const MetricsView = memo(({
             { label: 'BMR', value: `${computedComp.bmr} kcal`, color: 'text-amber-400' },
           ].map(item => (
             <div key={item.label} className="bg-zinc-950 p-2.5 rounded-xl border border-zinc-800/80">
-              <span className="text-zinc-500 block text-[8px] uppercase font-bold tracking-wider">{item.label}</span>
+              <span className="text-zinc-500 block text-[10px] uppercase font-bold tracking-wider">{item.label}</span>
               <span className={`${item.color} font-bold text-base font-mono`}>{item.value}</span>
             </div>
           ))}
         </div>
 
-        <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 space-y-1.5 text-[9px] font-mono text-zinc-300">
+        <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 space-y-1.5 text-[10px] font-mono text-zinc-300">
           <div className="flex justify-between"><span>Genetik potansiyel</span> <strong className="text-cyan-400">%{computedComp.potentialAchieved} (max FFMI {computedComp.maxPotentialFFMI})</strong></div>
           <div className="flex justify-between"><span>İskelet çatısı</span> <strong className="text-zinc-200">{computedComp.frameSize}</strong></div>
           <div className="flex justify-between"><span>Max doğal kilo</span> <strong className="text-emerald-400">{computedComp.maxNaturalWeight} kg</strong></div>
@@ -232,8 +232,8 @@ const MetricsView = memo(({
         </div>
 
         <div className="bg-cyan-950/20 border border-cyan-900/30 p-3 rounded-xl space-y-1">
-          <span className="text-cyan-400 font-bold uppercase block text-[8px] tracking-wider">Tavsiye</span>
-          <p className="text-zinc-300 leading-relaxed text-[9px] font-mono">{computedComp.trainingAdvice}</p>
+          <span className="text-cyan-400 font-bold uppercase block text-[10px] tracking-wider">Tavsiye</span>
+          <p className="text-zinc-300 leading-relaxed text-[10px] font-mono">{computedComp.trainingAdvice}</p>
         </div>
       </Section>
 
@@ -243,14 +243,14 @@ const MetricsView = memo(({
         action={
           <button
             onClick={() => setIsMeasurementGuideOpen(!isMeasurementGuideOpen)}
-            className="text-[9px] text-cyan-400 flex items-center font-mono border border-cyan-900/50 rounded-lg px-2 py-1"
+            className="text-[10px] text-cyan-400 flex items-center font-mono border border-cyan-900/50 rounded-lg px-2 py-1"
           >
             <Info size={10} className="mr-1" /> Rehber
           </button>
         }
       >
         {isMeasurementGuideOpen && (
-          <div className="bg-zinc-950 border border-zinc-800 p-3 rounded-xl text-[9px] font-mono text-zinc-400 space-y-1.5">
+          <div className="bg-zinc-950 border border-zinc-800 p-3 rounded-xl text-[10px] font-mono text-zinc-400 space-y-1.5">
             <p><strong className="text-zinc-200">Boyun:</strong> Adem elmasının hemen altından.</p>
             <p><strong className="text-zinc-200">Omuz:</strong> Kollar yanda, en geniş noktadan.</p>
             <p><strong className="text-zinc-200">Göğüs:</strong> Meme başı hizasında, nefes verdikten sonra.</p>
@@ -265,7 +265,7 @@ const MetricsView = memo(({
         <div className="grid grid-cols-2 gap-2.5">
           {BODY_METRICS.filter(m => m.key !== 'weight').map(m => (
             <div key={m.key} className="bg-zinc-950 px-2.5 py-2 rounded-xl border border-zinc-800 flex justify-between items-center">
-              <span className="text-[10px] font-mono text-zinc-400">{m.label}</span>
+              <span className="text-[11px] font-mono text-zinc-400">{m.label}</span>
               <input
                 type="number" inputMode="decimal" step="0.5"
                 value={form.measurements?.[m.key] || ''}

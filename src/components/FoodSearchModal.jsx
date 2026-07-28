@@ -152,7 +152,7 @@ const FoodSearchModal = memo(({
                 <button
                   key={t.key}
                   onClick={() => { setTab(t.key); setErrorMsg(''); }}
-                  className={`flex-1 py-2 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-colors flex items-center justify-center ${active ? 'bg-orange-600 text-white' : 'text-zinc-500'}`}
+                  className={`flex-1 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center justify-center ${active ? 'bg-orange-600 text-white' : 'text-zinc-500'}`}
                 >
                   <TabIcon size={11} className="mr-1" /> {t.label}
                 </button>
@@ -173,7 +173,7 @@ const FoodSearchModal = memo(({
                       <button
                         key={m.key}
                         onClick={() => { setOnlineMode(m.key); setQuery(''); setOnlineResults([]); setErrorMsg(''); }}
-                        className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase border transition-colors flex items-center justify-center ${onlineMode === m.key ? 'border-orange-600 text-orange-400 bg-orange-950/20' : 'border-zinc-800 text-zinc-500'}`}
+                        className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold uppercase border transition-colors flex items-center justify-center ${onlineMode === m.key ? 'border-orange-600 text-orange-400 bg-orange-950/20' : 'border-zinc-800 text-zinc-500'}`}
                       >
                         <ModeIcon size={11} className="mr-1" /> {m.label}
                       </button>
@@ -203,7 +203,7 @@ const FoodSearchModal = memo(({
                     <button
                       key={c}
                       onClick={() => setCategory(c)}
-                      className={`shrink-0 px-2.5 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wide border transition-colors ${category === c ? 'border-orange-600 text-orange-400 bg-orange-950/20' : 'border-zinc-800 text-zinc-500'}`}
+                      className={`shrink-0 px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide border transition-colors ${category === c ? 'border-orange-600 text-orange-400 bg-orange-950/20' : 'border-zinc-800 text-zinc-500'}`}
                     >
                       {c}
                     </button>
@@ -211,14 +211,14 @@ const FoodSearchModal = memo(({
                 </div>
               )}
 
-              <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400">
+              <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400">
                 <span>Porsiyon</span>
                 <div className="flex items-center gap-1.5">
                   {[50, 100, 150, 200].map(g => (
                     <button
                       key={g}
                       onClick={() => setServingGram(g)}
-                      className={`px-2 py-1 rounded-lg border text-[9px] font-bold transition-colors ${servingGram === g ? 'border-orange-600 text-orange-400' : 'border-zinc-800 text-zinc-500'}`}
+                      className={`px-2 py-1 rounded-lg border text-[10px] font-bold transition-colors ${servingGram === g ? 'border-orange-600 text-orange-400' : 'border-zinc-800 text-zinc-500'}`}
                     >
                       {g}
                     </button>
@@ -240,7 +240,7 @@ const FoodSearchModal = memo(({
         <div className="flex-1 overflow-y-auto p-3 space-y-2.5 hide-scrollbar">
           {tab === 'custom' ? (
             <div className="space-y-3">
-              <p className="text-[9px] font-mono text-zinc-500 leading-relaxed">
+              <p className="text-[10px] font-mono text-zinc-500 leading-relaxed">
                 100 gram başına değerleri gir. Kaydettiğin besin yerel listede
                 &quot;Kendi Besinlerim&quot; altında kalıcı olarak durur.
               </p>
@@ -261,7 +261,7 @@ const FoodSearchModal = memo(({
                   { key: 'calories100g', label: 'Kalori (kcal)', color: 'text-cyan-400' },
                 ].map(f => (
                   <div key={f.key}>
-                    <label className="text-[8px] font-mono text-zinc-500 uppercase block mb-1">{f.label}</label>
+                    <label className="text-[10px] font-mono text-zinc-500 uppercase block mb-1">{f.label}</label>
                     <input
                       type="number" inputMode="decimal" step="0.1"
                       value={customForm[f.key]}
@@ -274,7 +274,7 @@ const FoodSearchModal = memo(({
               </div>
 
               {estimatedKcal > 0 && (
-                <div className="text-[9px] font-mono text-zinc-500 bg-zinc-950 border border-zinc-800 rounded-xl p-2.5">
+                <div className="text-[10px] font-mono text-zinc-500 bg-zinc-950 border border-zinc-800 rounded-xl p-2.5">
                   Makrolara göre tahmini kalori: <strong className="text-cyan-400">{estimatedKcal} kcal</strong>
                   {' '}— kalori alanını boş bırakırsan bu değer kullanılır.
                 </div>
@@ -290,9 +290,9 @@ const FoodSearchModal = memo(({
             </div>
           ) : (
             <>
-              {errorMsg && <div className="text-center py-6 text-zinc-500 font-mono text-[10px] px-4">{errorMsg}</div>}
+              {errorMsg && <div className="text-center py-6 text-zinc-500 font-mono text-[11px] px-4">{errorMsg}</div>}
               {!errorMsg && results.length === 0 && (
-                <div className="text-center py-8 text-zinc-600 font-mono text-[10px]">
+                <div className="text-center py-8 text-zinc-600 font-mono text-[11px]">
                   {tab === 'online' ? 'Aramak için bir şeyler yaz.' : 'Eşleşen besin yok.'}
                 </div>
               )}
@@ -313,7 +313,7 @@ const FoodSearchModal = memo(({
                           {food.source === 'custom' && <Star size={10} className="mr-1 text-orange-400 shrink-0" fill="currentColor" />}
                           <span className="truncate">{food.name}</span>
                         </h4>
-                        <span className="text-[8px] text-zinc-500 uppercase font-mono tracking-wider">
+                        <span className="text-[10px] text-zinc-500 uppercase font-mono tracking-wider">
                           {food.brand || food.category || 'Çevrimiçi'}
                         </span>
                       </div>
@@ -329,17 +329,17 @@ const FoodSearchModal = memo(({
                         )}
                         <button
                           onClick={() => addToMeal(food)}
-                          className="bg-orange-950/40 border border-orange-900/50 text-orange-400 active:bg-orange-900/60 px-2.5 py-1.5 rounded-xl flex items-center text-[9px] font-bold uppercase transition-colors"
+                          className="bg-orange-950/40 border border-orange-900/50 text-orange-400 active:bg-orange-900/60 px-2.5 py-1.5 rounded-xl flex items-center text-[10px] font-bold uppercase transition-colors"
                         >
                           <Plus size={11} className="mr-0.5" /> Ekle
                         </button>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-4 gap-1 text-[9px] font-mono text-center pt-1 border-t border-zinc-900">
+                    <div className="grid grid-cols-4 gap-1 text-[10px] font-mono text-center pt-1 border-t border-zinc-900">
                       {macros.map(m => (
                         <div key={m.label} className="bg-zinc-900 py-1 rounded-lg">
-                          <span className="text-zinc-500 block text-[7px]">{m.label}</span>
+                          <span className="text-zinc-500 block text-[9px]">{m.label}</span>
                           <span className={`${m.color} font-bold`}>{m.value}</span>
                         </div>
                       ))}

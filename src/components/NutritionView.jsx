@@ -65,7 +65,7 @@ const NutritionView = memo(({
           <div className="flex items-center space-x-2">
             <button
               onClick={() => setIsFoodSearchOpen(true)}
-              className="bg-orange-950/50 border border-orange-900/60 text-orange-400 text-[9px] font-bold px-2 py-1 rounded-lg flex items-center hover:bg-orange-900/50 transition-colors"
+              className="bg-orange-950/50 border border-orange-900/60 text-orange-400 text-[10px] font-bold px-2 py-1 rounded-lg flex items-center hover:bg-orange-900/50 transition-colors"
             >
               <Search size={10} className="mr-1" /> Gıda Ara
             </button>
@@ -73,7 +73,7 @@ const NutritionView = memo(({
               type="date"
               value={currentNutritionForm.date}
               onChange={(e) => handleNutritionDateChange(e.target.value)}
-              className="bg-zinc-950 border border-zinc-800 rounded-xl px-2 py-1 text-zinc-300 font-mono text-[10px] outline-none"
+              className="bg-zinc-950 border border-zinc-800 rounded-xl px-2 py-1 text-zinc-300 font-mono text-[11px] outline-none"
             />
           </div>
         </div>
@@ -81,20 +81,20 @@ const NutritionView = memo(({
         {/* Günlük Toplam Makrolar */}
         <div className="grid grid-cols-4 gap-2 text-xs font-mono text-center">
           <div className="bg-zinc-950 p-2.5 rounded-xl border border-zinc-800">
-            <span className="text-[8px] text-zinc-500 uppercase font-bold block">Kalori</span>
+            <span className="text-[10px] text-zinc-500 uppercase font-bold block">Kalori</span>
             <span className="text-cyan-400 font-bold text-sm">{totals.calories}</span>
           </div>
           <div className="bg-zinc-950 p-2.5 rounded-xl border border-zinc-800">
-            <span className="text-[8px] text-zinc-500 uppercase font-bold block">Protein</span>
+            <span className="text-[10px] text-zinc-500 uppercase font-bold block">Protein</span>
             <span className="text-emerald-400 font-bold text-sm">{totals.protein}g</span>
-            <span className="text-[7px] text-zinc-600 block">/ {targetProtein}g</span>
+            <span className="text-[9px] text-zinc-600 block">/ {targetProtein}g</span>
           </div>
           <div className="bg-zinc-950 p-2.5 rounded-xl border border-zinc-800">
-            <span className="text-[8px] text-zinc-500 uppercase font-bold block">Karb</span>
+            <span className="text-[10px] text-zinc-500 uppercase font-bold block">Karb</span>
             <span className="text-amber-400 font-bold text-sm">{totals.carbs}g</span>
           </div>
           <div className="bg-zinc-950 p-2.5 rounded-xl border border-zinc-800">
-            <span className="text-[8px] text-zinc-500 uppercase font-bold block">Yağ</span>
+            <span className="text-[10px] text-zinc-500 uppercase font-bold block">Yağ</span>
             <span className="text-purple-400 font-bold text-sm">{totals.fats}g</span>
           </div>
         </div>
@@ -104,27 +104,27 @@ const NutritionView = memo(({
       {weeklyAvg && (
         <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 space-y-2">
           <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
-            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center">
+            <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center">
               <TrendingUp size={12} className="mr-1.5 text-orange-400" /> Son 7 Günlük Haftalık Ortalama
             </span>
-            <span className="text-[9px] font-mono text-zinc-500">{recent7Days.length} Gün Kaydı</span>
+            <span className="text-[10px] font-mono text-zinc-500">{recent7Days.length} Gün Kaydı</span>
           </div>
 
           <div className="grid grid-cols-4 gap-2 text-xs font-mono text-center pt-1">
             <div className="bg-zinc-950 p-2 rounded-xl border border-zinc-800/80">
-              <span className="text-[7px] text-zinc-500 uppercase block">Ort. Kalori</span>
+              <span className="text-[9px] text-zinc-500 uppercase block">Ort. Kalori</span>
               <span className="text-cyan-400 font-bold">{weeklyAvg.calories}</span>
             </div>
             <div className="bg-zinc-950 p-2 rounded-xl border border-zinc-800/80">
-              <span className="text-[7px] text-zinc-500 uppercase block">Ort. Protein</span>
+              <span className="text-[9px] text-zinc-500 uppercase block">Ort. Protein</span>
               <span className="text-emerald-400 font-bold">{weeklyAvg.protein}g</span>
             </div>
             <div className="bg-zinc-950 p-2 rounded-xl border border-zinc-800/80">
-              <span className="text-[7px] text-zinc-500 uppercase block">Ort. Karb</span>
+              <span className="text-[9px] text-zinc-500 uppercase block">Ort. Karb</span>
               <span className="text-amber-400 font-bold">{weeklyAvg.carbs}g</span>
             </div>
             <div className="bg-zinc-950 p-2 rounded-xl border border-zinc-800/80">
-              <span className="text-[7px] text-zinc-500 uppercase block">Ort. Yağ</span>
+              <span className="text-[9px] text-zinc-500 uppercase block">Ort. Yağ</span>
               <span className="text-purple-400 font-bold">{weeklyAvg.fats}g</span>
             </div>
           </div>
@@ -144,7 +144,7 @@ const NutritionView = memo(({
                 placeholder={`${index + 1}. Öğün`}
               />
               <div className="flex items-center space-x-2">
-                <span className="text-[10px] font-mono font-bold text-cyan-400">{meal.calories || 0} kcal</span>
+                <span className="text-[11px] font-mono font-bold text-cyan-400">{meal.calories || 0} kcal</span>
                 {safeMeals.length > 1 && (
                   <button
                     onClick={() => setCurrentNutritionForm(prev => ({
@@ -161,7 +161,7 @@ const NutritionView = memo(({
 
             <div className="grid grid-cols-3 gap-2 text-xs">
               <div>
-                <label className="text-[8px] font-mono text-zinc-500 uppercase block mb-1">Protein (g)</label>
+                <label className="text-[10px] font-mono text-zinc-500 uppercase block mb-1">Protein (g)</label>
                 <input
                   type="number"
                   value={meal.protein}
@@ -171,7 +171,7 @@ const NutritionView = memo(({
                 />
               </div>
               <div>
-                <label className="text-[8px] font-mono text-zinc-500 uppercase block mb-1">Karb (g)</label>
+                <label className="text-[10px] font-mono text-zinc-500 uppercase block mb-1">Karb (g)</label>
                 <input
                   type="number"
                   value={meal.carbs}
@@ -181,7 +181,7 @@ const NutritionView = memo(({
                 />
               </div>
               <div>
-                <label className="text-[8px] font-mono text-zinc-500 uppercase block mb-1">Yağ (g)</label>
+                <label className="text-[10px] font-mono text-zinc-500 uppercase block mb-1">Yağ (g)</label>
                 <input
                   type="number"
                   value={meal.fats}

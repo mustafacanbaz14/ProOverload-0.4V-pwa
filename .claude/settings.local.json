@@ -21,7 +21,8 @@
       "Bash(python -)",
       "Bash(git -c user.name=Mustafa -c user.email=mustafacanbaz448@gmail.com commit -q -m 'Yeniden yapılandırma sonrası oluşan hataları düzelt *)",
       "Bash(git -c user.name=Mustafa -c user.email=mustafacanbaz448@gmail.com commit -q -m 'Kas katkı sistemi ve ölçüm sayfası yenilendi *)",
-      "Bash(git -c user.name=Mustafa -c user.email=mustafacanbaz448@gmail.com commit -q -m 'Yerleşik besin veritabanı ve özel besin kaydı *)"
+      "Bash(git -c user.name=Mustafa -c user.email=mustafacanbaz448@gmail.com commit -q -m 'Yerleşik besin veritabanı ve özel besin kaydı *)",
+      "Bash(git -c user.name=Mustafa -c user.email=mustafacanbaz448@gmail.com commit -q -m 'Tasarım: okunabilirlik ve ayarlar penceresi *)"
     ]
   }
 }

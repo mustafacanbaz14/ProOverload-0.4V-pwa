@@ -31,7 +31,7 @@ const TrendChart = memo(({ data, color = '#22d3ee', unit = '', decimals = 1 }) =
 
   if (!chartMath) {
     return (
-      <div className="h-32 flex items-center justify-center bg-zinc-950/50 rounded-2xl border border-zinc-800 text-[10px] text-zinc-600 font-mono">
+      <div className="h-32 flex items-center justify-center bg-zinc-950/50 rounded-2xl border border-zinc-800 text-[11px] text-zinc-600 font-mono">
         Trend çizmek için en az 2 kayıt gerekli
       </div>
     );
@@ -42,7 +42,7 @@ const TrendChart = memo(({ data, color = '#22d3ee', unit = '', decimals = 1 }) =
 
   return (
     <div className="bg-zinc-950 p-3 rounded-2xl border border-zinc-800 space-y-2">
-      <div className="flex justify-between items-center text-[9px] font-mono">
+      <div className="flex justify-between items-center text-[10px] font-mono">
         <span className="text-zinc-500 uppercase tracking-wider font-bold">Zaman İçinde Değişim</span>
         <span className={`font-bold px-1.5 py-0.5 rounded ${diff === 0 ? 'text-zinc-400 bg-zinc-900' : isPositive ? 'text-emerald-400 bg-emerald-950/40' : 'text-red-400 bg-red-950/40'}`}>
           {diff > 0 ? '+' : ''}{diff.toFixed(decimals)} {unit}
@@ -74,7 +74,7 @@ const TrendChart = memo(({ data, color = '#22d3ee', unit = '', decimals = 1 }) =
         ))}
       </svg>
 
-      <div className="flex justify-between text-[8px] text-zinc-600 font-mono px-1 uppercase">
+      <div className="flex justify-between text-[10px] text-zinc-600 font-mono px-1 uppercase">
         <span>{data[0].label}</span>
         <span>{data[data.length - 1].label}</span>
       </div>

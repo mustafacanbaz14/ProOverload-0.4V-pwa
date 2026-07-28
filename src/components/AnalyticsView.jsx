@@ -54,13 +54,13 @@ const AnalyticsView = memo(({
       <div className="flex bg-zinc-900 p-1 rounded-2xl border border-zinc-800">
         <button
           onClick={() => setAnalysisType('body')}
-          className={`flex-1 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-colors ${analysisType === 'body' ? 'bg-cyan-600 text-white' : 'text-zinc-500'}`}
+          className={`flex-1 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-colors ${analysisType === 'body' ? 'bg-cyan-600 text-white' : 'text-zinc-500'}`}
         >
           Vücut Ölçüleri
         </button>
         <button
           onClick={() => setAnalysisType('1rm')}
-          className={`flex-1 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-colors ${analysisType === '1rm' ? 'bg-cyan-600 text-white' : 'text-zinc-500'}`}
+          className={`flex-1 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-colors ${analysisType === '1rm' ? 'bg-cyan-600 text-white' : 'text-zinc-500'}`}
         >
           1RM Güç İlerlemesi
         </button>
@@ -69,7 +69,7 @@ const AnalyticsView = memo(({
       {analysisType === 'body' && (
         <div className="space-y-3">
           <div className="bg-zinc-900 p-3 rounded-2xl border border-zinc-800">
-            <label className="text-[9px] font-mono text-zinc-500 uppercase block mb-1">Takip Edilen Bölge</label>
+            <label className="text-[10px] font-mono text-zinc-500 uppercase block mb-1">Takip Edilen Bölge</label>
             <select
               value={bodyMetricKey}
               onChange={(e) => setBodyMetricKey(e.target.value)}
@@ -88,7 +88,7 @@ const AnalyticsView = memo(({
       {analysisType === '1rm' && (
         <div className="space-y-3">
           <div className="bg-zinc-900 p-3 rounded-2xl border border-zinc-800">
-            <label className="text-[9px] font-mono text-zinc-500 uppercase block mb-1">Hareket Seçin</label>
+            <label className="text-[10px] font-mono text-zinc-500 uppercase block mb-1">Hareket Seçin</label>
             <select
               value={analysisExercise}
               onChange={(e) => setAnalysisExercise(e.target.value)}

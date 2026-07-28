@@ -45,14 +45,14 @@ const MuscleHeatmap = memo(({ muscleVolume = {} }) => {
         <h3 className="text-[11px] font-bold text-zinc-100 uppercase tracking-wider flex items-center">
           <Flame size={14} className="mr-2 text-orange-500" /> Kas Isı Haritası
         </h3>
-        <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Bu Hafta</span>
+        <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Bu Hafta</span>
       </div>
 
       <div className="p-4 space-y-3">
         <div className="flex justify-around items-start bg-zinc-950 py-4 rounded-xl border border-zinc-800/80">
           {/* --- ÖN CEPHE --- */}
           <div className="flex flex-col items-center">
-            <span className="text-[8px] font-mono text-zinc-500 uppercase tracking-widest mb-1.5">Ön</span>
+            <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-1.5">Ön</span>
             <svg viewBox="0 0 100 170" className="w-24 h-40">
               <circle cx="50" cy="16" r="9" fill="#3f3f46" />
               <rect x="46" y="25" width="8" height="6" fill="#3f3f46" />
@@ -83,7 +83,7 @@ const MuscleHeatmap = memo(({ muscleVolume = {} }) => {
 
           {/* --- ARKA CEPHE --- */}
           <div className="flex flex-col items-center">
-            <span className="text-[8px] font-mono text-zinc-500 uppercase tracking-widest mb-1.5">Arka</span>
+            <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-1.5">Arka</span>
             <svg viewBox="0 0 100 170" className="w-24 h-40">
               <circle cx="50" cy="16" r="9" fill="#3f3f46" />
               <rect x="46" y="25" width="8" height="6" fill="#3f3f46" />
@@ -119,18 +119,18 @@ const MuscleHeatmap = memo(({ muscleVolume = {} }) => {
         {/* Seçili bölge özeti */}
         <div className="bg-zinc-950 px-4 py-3 rounded-xl border border-zinc-800 flex items-center justify-between">
           <div>
-            <span className="text-[8px] font-mono text-zinc-500 uppercase tracking-widest block">Seçili Bölge</span>
+            <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest block">Seçili Bölge</span>
             <span className="text-sm font-bold text-zinc-100">{selected}</span>
           </div>
           <div className="text-right">
             <span className="text-lg font-mono font-bold" style={{ color: getMuscleColor(activeCount, selected) }}>
               {activeCount}
             </span>
-            <span className="text-[9px] font-mono text-zinc-500 block">{getMuscleStatus(activeCount, selected)}</span>
+            <span className="text-[10px] font-mono text-zinc-500 block">{getMuscleStatus(activeCount, selected)}</span>
           </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-1.5 text-[7px] font-mono text-center">
+        <div className="grid grid-cols-4 gap-1.5 text-[9px] font-mono text-center">
           <div className="py-1.5 rounded-lg border border-zinc-800 text-zinc-500">Pasif</div>
           <div className="py-1.5 rounded-lg border border-cyan-900/50 text-cyan-400">Koruma altı</div>
           <div className="py-1.5 rounded-lg border border-emerald-900/50 text-emerald-400">Verimli</div>

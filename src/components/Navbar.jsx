@@ -27,7 +27,7 @@ const Navbar = memo(({ view, setView }) => {
               <span className={`absolute top-0 w-8 h-0.5 rounded-full ${item.glowColor} shadow-lg animate-fade-in`} />
             )}
             <Icon size={19} className="transition-transform group-active:scale-90" />
-            <span className="text-[9px] font-mono mt-1 uppercase tracking-wider">{item.label}</span>
+            <span className="text-[10px] font-mono mt-1 uppercase tracking-wider">{item.label}</span>
           </button>
         );
       })}
