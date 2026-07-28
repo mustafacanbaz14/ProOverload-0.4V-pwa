@@ -5,7 +5,10 @@
       "Bash(git add *)",
       "Bash(git -c user.name=Mustafa -c user.email=mustafacanbaz448@gmail.com commit -q -m 'Kritik hataları düzelt ve veri yükleme yapısını sağlamlaştır *)",
       "Bash(git -c user.name=Mustafa -c user.email=mustafacanbaz448@gmail.com commit -q -m 'Kilit ekranında canlı antrenman kartı ekle *)",
-      "Bash(git -c user.name=Mustafa -c user.email=mustafacanbaz448@gmail.com commit -q -m 'Isınma seti, progresyon motoru, rekor takibi ve trend grafikleri *)"
+      "Bash(git -c user.name=Mustafa -c user.email=mustafacanbaz448@gmail.com commit -q -m 'Isınma seti, progresyon motoru, rekor takibi ve trend grafikleri *)",
+      "Bash(git -c user.name=Mustafa -c user.email=mustafacanbaz448@gmail.com commit -q -m 'Vercel yapılandırmasını düzelt *)",
+      "Bash(git checkout *)",
+      "Bash(git merge -q --no-ff iyilestirmeler -m 'İyileştirmeleri main'\\\\''e al *)"
     ]
   }
 }
