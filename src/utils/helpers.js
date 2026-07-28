@@ -79,6 +79,12 @@ export const loadWithFallback = (keys, defaultVal, parser = (d) => d) => {
   return defaultVal;
 };
 
+// Kayıt sırasına güvenilemez: içe aktarılan yedekler, tarihi sonradan düzenlenen
+// seanslar ve eski sürümlerden gelen veriler farklı sıralarda gelebiliyor.
+// Bu yüzden görüntüleme ve "en son ne yaptım" sorgularında sıralama tek yerden türetilir.
+export const sortByDateDesc = (list) =>
+  (Array.isArray(list) ? [...list] : []).sort((a, b) => new Date(b?.date || 0) - new Date(a?.date || 0));
+
 export const isWarmupSet = (set) => set?.setType === 'warmup';
 export const isWorkingSet = (set) => !isWarmupSet(set);
 

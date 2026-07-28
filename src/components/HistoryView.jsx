@@ -1,7 +1,9 @@
 import React, { memo } from 'react';
-import { History, Trash2, Calendar, Scale, Beef } from 'lucide-react';
+import { Trash2, Calendar, Scale, Beef, Pencil, Copy } from 'lucide-react';
 import { calcTonnage, calcEffectiveSets, isWorkingSet } from '../utils/helpers';
 
+// Listeler App tarafından tarihe göre azalan sırada verilir (en yeni en üstte).
+// Burada tekrar sıralama veya ters çevirme yapılmaz.
 const HistoryView = memo(({
   historyTab,
   setHistoryTab,
@@ -10,6 +12,8 @@ const HistoryView = memo(({
   nutritionHistory,
   setDeleteConfirm,
   handleEditOldWorkoutDate,
+  handleEditOldWorkout,
+  handleRepeatWorkout,
 }) => {
   return (
     <div className="p-4 space-y-4 pb-24 h-full overflow-y-auto hide-scrollbar bg-black">
@@ -39,7 +43,7 @@ const HistoryView = memo(({
           {workouts.length === 0 ? (
             <div className="text-center py-12 text-zinc-600 text-xs font-mono">Henüz antrenman kaydı yok</div>
           ) : (
-            [...workouts].reverse().map(w => {
+            workouts.map(w => {
               const tonnage = calcTonnage(w.exercises);
               const effectiveSets = calcEffectiveSets(w.exercises);
               return (
@@ -57,9 +61,29 @@ const HistoryView = memo(({
                         />
                       </div>
                     </div>
-                    <button onClick={() => setDeleteConfirm({ isOpen: true, type: 'workout', id: w.id })} className="text-zinc-600 hover:text-red-500 p-1">
-                      <Trash2 size={14} />
-                    </button>
+                    <div className="flex items-center shrink-0">
+                      <button
+                        onClick={() => handleRepeatWorkout?.(w)}
+                        title="Bu antrenmanı bugün tekrarla"
+                        className="text-zinc-500 active:text-cyan-400 p-2"
+                      >
+                        <Copy size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleEditOldWorkout?.(w)}
+                        title="Setleri düzenle"
+                        className="text-zinc-500 active:text-cyan-400 p-2"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirm({ isOpen: true, type: 'workout', id: w.id })}
+                        title="Sil"
+                        className="text-zinc-600 active:text-red-500 p-2"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 text-[9px] font-mono">
@@ -95,7 +119,7 @@ const HistoryView = memo(({
           {metricsHistory.length === 0 ? (
             <div className="text-center py-12 text-zinc-600 text-xs font-mono">Henüz ölçüm kaydı yok</div>
           ) : (
-            [...metricsHistory].reverse().map(m => (
+            metricsHistory.map(m => (
               <div key={m.id} className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 space-y-2">
                 <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
                   <div className="flex items-center space-x-2">
@@ -125,7 +149,7 @@ const HistoryView = memo(({
           {nutritionHistory.length === 0 ? (
             <div className="text-center py-12 text-zinc-600 text-xs font-mono">Henüz beslenme kaydı yok</div>
           ) : (
-            [...nutritionHistory].reverse().map(n => (
+            nutritionHistory.map(n => (
               <div key={n.id} className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 space-y-2">
                 <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
                   <div className="flex items-center space-x-2">

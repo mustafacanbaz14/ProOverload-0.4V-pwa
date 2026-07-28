@@ -16,7 +16,10 @@
       "Bash(gh --version)",
       "Bash(git ls-tree *)",
       "Bash(git -c user.name=Mustafa -c user.email=mustafacanbaz448@gmail.com commit -q -m 'Ayarlar penceresini telefonda kullanılabilir hale getir *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(node --input-type=module -e ' *)",
+      "Bash(python -)",
+      "Bash(git -c user.name=Mustafa -c user.email=mustafacanbaz448@gmail.com commit -q -m 'Yeniden yapılandırma sonrası oluşan hataları düzelt *)"
     ]
   }
 }

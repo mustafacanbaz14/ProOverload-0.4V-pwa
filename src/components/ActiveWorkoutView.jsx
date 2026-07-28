@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { Activity, Pause, Play, Plus, X, Trash2, Trophy, TrendingUp, AlertCircle, Save } from 'lucide-react';
+import { Activity, Pause, Play, Plus, X, Trash2, Trophy, TrendingUp, AlertCircle, Save, Timer } from 'lucide-react';
 import WorkoutTimer from './WorkoutTimer';
 import { FORM_RATINGS, SET_TYPES } from '../utils/constants';
 import {
@@ -22,6 +22,9 @@ const ActiveWorkoutView = memo(({
   removeSet,
   repsOnFocusRef,
   startRest,
+  stopRest,
+  rest,
+  restSecondsLeft,
 }) => {
   if (!activeWorkout) return null;
 
@@ -253,12 +256,21 @@ const ActiveWorkoutView = memo(({
                   );
                 })}
 
-                <button
-                  onClick={() => addSet(ex.id)}
-                  className="w-full py-2 bg-zinc-950 hover:bg-zinc-900 active:bg-zinc-800 text-cyan-400 border border-dashed border-zinc-800 rounded-xl font-bold text-xs flex items-center justify-center uppercase tracking-wider transition-colors"
-                >
-                  <Plus size={14} className="mr-1" /> Set Ekle
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => addSet(ex.id)}
+                    className="flex-1 py-2 bg-zinc-950 hover:bg-zinc-900 active:bg-zinc-800 text-cyan-400 border border-dashed border-zinc-800 rounded-xl font-bold text-xs flex items-center justify-center uppercase tracking-wider transition-colors"
+                  >
+                    <Plus size={14} className="mr-1" /> Set Ekle
+                  </button>
+                  <button
+                    onClick={() => startRest(settings.restSeconds || 120)}
+                    title="Dinlenme sayacını başlat"
+                    className="px-3 py-2 bg-zinc-950 active:bg-zinc-800 text-zinc-400 border border-zinc-800 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-colors shrink-0"
+                  >
+                    {settings.restSeconds || 120}s
+                  </button>
+                </div>
               </div>
             </div>
           );
@@ -271,6 +283,44 @@ const ActiveWorkoutView = memo(({
           <Plus size={16} className="mr-2 text-cyan-400" /> Hareket Ekle
         </button>
       </div>
+
+      {/* Dinlenme geri sayımı — ekranın altında sabit durur */}
+      {rest && restSecondsLeft > 0 && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-[360px]">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl px-4 py-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[9px] font-bold uppercase tracking-widest text-cyan-500 flex items-center">
+                <Timer size={12} className="mr-1.5 animate-pulse" /> Dinlenme
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => startRest(restSecondsLeft + 30)}
+                  className="text-[9px] font-bold text-zinc-400 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 active:bg-zinc-800 transition-colors"
+                >
+                  +30s
+                </button>
+                <button
+                  onClick={stopRest}
+                  className="text-zinc-500 active:text-red-400 bg-zinc-950 border border-zinc-800 p-1.5 rounded-lg transition-colors"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="font-mono font-bold text-3xl text-cyan-400 tabular-nums tracking-tight">
+                {Math.floor(restSecondsLeft / 60)}:{(restSecondsLeft % 60).toString().padStart(2, '0')}
+              </span>
+              <div className="flex-1 bg-zinc-950 rounded-full h-2 border border-zinc-800 overflow-hidden">
+                <div
+                  className="h-full bg-cyan-500 rounded-full transition-all duration-500"
+                  style={{ width: `${Math.max(0, Math.min(100, (restSecondsLeft / rest.total) * 100))}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 });

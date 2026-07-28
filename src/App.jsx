@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
-  Plus, Save, Activity, X, Search, Trash2, AlertCircle, Settings, BrainCircuit, Star
+  Plus, Save, Activity, X, Search, Trash2, AlertCircle, Settings, BrainCircuit, Star, Database
 } from 'lucide-react';
 import {
   startLockScreenActivity, updateLockScreenActivity, stopLockScreenActivity,
@@ -13,7 +13,7 @@ import {
   generateId, getLocalDateString, getMondayOfCurrentWeek, detectMuscleGroup,
   foldForSearch, parseNumber, mergeMetrics, mergeNutrition,
   isWorkingSet, calcEffectiveSets, buildPersonalRecords, loadPersistedState,
-  computeComposition
+  computeComposition, sortByDateDesc
 } from './utils/helpers';
 
 import Navbar from './components/Navbar';
@@ -67,6 +67,7 @@ export default function App() {
 
   const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, type: null, id: null });
   const [rest, setRest] = useState(null);
+  const [restSecondsLeft, setRestSecondsLeft] = useState(0);
 
   const [analysisExercise, setAnalysisExercise] = useState('');
   const [bodyMetricKey, setBodyMetricKey] = useState('weight');
@@ -80,7 +81,6 @@ export default function App() {
   const [todayTime] = useState(() => Date.now());
 
   const activeWorkoutRef = useRef(activeWorkout);
-  const exerciseHistoryRef = useRef(null);
   const restRef = useRef(rest);
   const repsOnFocusRef = useRef(null);
 
@@ -140,16 +140,191 @@ export default function App() {
     if (!rest) return;
     const tick = () => {
       const remaining = Math.max(0, Math.ceil((rest.endsAt - Date.now()) / 1000));
+      setRestSecondsLeft(remaining);
       if (remaining === 0) {
         setRest(null);
         if (settings.restAlert) playRestAlert();
         vibrateAlert();
       }
     };
-    tick();
-    const interval = setInterval(tick, 1000);
+    const interval = setInterval(tick, 500);
     return () => clearInterval(interval);
   }, [rest, settings.restAlert]);
+
+
+  // Antrenman işlemleri
+  const startRest = useCallback((seconds) => {
+    const total = Math.max(1, Math.round(seconds));
+    setRest({ endsAt: Date.now() + total * 1000, total });
+    setRestSecondsLeft(total);
+  }, []);
+
+  const stopRest = useCallback(() => {
+    setRest(null);
+    setRestSecondsLeft(0);
+  }, []);
+
+  const allExercisesNames = useMemo(() => {
+    const customNames = customExercises.map(ex => typeof ex === 'object' ? ex.name : ex);
+    return Array.from(new Set([...DEFAULT_EXERCISES, ...customNames])).sort();
+  }, [customExercises]);
+
+  const filteredExercises = useMemo(() => {
+    if (!exerciseSearchQuery.trim()) return allExercisesNames;
+    const query = foldForSearch(exerciseSearchQuery);
+    return allExercisesNames.filter(ex => foldForSearch(ex).includes(query));
+  }, [allExercisesNames, exerciseSearchQuery]);
+
+  // Tarihe göre azalan sıralı listeler: hem arşiv görünümü hem de "en son ne yaptım"
+  // sorguları bunlara dayanır, böylece kayıt sırasından bağımsız olarak doğru çalışır.
+  const sortedWorkouts = useMemo(() => sortByDateDesc(workouts), [workouts]);
+  const sortedMetrics = useMemo(() => sortByDateDesc(metricsHistory), [metricsHistory]);
+  const sortedNutrition = useMemo(() => sortByDateDesc(nutritionHistory), [nutritionHistory]);
+
+  const personalRecords = useMemo(() => {
+    return buildPersonalRecords(workouts, activeWorkout?.id);
+  }, [workouts, activeWorkout?.id]);
+
+  const computedComp = useMemo(() => {
+    return computeComposition(currentMetricsForm);
+  }, [currentMetricsForm]);
+
+  const dashboardStats = useMemo(() => {
+    const monday = getMondayOfCurrentWeek();
+    const thisWeekWorkouts = workouts.filter(w => new Date(w.date) >= monday);
+    const thisWeekSessions = thisWeekWorkouts.length;
+    const thisWeekEffectiveSets = thisWeekWorkouts.reduce((sum, w) => sum + calcEffectiveSets(w.exercises), 0);
+
+    const muscleVolume = {
+      'Göğüs': 0, 'Sırt': 0, 'Omuz': 0,
+      'Ön Kol': 0, 'Arka Kol': 0,
+      'Ön Bacak': 0, 'Arka Bacak': 0, 'Kalça': 0,
+      'Karın': 0, 'Bel': 0
+    };
+
+    thisWeekWorkouts.forEach(w => {
+      (w.exercises || []).forEach(ex => {
+        const { muscle, secondary } = detectMuscleGroup(ex.name, customExercises);
+        const count = (ex.sets || []).filter(isWorkingSet).length;
+
+        if (count > 0) {
+          if (muscleVolume[muscle] !== undefined) muscleVolume[muscle] += count;
+          (secondary || []).forEach(sec => {
+            if (muscleVolume[sec] !== undefined) muscleVolume[sec] += count * 0.5;
+          });
+        }
+      });
+    });
+
+    const isDeloadNeeded = Object.values(muscleVolume).some(v => v > 22);
+
+    // İtme/çekme dengesi: bu haftaki etkili setlerin mekanik dağılımı.
+    let pushSets = 0;
+    let pullSets = 0;
+    thisWeekWorkouts.forEach(w => {
+      (w.exercises || []).forEach(ex => {
+        const { mechanics } = detectMuscleGroup(ex.name, customExercises);
+        const effective = calcEffectiveSets([ex]);
+        if (mechanics === 'Push') pushSets += effective;
+        else if (mechanics === 'Pull') pullSets += effective;
+      });
+    });
+    // Hiç çekme yapılmamışken oran sayısal olarak tanımsızdır; bu durumu
+    // "dengeli" saymamak için denge bilgisi ayrı bir bayrakla taşınır.
+    const hasPushPullData = pushSets > 0 || pullSets > 0;
+    const pushPullRatio = pullSets > 0
+      ? (pushSets / pullSets).toFixed(2)
+      : (pushSets > 0 ? 'Çekme yok' : '—');
+    const pushPullBalanced = pullSets > 0 && pushSets > 0
+      ? (pushSets / pullSets) <= 1.5 && (pullSets / pushSets) <= 1.5
+      : !hasPushPullData;
+
+    // ACWR (akut:kronik yük oranı). Akut = son 7 gün, kronik = son 28 günün
+    // haftalık ortalaması. 0.8-1.3 aralığı güvenli kabul edilir.
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let acuteLoad = 0;
+    let chronicLoad = 0;
+    workouts.forEach(w => {
+      const wDate = new Date(w.date);
+      wDate.setHours(0, 0, 0, 0);
+      const diffDays = Math.floor((today - wDate) / (1000 * 60 * 60 * 24));
+      if (diffDays < 0) return; // gelecek tarihli kayıtlar sayılmaz
+      // Seans yükü: sRPE benzeri — zorluk derecesi × etkili set sayısı
+      const load = (w.rating || 3) * calcEffectiveSets(w.exercises);
+      if (diffDays <= 7) acuteLoad += load;
+      if (diffDays <= 28) chronicLoad += load;
+    });
+    const averageChronic = chronicLoad / 4;
+    const acwr = averageChronic > 0 ? (acuteLoad / averageChronic).toFixed(2) : '0.00';
+
+    return {
+      thisWeekSessions,
+      thisWeekEffectiveSets,
+      muscleVolume,
+      isDeloadNeeded,
+      acwr,
+      pushPullRatio,
+      pushPullBalanced,
+      hasPushPullData
+    };
+  }, [workouts, customExercises]);
+
+  const handleSelectExercise = useCallback((exerciseName) => {
+    setActiveWorkout(prev => {
+      if (!prev) return prev;
+      const newExerciseId = generateId();
+      const initialSet = { id: generateId(), weight: '', reps: '', rir: 2, tempo: '', formRating: 8, setType: 'normal' };
+      return {
+        ...prev,
+        activeExerciseId: newExerciseId,
+        exercises: [...(prev?.exercises || []), { id: newExerciseId, name: exerciseName, sets: [initialSet] }]
+      };
+    });
+    setIsExerciseModalOpen(false);
+    setExerciseSearchQuery('');
+  }, []);
+
+  const addSet = useCallback((exerciseId) => {
+    setActiveWorkout(prev => ({
+      ...prev, activeExerciseId: exerciseId, exercises: (prev?.exercises || []).map(ex => {
+        if (ex.id === exerciseId) {
+          const lastSet = ex.sets[ex.sets.length - 1] || { weight: '', reps: '', rir: 2, tempo: '', formRating: 8, setType: 'normal' };
+          const newSet = settings.autoCopyLastSet
+            ? { ...lastSet, id: generateId() }
+            : { id: generateId(), weight: '', reps: '', rir: 2, tempo: '', formRating: 8, setType: 'normal' };
+          return { ...ex, sets: [...ex.sets, newSet] };
+        }
+        return ex;
+      })
+    }));
+  }, [settings.autoCopyLastSet]);
+
+  const updateSet = useCallback((exerciseId, setId, field, value) => {
+    setActiveWorkout(prev => ({
+      ...prev,
+      activeExerciseId: exerciseId,
+      exercises: (prev?.exercises || []).map(ex => ex.id === exerciseId
+        ? { ...ex, sets: (ex.sets || []).map(s => s.id === setId ? { ...s, [field]: value } : s) } : ex)
+    }));
+  }, []);
+
+  const removeSet = useCallback((exerciseId, setId) => {
+    setActiveWorkout(prev => ({ ...prev, exercises: (prev?.exercises || []).map(ex => ex.id === exerciseId ? { ...ex, sets: (ex.sets || []).filter(s => s.id !== setId) } : ex) }));
+  }, []);
+
+  // Sıralı liste üzerinden gezilir: sırasız bir dizide ilk eşleşme en eski seans olur
+  // ve "geçen antrenman" bilgisi ile progresyon önerisi yanlış çıkardı.
+  const getRecentExerciseData = useCallback((exerciseName) => {
+    for (const w of sortedWorkouts) {
+      if (w.id === activeWorkout?.id) continue;
+      const ex = (w.exercises || []).find(e => e.name === exerciseName);
+      if (ex && Array.isArray(ex.sets) && ex.sets.some(s => isWorkingSet(s) && parseNumber(s.reps) > 0)) {
+        return { date: w.date, sets: ex.sets.filter(isWorkingSet) };
+      }
+    }
+    return null;
+  }, [sortedWorkouts, activeWorkout?.id]);
 
   // iOS Lock Screen entegrasyonu
   const activeWorkoutId = activeWorkout?.id;
@@ -167,7 +342,7 @@ export default function App() {
       const exercises = workout.exercises || [];
       const activeIdx = exercises.findIndex(e => e.id === workout.activeExerciseId);
       const active = activeIdx >= 0 ? exercises[activeIdx] : exercises[exercises.length - 1];
-      const history = active ? exerciseHistoryRef.current?.get(active.name) : null;
+      const history = active ? getRecentExerciseData(active.name) : null;
 
       const totalExercises = Math.max(1, exercises.length);
       const exerciseIndex = activeIdx >= 0 ? activeIdx + 1 : totalExercises;
@@ -216,124 +391,9 @@ export default function App() {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [lockScreenOn, activeWorkoutId, isEditingOldWorkout, currentExerciseName, timerStatus, rest, settings.keepScreenAwake]);
+  }, [lockScreenOn, activeWorkoutId, isEditingOldWorkout, currentExerciseName, timerStatus, rest,
+      settings.keepScreenAwake, getRecentExerciseData]);
 
-  // Antrenman işlemleri
-  const startRest = useCallback((seconds) => {
-    setRest({ endsAt: Date.now() + seconds * 1000, total: seconds });
-  }, []);
-
-  const allExercisesNames = useMemo(() => {
-    const customNames = customExercises.map(ex => typeof ex === 'object' ? ex.name : ex);
-    return Array.from(new Set([...DEFAULT_EXERCISES, ...customNames])).sort();
-  }, [customExercises]);
-
-  const filteredExercises = useMemo(() => {
-    if (!exerciseSearchQuery.trim()) return allExercisesNames;
-    const query = foldForSearch(exerciseSearchQuery);
-    return allExercisesNames.filter(ex => foldForSearch(ex).includes(query));
-  }, [allExercisesNames, exerciseSearchQuery]);
-
-  const personalRecords = useMemo(() => {
-    return buildPersonalRecords(workouts, activeWorkout?.id);
-  }, [workouts, activeWorkout?.id]);
-
-  const computedComp = useMemo(() => {
-    return computeComposition(currentMetricsForm);
-  }, [currentMetricsForm]);
-
-  const dashboardStats = useMemo(() => {
-    const monday = getMondayOfCurrentWeek();
-    const thisWeekWorkouts = workouts.filter(w => new Date(w.date) >= monday);
-    const thisWeekSessions = thisWeekWorkouts.length;
-    const thisWeekEffectiveSets = thisWeekWorkouts.reduce((sum, w) => sum + calcEffectiveSets(w.exercises), 0);
-
-    const muscleVolume = {
-      'Göğüs': 0, 'Sırt': 0, 'Omuz': 0,
-      'Ön Kol': 0, 'Arka Kol': 0,
-      'Ön Bacak': 0, 'Arka Bacak': 0, 'Kalça': 0,
-      'Karın': 0, 'Bel': 0
-    };
-
-    thisWeekWorkouts.forEach(w => {
-      (w.exercises || []).forEach(ex => {
-        const { muscle, secondary } = detectMuscleGroup(ex.name, customExercises);
-        const count = (ex.sets || []).filter(isWorkingSet).length;
-
-        if (count > 0) {
-          if (muscleVolume[muscle] !== undefined) muscleVolume[muscle] += count;
-          (secondary || []).forEach(sec => {
-            if (muscleVolume[sec] !== undefined) muscleVolume[sec] += count * 0.5;
-          });
-        }
-      });
-    });
-
-    const isDeloadNeeded = Object.values(muscleVolume).some(v => v > 22);
-
-    return {
-      thisWeekSessions,
-      thisWeekEffectiveSets,
-      muscleVolume,
-      isDeloadNeeded,
-      acwr: '1.0',
-      pushPullRatio: '1.1'
-    };
-  }, [workouts, customExercises]);
-
-  const handleSelectExercise = useCallback((exerciseName) => {
-    setActiveWorkout(prev => {
-      if (!prev) return prev;
-      const newExerciseId = generateId();
-      const initialSet = { id: generateId(), weight: '', reps: '', rir: 2, tempo: '', formRating: 8, setType: 'normal' };
-      return {
-        ...prev,
-        activeExerciseId: newExerciseId,
-        exercises: [...(prev?.exercises || []), { id: newExerciseId, name: exerciseName, sets: [initialSet] }]
-      };
-    });
-    setIsExerciseModalOpen(false);
-    setExerciseSearchQuery('');
-  }, []);
-
-  const addSet = useCallback((exerciseId) => {
-    setActiveWorkout(prev => ({
-      ...prev, activeExerciseId: exerciseId, exercises: (prev?.exercises || []).map(ex => {
-        if (ex.id === exerciseId) {
-          const lastSet = ex.sets[ex.sets.length - 1] || { weight: '', reps: '', rir: 2, tempo: '', formRating: 8, setType: 'normal' };
-          const newSet = settings.autoCopyLastSet
-            ? { ...lastSet, id: generateId() }
-            : { id: generateId(), weight: '', reps: '', rir: 2, tempo: '', formRating: 8, setType: 'normal' };
-          return { ...ex, sets: [...ex.sets, newSet] };
-        }
-        return ex;
-      })
-    }));
-  }, [settings.autoCopyLastSet]);
-
-  const updateSet = useCallback((exerciseId, setId, field, value) => {
-    setActiveWorkout(prev => ({
-      ...prev,
-      activeExerciseId: exerciseId,
-      exercises: (prev?.exercises || []).map(ex => ex.id === exerciseId
-        ? { ...ex, sets: (ex.sets || []).map(s => s.id === setId ? { ...s, [field]: value } : s) } : ex)
-    }));
-  }, []);
-
-  const removeSet = useCallback((exerciseId, setId) => {
-    setActiveWorkout(prev => ({ ...prev, exercises: (prev?.exercises || []).map(ex => ex.id === exerciseId ? { ...ex, sets: (ex.sets || []).filter(s => s.id !== setId) } : ex) }));
-  }, []);
-
-  const getRecentExerciseData = useCallback((exerciseName) => {
-    for (const w of workouts) {
-      if (w.id === activeWorkout?.id) continue;
-      const ex = (w.exercises || []).find(e => e.name === exerciseName);
-      if (ex && Array.isArray(ex.sets) && ex.sets.some(s => isWorkingSet(s) && parseNumber(s.reps) > 0)) {
-        return { date: w.date, sets: ex.sets.filter(isWorkingSet) };
-      }
-    }
-    return null;
-  }, [workouts, activeWorkout?.id]);
 
   const handleStartRequest = useCallback((templateOrWorkout = null) => {
     setPreWorkoutModal({ template: templateOrWorkout });
@@ -445,6 +505,29 @@ export default function App() {
   const handleEditOldWorkoutDate = (workoutId, newDate) => {
     setWorkouts(prev => prev.map(w => w.id === workoutId ? { ...w, date: newDate } : w));
   };
+
+  // Geçmiş bir seansı düzenlemek için aktif antrenman ekranına yükler.
+  // isEditingOld işaretiyle kronometre çalışmaz ve kilit ekranı kartı açılmaz;
+  // kaydedildiğinde yeni kayıt eklenmez, mevcut kaydın üzerine yazılır.
+  const handleEditOldWorkout = useCallback((workout) => {
+    const copy = JSON.parse(JSON.stringify(workout));
+    setActiveWorkout({
+      ...copy,
+      isEditingOld: true,
+      activeExerciseId: copy.exercises?.[0]?.id || null,
+      timer: {
+        status: 'paused',
+        startTime: null,
+        accumulatedSeconds: Math.max(0, Math.round((copy.duration || 0) * 60))
+      }
+    });
+    showToast('Geçmiş antrenman düzenleniyor.');
+  }, [showToast]);
+
+  // Geçmiş bir seansı bugün için şablon olarak tekrarlar.
+  const handleRepeatWorkout = useCallback((workout) => {
+    setPreWorkoutModal({ template: workout });
+  }, []);
 
   const handleExportData = () => {
     const backup = {
@@ -613,11 +696,13 @@ export default function App() {
             <HistoryView
               historyTab={historyTab}
               setHistoryTab={setHistoryTab}
-              workouts={workouts}
-              metricsHistory={metricsHistory}
-              nutritionHistory={nutritionHistory}
+              workouts={sortedWorkouts}
+              metricsHistory={sortedMetrics}
+              nutritionHistory={sortedNutrition}
               setDeleteConfirm={setDeleteConfirm}
               handleEditOldWorkoutDate={handleEditOldWorkoutDate}
+              handleEditOldWorkout={handleEditOldWorkout}
+              handleRepeatWorkout={handleRepeatWorkout}
             />
           )}
 
@@ -637,6 +722,9 @@ export default function App() {
               removeSet={removeSet}
               repsOnFocusRef={repsOnFocusRef}
               startRest={startRest}
+              stopRest={stopRest}
+              rest={rest}
+              restSecondsLeft={restSecondsLeft}
             />
           )}
         </div>

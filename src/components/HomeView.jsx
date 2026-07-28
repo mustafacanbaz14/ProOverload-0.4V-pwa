@@ -71,10 +71,18 @@ const HomeView = memo(({
         </div>
         <div className="bg-zinc-900 p-4 rounded-2xl border border-zinc-800">
           <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block mb-1">İtme / Çekme Oranı</span>
-          <span className={`text-xl font-mono font-bold block mb-1 ${Number(dashboardStats.pushPullRatio) > 1.5 ? 'text-orange-400' : 'text-emerald-500'}`}>{dashboardStats.pushPullRatio}</span>
-          <div className={`text-[8px] font-bold uppercase tracking-widest ${Number(dashboardStats.pushPullRatio) > 1.5 ? 'text-orange-400' : 'text-emerald-500'}`}>
-            {Number(dashboardStats.pushPullRatio) > 1.5 ? 'Dengesiz (Risk)' : 'Dengeli'}
-          </div>
+          {(() => {
+            // Veri yokken "dengeli" demek yanıltıcı olur; üç durum ayrı ele alınır.
+            const { hasPushPullData, pushPullBalanced, pushPullRatio } = dashboardStats;
+            const renk = !hasPushPullData ? 'text-zinc-500' : pushPullBalanced ? 'text-emerald-500' : 'text-orange-400';
+            const etiket = !hasPushPullData ? 'Veri Yok' : pushPullBalanced ? 'Dengeli' : 'Dengesiz (Risk)';
+            return (
+              <>
+                <span className={`text-xl font-mono font-bold block mb-1 ${renk}`}>{pushPullRatio}</span>
+                <div className={`text-[8px] font-bold uppercase tracking-widest ${renk}`}>{etiket}</div>
+              </>
+            );
+          })()}
         </div>
       </div>
 
