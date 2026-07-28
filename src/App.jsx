@@ -45,6 +45,7 @@ export default function App() {
   const [analysisType, setAnalysisType] = useState('body');
 
   const [customExercises, setCustomExercises] = useState(initial.customExercises);
+  const [customFoods, setCustomFoods] = useState(initial.customFoods);
   const [isExerciseModalOpen, setIsExerciseModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
@@ -110,6 +111,12 @@ export default function App() {
       localStorage.setItem('po_custom_exercises_v16', JSON.stringify(customExercises));
     } catch { /* yoksay */ }
   }, [customExercises]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('po_custom_foods_v16', JSON.stringify(customFoods));
+    } catch { /* yoksay */ }
+  }, [customFoods]);
 
   useEffect(() => {
     try {
@@ -556,7 +563,7 @@ export default function App() {
     const backup = {
       version: '0.5.0',
       exportedAt: new Date().toISOString(),
-      workouts, templates, customExercises, metricsHistory, nutritionHistory, settings
+      workouts, templates, customExercises, customFoods, metricsHistory, nutritionHistory, settings
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -592,6 +599,7 @@ export default function App() {
     if (Array.isArray(data.workouts || data.w)) setWorkouts(data.workouts || data.w);
     if (Array.isArray(data.templates || data.t)) setTemplates(data.templates || data.t);
     if (Array.isArray(data.customExercises)) setCustomExercises(data.customExercises);
+    if (Array.isArray(data.customFoods)) setCustomFoods(data.customFoods);
     if (Array.isArray(data.metricsHistory || data.m)) setMetricsHistory((data.metricsHistory || data.m).map(mergeMetrics));
     if (Array.isArray(data.nutritionHistory || data.n)) setNutritionHistory((data.nutritionHistory || data.n).map(mergeNutrition));
     if (data.settings || data.s) setSettings(prev => ({ ...prev, ...(data.settings || data.s) }));
@@ -786,6 +794,8 @@ export default function App() {
         <FoodSearchModal
           isOpen={isFoodSearchOpen}
           onClose={() => setIsFoodSearchOpen(false)}
+          customFoods={customFoods}
+          setCustomFoods={setCustomFoods}
           onAddFoodToMeal={(food) => {
             setCurrentNutritionForm(prev => ({
               ...prev,

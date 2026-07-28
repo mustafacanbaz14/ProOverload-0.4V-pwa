@@ -240,6 +240,7 @@ export const loadPersistedState = () => {
     workouts: loadWithFallback(keys('workouts'), []),
     templates: loadWithFallback(keys('templates'), []),
     customExercises: loadWithFallback(keys('custom_exercises'), []),
+    customFoods: loadWithFallback(keys('custom_foods'), []),
     mealTemplates: loadWithFallback(keys('meal_templates'), []),
     dayTemplates: loadWithFallback(keys('day_templates'), []),
     activeWorkout: loadWithFallback(keys('active_workout'), null),
