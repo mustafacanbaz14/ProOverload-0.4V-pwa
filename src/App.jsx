@@ -102,6 +102,14 @@ const detectMuscleGroup = (name, customList = []) => {
   return { muscle: 'Diğer', mechanics: 'Diğer' };
 };
 
+// Arama için metni sadeleştirir. Liste İngilizce hareket adları ile Türkçe özel
+// hareketleri birlikte tuttuğu için Türkçe yerel ayarla küçültme yapılamaz:
+// toLocaleLowerCase('tr') "Incline" kelimesini "ıncline" yapıp aramayı bozardı.
+// Bunun yerine yalnızca I/İ/ı harfleri ortak bir biçime indirgenir.
+const foldForSearch = (text) => String(text || '')
+  .replace(/[İIı]/g, 'i')
+  .toLowerCase();
+
 const parseNumber = (val) => {
   if (val === '' || val === null || val === undefined) return 0;
   const normalized = String(val).replace(',', '.');
@@ -1208,7 +1216,7 @@ export default function App() {
     ...customExercises.map(ex => typeof ex === 'object' ? ex.name : ex)
   ])].sort();
 
-  const filteredExercises = allExercisesNames.filter(ex => ex.toLowerCase().includes((exerciseSearchQuery || '').trim().toLowerCase()));
+  const filteredExercises = allExercisesNames.filter(ex => foldForSearch(ex).includes(foldForSearch(exerciseSearchQuery).trim()));
 
   const handleSelectExercise = (exerciseName) => {
     updateInteraction();
@@ -2482,7 +2490,7 @@ export default function App() {
         {/* READINESS MODAL (Pre-Workout) */}
         {preWorkoutModal && (
           <div className="absolute inset-0 bg-black/90 z-[60] flex justify-center items-center px-4 backdrop-blur-sm">
-            <div className="bg-zinc-900 w-full rounded-2xl shadow-2xl border border-zinc-800 p-6 flex flex-col">
+            <div className="bg-zinc-900 w-full max-h-[88dvh] overflow-y-auto hide-scrollbar rounded-2xl shadow-2xl border border-zinc-800 p-6 flex flex-col">
               <h3 className="text-sm font-bold text-zinc-100 mb-2 uppercase tracking-wide border-b border-zinc-800 pb-3 flex items-center">
                 <BrainCircuit size={16} className="mr-2 text-cyan-500" /> Hazırbulunuşluk
               </h3>
@@ -2516,7 +2524,7 @@ export default function App() {
         {/* END WORKOUT MODAL */}
         {isEndWorkoutModalOpen && (
           <div className="absolute inset-0 bg-black/90 z-[60] flex justify-center items-center px-4 backdrop-blur-sm">
-            <div className="bg-zinc-900 w-full rounded-2xl shadow-2xl border border-zinc-800 p-6 flex flex-col">
+            <div className="bg-zinc-900 w-full max-h-[88dvh] overflow-y-auto hide-scrollbar rounded-2xl shadow-2xl border border-zinc-800 p-6 flex flex-col">
               <h3 className="text-sm font-bold text-zinc-100 mb-4 uppercase tracking-wide border-b border-zinc-800 pb-3 flex items-center">
                 <Save size={16} className="mr-2 text-emerald-500" /> Antrenmanı Tamamla
               </h3>
@@ -2552,13 +2560,49 @@ export default function App() {
 
         {/* SETTINGS MODAL */}
         {isSettingsModalOpen && (
-          <div className="absolute inset-0 bg-black/90 z-[60] flex justify-center items-center px-4 backdrop-blur-sm">
-            <div className="bg-zinc-900 w-full rounded-2xl shadow-2xl border border-zinc-800 p-6 flex flex-col">
-              <h3 className="text-sm font-bold text-zinc-100 mb-4 uppercase tracking-wide border-b border-zinc-800 pb-3 flex items-center">
-                <Settings size={16} className="mr-2 text-zinc-400" /> Ayarlar & Yedekleme
-              </h3>
+          <div className="absolute inset-0 bg-black/90 z-[60] flex justify-center items-center p-4 backdrop-blur-sm">
+            {/* Yükseklik sınırlandırılır ve gövde kaydırılır: içerik uzadığında
+                kapatma düğmesi ve alttaki bölümler erişilemez hale gelmemeli. */}
+            <div className="bg-zinc-900 w-full max-h-[88dvh] rounded-2xl shadow-2xl border border-zinc-800 flex flex-col overflow-hidden">
 
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-950 shrink-0">
+                <h3 className="text-sm font-bold text-zinc-100 uppercase tracking-wide flex items-center">
+                  <Settings size={16} className="mr-2 text-zinc-400" /> Ayarlar
+                </h3>
+                <button onClick={() => setIsSettingsModalOpen(false)} className="text-zinc-400 active:text-zinc-100 p-2 -mr-1 transition-colors" aria-label="Kapat">
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto hide-scrollbar p-5">
+
+              {/* Veri yedekleme en üstte: veri yalnızca bu cihazda tutulduğu için
+                  ayarların içindeki en kritik bölüm bu. */}
+              <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 mb-6">
+                <div className="flex justify-between items-center mb-2">
+                  <div className="text-[11px] font-bold text-cyan-400 uppercase tracking-wider flex items-center">
+                    <Database size={13} className="mr-1.5" /> Veri Yedekleme
+                  </div>
+                  <div className={`text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 rounded ${isStoragePersisted ? 'bg-emerald-900/30 text-emerald-400' : 'bg-red-900/30 text-red-400'}`}>
+                    {isStoragePersisted ? 'Kalıcı Bellek: Aktif' : 'Kalıcı Bellek: Pasif'}
+                  </div>
+                </div>
+                <div className="text-[9px] text-zinc-500 mb-3 font-mono leading-relaxed">
+                  Veriler yalnızca bu cihazda tutulur. Telefonu değiştirmeden veya tarayıcıyı sıfırlamadan önce mutlaka indir.
+                  <br /><span className="text-zinc-400">Son yedek: {lastBackupDate ? new Date(lastBackupDate).toLocaleDateString('tr-TR') : 'Hiç alınmadı'}</span>
+                </div>
+                <div className="flex space-x-3">
+                  <button onClick={exportJSON} className="flex-1 bg-zinc-800 active:bg-zinc-700 text-cyan-400 font-bold py-3 rounded-xl text-[10px] uppercase flex justify-center items-center transition-colors border border-zinc-700">
+                    <Download size={14} className="mr-2" /> Yedek İndir
+                  </button>
+                  <label className="flex-1 bg-zinc-800 active:bg-zinc-700 text-orange-400 font-bold py-3 rounded-xl text-[10px] uppercase flex justify-center items-center cursor-pointer transition-colors border border-zinc-700">
+                    <Upload size={14} className="mr-2" /> Yedek Yükle
+                    <input type="file" accept=".json,application/json" onChange={importJSON} className="hidden" ref={fileInputRef} />
+                  </label>
+                </div>
+              </div>
+
+              <div className="border-t border-zinc-800 pt-5 flex items-center justify-between mb-6">
                 <div className="pr-4">
                   <div className="text-xs text-zinc-200 font-bold uppercase tracking-wider">Son Seti Kopyala</div>
                   <div className="text-[10px] text-zinc-500 mt-1 leading-tight">Yeni set eklerken bir önceki setin ağırlık ve tekrar verilerini klonlar.</div>
@@ -2681,25 +2725,8 @@ export default function App() {
                 <p className="text-[8px] text-zinc-500 font-mono">Bilimsel Referans: Büyüme (Bulk) döneminde yağsız kütle (FFM) başına 2.0-2.4g protein yeterliyken, kalori açığı (Cut) yaratılan dönemlerde kas yıkımını önlemek için ihtiyaç 2.4-3.1g seviyelerine çıkar.</p>
               </div>
 
-              <div className="border-t border-zinc-800 pt-5 mb-6">
-                <div className="flex justify-between items-end mb-2">
-                  <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Veritabanı Yönetimi (Local)</div>
-                  <div className={`text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 rounded ${isStoragePersisted ? 'bg-emerald-900/30 text-emerald-400' : 'bg-red-900/30 text-red-400'}`}>
-                    {isStoragePersisted ? 'Kalıcı Bellek: Aktif' : 'Kalıcı Bellek: Pasif'}
-                  </div>
-                </div>
-                <div className="text-[9px] text-zinc-600 mb-4 font-mono">Uygulama verileri sadece cihazınızdadır. Tarayıcıyı sıfırlamadan önce mutlaka JSON olarak indirin. <br /><span className="text-zinc-400">Son Yedek: {lastBackupDate ? new Date(lastBackupDate).toLocaleDateString('tr-TR') : 'Hiç Alınmadı'}</span></div>
-                <div className="flex space-x-3">
-                  <button onClick={exportJSON} className="flex-1 bg-zinc-800 active:bg-zinc-700 text-cyan-400 font-bold py-3 rounded-xl text-[10px] uppercase flex justify-center items-center transition-colors"><Download size={14} className="mr-2" /> İndir</button>
-                  <label className="flex-1 bg-zinc-800 active:bg-zinc-700 text-orange-400 font-bold py-3 rounded-xl text-[10px] uppercase flex justify-center items-center cursor-pointer transition-colors">
-                    <Upload size={14} className="mr-2" /> Yükle
-                    <input type="file" accept=".json" onChange={importJSON} className="hidden" ref={fileInputRef} />
-                  </label>
-                </div>
-              </div>
-
               {!isStandalone && (
-                <div className="border-t border-zinc-800 pt-5 mb-6">
+                <div className="border-t border-zinc-800 pt-5 mb-2">
                   <h4 className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider mb-2">Uygulamayı Cihaza Kur (PWA)</h4>
                   <p className="text-[9px] text-zinc-400 font-mono mb-3 leading-relaxed">
                     Bu sistemi adres çubuğu olmadan tam ekran bir uygulama gibi kullanmak için:
@@ -2711,7 +2738,11 @@ export default function App() {
                 </div>
               )}
 
-              <button onClick={() => setIsSettingsModalOpen(false)} className="w-full bg-zinc-100 active:bg-white text-zinc-900 font-bold py-3.5 rounded-xl uppercase text-xs transition-colors">Kapat</button>
+              </div>
+
+              <div className="p-4 border-t border-zinc-800 bg-zinc-950 shrink-0 pb-safe">
+                <button onClick={() => setIsSettingsModalOpen(false)} className="w-full bg-zinc-100 active:bg-white text-zinc-900 font-bold py-3.5 rounded-xl uppercase text-xs transition-colors">Kapat</button>
+              </div>
             </div>
           </div>
         )}
