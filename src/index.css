@@ -2,7 +2,7 @@
 
 @layer base {
   body {
-    @apply bg-black text-white;
+    @apply bg-black text-white antialiased;
     -webkit-tap-highlight-color: transparent;
     user-select: none;
   }
@@ -21,5 +21,29 @@
   }
   .pt-safe {
     padding-top: env(safe-area-inset-top, 20px);
+  }
+
+  /* Premium Glassmorphism & Neon Glow Utilities */
+  .glass-card {
+    background: rgba(24, 24, 27, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(63, 63, 70, 0.5);
+  }
+
+  .glow-cyan {
+    box-shadow: 0 0 20px -5px rgba(6, 182, 212, 0.3);
+  }
+
+  .glow-emerald {
+    box-shadow: 0 0 20px -5px rgba(16, 185, 129, 0.3);
+  }
+
+  .glow-purple {
+    box-shadow: 0 0 20px -5px rgba(168, 85, 247, 0.3);
+  }
+
+  .glow-orange {
+    box-shadow: 0 0 20px -5px rgba(249, 115, 22, 0.3);
   }
 }

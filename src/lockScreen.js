@@ -89,7 +89,19 @@ export const formatDuration = (totalSeconds) => {
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 };
 
-const drawArtwork = ({ elapsedSeconds, exerciseName, previousSets, previousDate, effectiveSets, isPaused, restSecondsLeft }) => {
+const drawArtwork = ({
+  elapsedSeconds,
+  exerciseName,
+  previousSets,
+  previousDate,
+  effectiveSets,
+  isPaused,
+  restSecondsLeft,
+  exerciseIndex = 1,
+  totalExercises = 1,
+  completedSetsCount = 0,
+  totalSetsCount = 0,
+}) => {
   const SIZE = 512;
   const PAD = 36;
   const BOTTOM_LIMIT = SIZE - 16; // Hiçbir şey bu çizginin altına taşmamalı
@@ -106,90 +118,93 @@ const drawArtwork = ({ elapsedSeconds, exerciseName, previousSets, previousDate,
 
   ctx.textBaseline = 'top';
 
-  // Durum etiketi (sol) ve etkili set rozeti (sağ) aynı satırda:
-  // böylece alt bölge tamamen geçmiş setlere kalır.
+  // Durum etiketi (sol) ve etkili set rozeti (sağ) aynı satırda
   ctx.fillStyle = '#52525b';
   ctx.font = 'bold 19px system-ui, -apple-system, sans-serif';
-  ctx.fillText(isPaused ? 'DURAKLATILDI' : 'ANTRENMAN SÜRÜYOR', PAD, 36);
+  ctx.fillText(isPaused ? 'DURAKLATILDI' : 'ANTRENMAN SÜRÜYOR', PAD, 32);
 
   const badge = `${effectiveSets} ETKİLİ SET`;
   ctx.textAlign = 'right';
   ctx.fillStyle = '#22d3ee';
-  ctx.fillText(badge, SIZE - PAD, 36);
+  ctx.fillText(badge, SIZE - PAD, 32);
   ctx.textAlign = 'left';
 
-  // Geçen süre
+  // Toplam Geçen süre & Dakika göstergesi
+  const elapsedMins = Math.floor(elapsedSeconds / 60);
   ctx.fillStyle = isPaused ? '#a1a1aa' : '#34d399';
-  ctx.font = 'bold 88px ui-monospace, SFMono-Regular, Menlo, monospace';
-  ctx.fillText(formatDuration(elapsedSeconds), PAD, 64);
+  ctx.font = 'bold 76px ui-monospace, SFMono-Regular, Menlo, monospace';
+  ctx.fillText(formatDuration(elapsedSeconds), PAD, 58);
 
-  let y = 176;
+  ctx.fillStyle = '#a1a1aa';
+  ctx.font = 'bold 18px system-ui, -apple-system, sans-serif';
+  ctx.fillText(`TOPLAM SÜRE: ${elapsedMins} DK`, PAD, 140);
 
-  // Dinlenme sayacı — set arasındayken en dikkat çekici bilgi bu olduğu için
-  // hareket adının üstünde, vurgulu bir şeritte gösterilir.
+  let y = 172;
+
+  // Dinlenme sayacı — set arasındayken en dikkat çekici bilgi
   const isResting = Number(restSecondsLeft) > 0;
   if (isResting) {
-    const barH = 62;
+    const barH = 64;
     ctx.fillStyle = '#164e63';
     ctx.fillRect(PAD, y, SIZE - PAD * 2, barH);
     ctx.fillStyle = '#06b6d4';
     ctx.fillRect(PAD, y, 6, barH);
 
     ctx.fillStyle = '#67e8f9';
-    ctx.font = 'bold 17px system-ui, -apple-system, sans-serif';
-    ctx.fillText('DİNLENME', PAD + 20, y + 10);
+    ctx.font = 'bold 16px system-ui, -apple-system, sans-serif';
+    ctx.fillText(`DİNLENME KANALI (${restSecondsLeft} SN KALDI)`, PAD + 18, y + 10);
 
     ctx.textAlign = 'right';
     ctx.fillStyle = '#ecfeff';
-    ctx.font = 'bold 40px ui-monospace, SFMono-Regular, Menlo, monospace';
-    ctx.fillText(formatDuration(restSecondsLeft), SIZE - PAD - 20, y + 12);
+    ctx.font = 'bold 38px ui-monospace, SFMono-Regular, Menlo, monospace';
+    ctx.fillText(formatDuration(restSecondsLeft), SIZE - PAD - 16, y + 12);
     ctx.textAlign = 'left';
 
     y += barH + 16;
   }
 
-  // Mevcut hareket
-  ctx.fillStyle = '#52525b';
-  ctx.font = 'bold 18px system-ui, -apple-system, sans-serif';
-  ctx.fillText('MEVCUT HAREKET', PAD, y);
+  // Mevcut hareket ve set detayları
+  ctx.fillStyle = '#06b6d4';
+  ctx.font = 'bold 17px system-ui, -apple-system, sans-serif';
+  const exLabel = `MEVCUT HAREKET (${exerciseIndex}/${totalExercises}) · SET ${completedSetsCount + 1}/${Math.max(completedSetsCount + 1, totalSetsCount)}`;
+  ctx.fillText(exLabel, PAD, y);
   y += 24;
 
   ctx.fillStyle = '#fafafa';
-  ctx.font = 'bold 34px system-ui, -apple-system, sans-serif';
+  ctx.font = 'bold 30px system-ui, -apple-system, sans-serif';
   const nameLines = wrapText(ctx, exerciseName || 'Hareket seçilmedi', SIZE - PAD * 2).slice(0, 2);
-  nameLines.forEach((line, i) => ctx.fillText(line, PAD, y + i * 40));
+  nameLines.forEach((line, i) => ctx.fillText(line, PAD, y + i * 36));
 
-  y += nameLines.length * 40 + 16;
+  y += nameLines.length * 36 + 14;
 
   ctx.fillStyle = '#27272a';
   ctx.fillRect(PAD, y, SIZE - PAD * 2, 2);
-  y += 20;
+  y += 18;
 
   ctx.fillStyle = '#52525b';
-  ctx.font = 'bold 18px system-ui, -apple-system, sans-serif';
+  ctx.font = 'bold 17px system-ui, -apple-system, sans-serif';
   ctx.fillText(previousDate ? `GEÇEN ANTRENMAN · ${previousDate}` : 'GEÇEN ANTRENMAN', PAD, y);
-  y += 32;
+  y += 28;
 
   const sets = Array.isArray(previousSets) ? previousSets.slice(0, 4) : [];
   if (sets.length === 0) {
     ctx.fillStyle = '#71717a';
-    ctx.font = '25px ui-monospace, SFMono-Regular, Menlo, monospace';
-    ctx.fillText('Bu hareket için kayıt yok', PAD, y);
+    ctx.font = '22px ui-monospace, SFMono-Regular, Menlo, monospace';
+    ctx.fillText('Bu hareket için geçmiş kayıt yok', PAD, y);
   } else {
-    const ROW = 38;
-    ctx.font = '27px ui-monospace, SFMono-Regular, Menlo, monospace';
+    const ROW = 34;
+    ctx.font = '25px ui-monospace, SFMono-Regular, Menlo, monospace';
     for (let i = 0; i < sets.length; i++) {
-      // Alt sınıra sığmayan satır hiç çizilmez (taşma yerine kırpma).
       if (y + ROW > BOTTOM_LIMIT) break;
       const set = sets[i];
       ctx.fillStyle = '#52525b';
       ctx.fillText(`${i + 1}`, PAD, y);
       ctx.fillStyle = '#22d3ee';
-      ctx.fillText(`${set.weight || 0} kg`, PAD + 38, y);
+      ctx.fillText(`${set.weight || 0} kg`, PAD + 36, y);
       ctx.fillStyle = '#e4e4e7';
-      ctx.fillText(`× ${set.reps || 0}`, PAD + 174, y);
+      ctx.fillText(`× ${set.reps || 0}`, PAD + 168, y);
       ctx.fillStyle = '#a1a1aa';
-      ctx.fillText(`RIR ${set.rir ?? '-'}`, PAD + 284, y);
+      ctx.fillText(`RIR ${set.rir ?? '-'}`, PAD + 276, y);
       y += ROW;
     }
   }
@@ -255,18 +270,33 @@ export const updateLockScreenActivity = async ({
   isPaused = false,
   restSecondsLeft = 0,
   restTotalSeconds = 0,
+  exerciseIndex = 1,
+  totalExercises = 1,
+  completedSetsCount = 0,
+  totalSetsCount = 0,
 }) => {
   if (!isLockScreenSupported() || !isActive) return;
 
   const mySequence = ++updateSequence;
   const isResting = restSecondsLeft > 0 && restTotalSeconds > 0;
+  const elapsedMinutes = Math.floor(elapsedSeconds / 60);
 
   const summary = previousSets.length > 0
     ? previousSets.slice(0, 3).map((s) => `${s.weight || 0}×${s.reps || 0} (RIR ${s.rir ?? '-'})`).join('  ')
     : 'Geçmiş kayıt yok';
 
   const nextArtwork = await drawArtwork({
-    elapsedSeconds, exerciseName, previousSets, previousDate, effectiveSets, isPaused, restSecondsLeft,
+    elapsedSeconds,
+    exerciseName,
+    previousSets,
+    previousDate,
+    effectiveSets,
+    isPaused,
+    restSecondsLeft,
+    exerciseIndex,
+    totalExercises,
+    completedSetsCount,
+    totalSetsCount,
   });
 
   // Bu çağrı beklerken daha yenisi başladıysa sonucu at, aksi halde eski veriyi yazardık.
@@ -275,13 +305,19 @@ export const updateLockScreenActivity = async ({
     return;
   }
 
+  const setProgressStr = `Set ${completedSetsCount + 1}/${Math.max(completedSetsCount + 1, totalSetsCount)}`;
+  const exProgressStr = `${exerciseIndex}/${totalExercises}. Hareket`;
+  const timeStr = `${elapsedMinutes} Dk (${formatDuration(elapsedSeconds)})`;
+
   try {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: isResting
-        ? `Dinlenme ${formatDuration(restSecondsLeft)} · ${exerciseName || 'Antrenman'}`
-        : (exerciseName || 'Antrenman sürüyor'),
-      artist: `Geçen antrenman: ${summary}`,
-      album: `${formatDuration(elapsedSeconds)} · ${effectiveSets} etkili set`,
+        ? `⏱️ Dinlenme: ${formatDuration(restSecondsLeft)} (${restSecondsLeft}s) · ${exerciseName || 'Antrenman'}`
+        : `🏋️ ${exerciseName || 'Antrenman'} (${setProgressStr})`,
+      artist: isResting
+        ? `🏋️ ${exerciseName || 'Mevcut Hareket'} (${exProgressStr} · ${setProgressStr})`
+        : `⏱️ Toplam Antrenman Süresi: ${timeStr} · ${exProgressStr}`,
+      album: `⏱️ Antrenman Süresi: ${timeStr} · ${effectiveSets} Etkili Set · Geçen: ${summary}`,
       artwork: nextArtwork
         ? [{ src: nextArtwork, sizes: '512x512', type: 'image/png' }]
         : [],
