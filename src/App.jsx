@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Plus, Save, Activity, TrendingUp, X, ChevronRight, Search, User, Scale, Ruler, Trash2, AlertCircle, Target, Zap, Database, Flame, Beef, Droplets, Wheat, Copy, History, Settings, Star, Pencil, BookmarkPlus, Timer, Download, Upload, LineChart, BrainCircuit, Info, Play, Pause, BarChart, Smartphone, Sun } from 'lucide-react';
+import { Plus, Save, Activity, TrendingUp, X, ChevronRight, Search, User, Scale, Ruler, Trash2, AlertCircle, Target, Zap, Database, Flame, Beef, Droplets, Wheat, Copy, History, Settings, Star, Pencil, BookmarkPlus, Timer, Download, Upload, LineChart, BrainCircuit, Info, Play, Pause, BarChart, Smartphone, Sun, Trophy, Ruler as RulerIcon } from 'lucide-react';
 import {
   isLockScreenSupported, startLockScreenActivity, updateLockScreenActivity, stopLockScreenActivity,
-  isWakeLockSupported, requestWakeLock, releaseWakeLock
+  isWakeLockSupported, requestWakeLock, releaseWakeLock, playRestAlert, vibrateAlert
 } from './lockScreen';
 
 // --- BİLİMSEL SABİTLER VE YARDIMCI FONKSİYONLAR ---
@@ -12,7 +12,9 @@ const FAT_METHOD_LABELS = { skinfold: 'Kaliper Bazlı', navy: 'Mezura Bazlı', a
 
 const DEFAULT_SETTINGS = {
   autoCopyLastSet: true, nutritionGoal: 'bulk', proteinPerFfmBulk: 2.2, proteinPerFfmCut: 2.6,
-  lockScreenActivity: true, keepScreenAwake: true
+  lockScreenActivity: true, keepScreenAwake: true,
+  autoRestTimer: true, restSeconds: 120, restAlert: true,
+  repRangeMin: 6, repRangeMax: 10
 };
 
 const DELETE_LABELS = {
@@ -147,17 +149,90 @@ const loadWithFallback = (keys, defaultVal, parser = (d) => d) => {
   return defaultVal;
 };
 
+// Isınma setleri hacim, etkili set, tonaj, 1RM ve rekor hesaplarının hiçbirine girmez;
+// yalnızca seans içinde referans olarak durur.
+const isWarmupSet = (set) => set?.setType === 'warmup';
+const isWorkingSet = (set) => !isWarmupSet(set);
+
 const calcTonnage = (exercises) => {
   if (!Array.isArray(exercises)) return 0;
-  return exercises.reduce((acc, ex) => acc + (ex.sets || []).reduce((sAcc, s) => sAcc + (parseNumber(s.weight) * parseNumber(s.reps)), 0), 0);
+  return exercises.reduce((acc, ex) => acc + (ex.sets || [])
+    .filter(isWorkingSet)
+    .reduce((sAcc, s) => sAcc + (parseNumber(s.weight) * parseNumber(s.reps)), 0), 0);
 };
 
-// Etkili set: RIR <= 3 ile tamamlanan, yani hipertrofi uyaranı sağlayan setler.
+// Etkili set: RIR <= 3 ile tamamlanan, yani hipertrofi uyaranı sağlayan çalışma setleri.
 // Hem bir antrenman nesnesi hem de doğrudan hareket dizisi kabul eder.
 const calcEffectiveSets = (workoutOrExercises) => {
   const exercises = workoutOrExercises?.exercises || workoutOrExercises;
   if (!Array.isArray(exercises)) return 0;
-  return exercises.reduce((acc, ex) => acc + (ex.sets || []).filter(s => parseNumber(s.rir) <= 3 && parseNumber(s.reps) > 0).length, 0);
+  return exercises.reduce((acc, ex) => acc + (ex.sets || [])
+    .filter(s => isWorkingSet(s) && parseNumber(s.rir) <= 3 && parseNumber(s.reps) > 0).length, 0);
+};
+
+// Epley: 1RM = ağırlık × (1 + efektif tekrar / 30). Yedekte kalan tekrarlar (RIR)
+// da efektif tekrara dahildir. Formül ~15 efektif tekrarın üzerinde güvenilirliğini
+// kaybettiği için bu sınırın dışında tahmin üretilmez.
+const estimate1RM = (weight, reps, rir) => {
+  const w = parseNumber(weight);
+  const r = parseNumber(reps);
+  const totalReps = r + parseNumber(rir);
+  if (w <= 0 || r <= 0 || totalReps > 15) return 0;
+  return Math.round(w * (1 + totalReps / 30));
+};
+
+// Hareket başına en iyi tahmini 1RM. Isınma setleri ve (varsa) hâlâ sürmekte olan
+// seans hariç tutulur; rekor karşılaştırması geçmişe karşı yapılmalıdır.
+const buildPersonalRecords = (workouts, excludeWorkoutId = null) => {
+  const records = new Map();
+  for (const w of workouts) {
+    if (w.id === excludeWorkoutId) continue;
+    for (const ex of (w.exercises || [])) {
+      for (const s of (ex.sets || [])) {
+        if (isWarmupSet(s)) continue;
+        const e1rm = estimate1RM(s.weight, s.reps, s.rir);
+        if (e1rm <= 0) continue;
+        const current = records.get(ex.name);
+        if (!current || e1rm > current.e1rm) {
+          records.set(ex.name, {
+            e1rm,
+            weight: parseNumber(s.weight),
+            reps: parseNumber(s.reps),
+            date: w.date
+          });
+        }
+      }
+    }
+  }
+  return records;
+};
+
+// Çift progresyon: tekrar aralığının üstüne çıkıldıysa ağırlık artar ve alt sınıra
+// dönülür, aksi halde aynı ağırlıkta bir tekrar daha hedeflenir.
+const suggestNextTarget = (previousSets, { repRangeMin, repRangeMax }, muscle) => {
+  const working = (previousSets || []).filter(s => isWorkingSet(s) && parseNumber(s.reps) > 0);
+  if (working.length === 0) return null;
+
+  const top = working.reduce((a, b) => (parseNumber(b.weight) > parseNumber(a.weight) ? b : a));
+  const weight = parseNumber(top.weight);
+  const reps = parseNumber(top.reps);
+  const rir = parseNumber(top.rir);
+  if (reps <= 0) return null;
+
+  // İzolasyon ağırlıklı gruplarda daha küçük artış adımı kullanılır.
+  const increment = (muscle === 'Kol' || muscle === 'Omuz') ? 1.25 : 2.5;
+
+  if (reps >= repRangeMax) {
+    return {
+      weight: Number((weight + increment).toFixed(2)),
+      reps: repRangeMin,
+      note: `${reps} tekrara ulaştın, ağırlığı +${increment} kg artır`
+    };
+  }
+  if (rir === 0 && reps < repRangeMin) {
+    return { weight, reps, note: 'Geçen sefer tükenişteydin, aynı yükte kal' };
+  }
+  return { weight, reps: reps + 1, note: `Aynı ağırlıkta ${reps + 1} tekrar hedefle` };
 };
 
 // Uygulama ana ekrana kurulu (standalone) modda mı çalışıyor?
@@ -207,7 +282,12 @@ const loadPersistedState = () => {
       proteinPerFfmBulk: savedSettings.proteinPerFfmBulk || DEFAULT_SETTINGS.proteinPerFfmBulk,
       proteinPerFfmCut: savedSettings.proteinPerFfmCut || DEFAULT_SETTINGS.proteinPerFfmCut,
       lockScreenActivity: savedSettings.lockScreenActivity ?? DEFAULT_SETTINGS.lockScreenActivity,
-      keepScreenAwake: savedSettings.keepScreenAwake ?? DEFAULT_SETTINGS.keepScreenAwake
+      keepScreenAwake: savedSettings.keepScreenAwake ?? DEFAULT_SETTINGS.keepScreenAwake,
+      autoRestTimer: savedSettings.autoRestTimer ?? DEFAULT_SETTINGS.autoRestTimer,
+      restSeconds: savedSettings.restSeconds || DEFAULT_SETTINGS.restSeconds,
+      restAlert: savedSettings.restAlert ?? DEFAULT_SETTINGS.restAlert,
+      repRangeMin: savedSettings.repRangeMin || DEFAULT_SETTINGS.repRangeMin,
+      repRangeMax: savedSettings.repRangeMax || DEFAULT_SETTINGS.repRangeMax
     },
     lastBackupDate: localStorage.getItem('po_last_backup')
   };
@@ -382,6 +462,112 @@ const WorkoutTimer = ({ timer, isEditing, initialDuration }) => {
   return <span className={`font-mono font-bold ${isRunning ? 'text-emerald-400' : 'text-zinc-500'}`}>{h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`}</span>;
 };
 
+// Zaman serisi çizgi grafiği. data: [{ date: 'YYYY-MM-DD', value: number }]
+const TrendChart = ({ data, color = '#22d3ee', unit = '', decimals = 1 }) => {
+  if (!Array.isArray(data) || data.length < 2) {
+    return (
+      <div className="h-52 flex items-center justify-center text-zinc-600 text-[10px] font-mono text-center px-6">
+        Trend çizilebilmesi için en az 2 kayıt gerekli.
+      </div>
+    );
+  }
+
+  const W = 320, H = 170, PAD_L = 38, PAD_R = 10, PAD_T = 14, PAD_B = 24;
+  const values = data.map(d => d.value);
+  const rawMin = Math.min(...values);
+  const rawMax = Math.max(...values);
+  // Tamamen düz seride sıfıra bölmeyi önlemek için yapay bir aralık açılır.
+  const span = rawMax - rawMin || Math.max(Math.abs(rawMax) * 0.1, 1);
+  const min = rawMin - span * 0.15;
+  const max = rawMax + span * 0.15;
+
+  const x = (i) => PAD_L + (i / (data.length - 1)) * (W - PAD_L - PAD_R);
+  const y = (v) => PAD_T + (1 - (v - min) / (max - min)) * (H - PAD_T - PAD_B);
+
+  const linePoints = data.map((d, i) => `${x(i)},${y(d.value)}`).join(' ');
+  const areaPoints = `${PAD_L},${H - PAD_B} ${linePoints} ${x(data.length - 1)},${H - PAD_B}`;
+
+  const first = data[0];
+  const last = data[data.length - 1];
+  const change = last.value - first.value;
+  const fmt = (v) => v.toFixed(decimals);
+  const gradientId = `grad-${color.replace('#', '')}`;
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 170 }}>
+        <defs>
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+            <stop offset="100%" stopColor={color} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
+        {/* Yatay kılavuz çizgileri ve eksen değerleri */}
+        {[0, 0.5, 1].map((t) => {
+          const value = max - t * (max - min);
+          const gy = PAD_T + t * (H - PAD_T - PAD_B);
+          return (
+            <g key={t}>
+              <line x1={PAD_L} y1={gy} x2={W - PAD_R} y2={gy} stroke="#27272a" strokeWidth="1" />
+              <text x={PAD_L - 5} y={gy + 3} textAnchor="end" fill="#52525b" fontSize="8" fontFamily="monospace">
+                {fmt(value)}
+              </text>
+            </g>
+          );
+        })}
+
+        <polygon points={areaPoints} fill={`url(#${gradientId})`} />
+        <polyline points={linePoints} fill="none" stroke={color} strokeWidth="2"
+          strokeLinejoin="round" strokeLinecap="round" />
+
+        {data.map((d, i) => (
+          <circle key={i} cx={x(i)} cy={y(d.value)} r={i === data.length - 1 ? 3.5 : 2}
+            fill={i === data.length - 1 ? color : '#09090b'} stroke={color} strokeWidth="1.5" />
+        ))}
+
+        <text x={PAD_L} y={H - 8} fill="#52525b" fontSize="8" fontFamily="monospace">
+          {new Date(first.date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}
+        </text>
+        <text x={W - PAD_R} y={H - 8} textAnchor="end" fill="#52525b" fontSize="8" fontFamily="monospace">
+          {new Date(last.date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}
+        </text>
+      </svg>
+
+      <div className="grid grid-cols-3 gap-2 mt-3">
+        <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-center">
+          <div className="text-[8px] uppercase tracking-widest text-zinc-500 font-bold">İlk</div>
+          <div className="font-mono text-xs text-zinc-300 mt-0.5">{fmt(first.value)}{unit}</div>
+        </div>
+        <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-center">
+          <div className="text-[8px] uppercase tracking-widest text-zinc-500 font-bold">Son</div>
+          <div className="font-mono text-xs font-bold mt-0.5" style={{ color }}>{fmt(last.value)}{unit}</div>
+        </div>
+        <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-center">
+          <div className="text-[8px] uppercase tracking-widest text-zinc-500 font-bold">Değişim</div>
+          <div className={`font-mono text-xs font-bold mt-0.5 ${change > 0 ? 'text-emerald-400' : change < 0 ? 'text-orange-400' : 'text-zinc-400'}`}>
+            {change > 0 ? '+' : ''}{fmt(change)}{unit}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Ölçüm arşivinden çizilebilecek seriler
+const BODY_METRICS = [
+  { key: 'weight', label: 'Kilo', unit: ' kg', color: '#22d3ee', pick: (m) => parseNumber(m.weight) },
+  { key: 'bodyFat', label: 'Yağ %', unit: '%', color: '#fb923c', pick: (m) => m.composition.activeBF },
+  { key: 'ffm', label: 'Yağsız Kütle', unit: ' kg', color: '#34d399', pick: (m) => parseNumber(m.composition.ffm) },
+  { key: 'ffmi', label: 'FFMI', unit: '', color: '#a78bfa', pick: (m) => parseNumber(m.composition.ffmi) },
+  { key: 'chest', label: 'Göğüs', unit: ' cm', color: '#f472b6', pick: (m) => parseNumber(m.measurements?.chest) },
+  { key: 'arm', label: 'Kol', unit: ' cm', color: '#facc15', pick: (m) => parseNumber(m.measurements?.arm) },
+  { key: 'waist', label: 'Bel', unit: ' cm', color: '#f87171', pick: (m) => parseNumber(m.measurements?.waist) },
+  { key: 'shoulder', label: 'Omuz', unit: ' cm', color: '#60a5fa', pick: (m) => parseNumber(m.measurements?.shoulder) },
+  { key: 'thigh', label: 'Bacak', unit: ' cm', color: '#4ade80', pick: (m) => parseNumber(m.measurements?.thigh) },
+  { key: 'hip', label: 'Kalça', unit: ' cm', color: '#c084fc', pick: (m) => parseNumber(m.measurements?.hip) },
+];
+
 export default function App() {
   // Kalıcı veri, efekt içinde değil lazy initializer ile okunur. Böylece ilk render'da
   // veri hazır olur ve "boş başlangıç state'ini diske yazma" yarışı hiç oluşmaz.
@@ -399,7 +585,7 @@ export default function App() {
   const [view, setView] = useState('home');
   const [historyTab, setHistoryTab] = useState('workouts');
   const [profileTab, setProfileTab] = useState('metrics');
-  const [analysisType, setAnalysisType] = useState('1rm'); // '1rm' or 'volume'
+  const [analysisType, setAnalysisType] = useState('body'); // 'body' | '1rm' | 'volume'
 
   const [customExercises, setCustomExercises] = useState(initial.customExercises);
   const [isExerciseModalOpen, setIsExerciseModalOpen] = useState(false);
@@ -422,8 +608,13 @@ export default function App() {
   const [currentNutritionForm, setCurrentNutritionForm] = useState(initial.currentNutritionForm);
 
   const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, type: null, id: null });
-  const [restTimer, setRestTimer] = useState(0);
+  // Dinlenme sayacı bitiş zamanı olarak tutulur (geri sayan bir sayı olarak değil):
+  // böylece uygulama arka plandayken setInterval kısıtlansa bile geri dönüldüğünde
+  // kalan süre doğru hesaplanır.
+  const [rest, setRest] = useState(null);            // { endsAt, total }
+  const [restSecondsLeft, setRestSecondsLeft] = useState(0);
   const [analysisExercise, setAnalysisExercise] = useState('');
+  const [bodyMetricKey, setBodyMetricKey] = useState('weight');
 
   const [lastBackupDate, setLastBackupDate] = useState(initial.lastBackupDate);
   const [isStoragePersisted, setIsStoragePersisted] = useState(false);
@@ -440,6 +631,10 @@ export default function App() {
   const activeWorkoutRef = useRef(activeWorkout);
   const currentMetricsFormRef = useRef(currentMetricsForm);
   const exerciseHistoryRef = useRef(null);
+  const restRef = useRef(null);
+  // Tekrar alanına odaklanıldığındaki değer; dinlenmenin sadece gerçekten
+  // yeni bir set girildiğinde otomatik başlaması için karşılaştırılır.
+  const repsOnFocusRef = useRef(null);
 
   // --- INIT & PERSISTENCE ---
   // Veri yükleme yukarıda lazy initializer ile yapıldı. Burada yalnızca tarayıcıdan
@@ -478,11 +673,35 @@ export default function App() {
     return () => clearTimeout(timeoutId);
   }, [activeWorkout]);
 
+  // Kalan süre bitiş zamanından türetilir; 500ms'lik tik yalnızca ekranı tazeler.
   useEffect(() => {
-    let interval;
-    if (restTimer > 0) interval = setInterval(() => setRestTimer(t => t - 1), 1000);
+    if (!rest) return;
+
+    const interval = setInterval(() => {
+      const left = Math.max(0, Math.ceil((rest.endsAt - Date.now()) / 1000));
+      setRestSecondsLeft(left);
+      if (left <= 0) {
+        setRest(null);
+        if (settings.restAlert) {
+          playRestAlert();
+          vibrateAlert();
+        }
+      }
+    }, 500);
+
     return () => clearInterval(interval);
-  }, [restTimer]);
+  }, [rest, settings.restAlert]);
+
+  const startRest = (seconds) => {
+    const total = Math.max(1, Math.round(seconds));
+    setRest(() => ({ endsAt: Date.now() + total * 1000, total }));
+    setRestSecondsLeft(total);
+  };
+
+  const stopRest = () => {
+    setRest(null);
+    setRestSecondsLeft(0);
+  };
 
   // Kısa bildirimler (kaydetme onayı, hata mesajı vb.)
   // Her çağrıda yeni bir nesne üretilir; efekt bu referans değişimiyle tetiklenir.
@@ -662,6 +881,13 @@ export default function App() {
 
   const activeWorkoutId = activeWorkout ? activeWorkout.id : null;
 
+  // Hareket başına geçmiş rekorlar; süren seans hariç tutulur ki bu seansta
+  // kırılan rekor "yeni" olarak tespit edilebilsin.
+  const personalRecords = useMemo(
+    () => buildPersonalRecords(workouts, activeWorkoutId),
+    [workouts, activeWorkoutId]
+  );
+
   // Hareket adı -> en son yapılan seansın verisi. Tek seferde kurulur; aksi halde
   // her render'da (her tuş vuruşunda) tüm antrenman geçmişi baştan taranırdı.
   const exerciseHistoryIndex = useMemo(() => {
@@ -671,10 +897,14 @@ export default function App() {
     for (const w of sorted) {
       if (!Array.isArray(w.exercises) || w.id === activeWorkoutId) continue;
       for (const ex of w.exercises) {
-        if (index.has(ex.name) || !Array.isArray(ex.sets) || ex.sets.length === 0) continue;
-        const best = ex.sets.reduce((prev, current) =>
+        if (index.has(ex.name) || !Array.isArray(ex.sets)) continue;
+        // Isınma setleri referans alınmamalı; "geçen sefer ne yaptım" sorusunun
+        // cevabı çalışma setleridir.
+        const working = ex.sets.filter(isWorkingSet);
+        if (working.length === 0) continue;
+        const best = working.reduce((prev, current) =>
           ((parseNumber(prev.weight) * parseNumber(prev.reps)) > (parseNumber(current.weight) * parseNumber(current.reps)) ? prev : current));
-        index.set(ex.name, { date: w.date, sets: ex.sets, best });
+        index.set(ex.name, { date: w.date, sets: working, best });
       }
     }
     return index;
@@ -687,7 +917,8 @@ export default function App() {
     activeWorkoutRef.current = activeWorkout;
     currentMetricsFormRef.current = currentMetricsForm;
     exerciseHistoryRef.current = exerciseHistoryIndex;
-  }, [activeWorkout, currentMetricsForm, exerciseHistoryIndex]);
+    restRef.current = rest;
+  }, [activeWorkout, currentMetricsForm, exerciseHistoryIndex, rest]);
 
   // --- KİLİT EKRANI CANLI KARTI ---
   const timerStatus = activeWorkout?.timer?.status || null;
@@ -734,13 +965,18 @@ export default function App() {
         elapsed += Math.floor((Date.now() - workout.timer.startTime) / 1000);
       }
 
+      const currentRest = restRef.current;
+      const secondsLeft = currentRest ? Math.max(0, Math.ceil((currentRest.endsAt - Date.now()) / 1000)) : 0;
+
       updateLockScreenActivity({
         elapsedSeconds: elapsed,
         exerciseName: active?.name || '',
-        previousSets: history?.sets || [],
+        previousSets: (history?.sets || []).filter(isWorkingSet),
         previousDate: history ? new Date(history.date).toLocaleDateString('tr-TR') : '',
         effectiveSets: calcEffectiveSets(exercises),
         isPaused: workout.timer?.status !== 'running',
+        restSecondsLeft: secondsLeft,
+        restTotalSeconds: currentRest?.total || 0,
       });
     };
 
@@ -761,7 +997,9 @@ export default function App() {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [lockScreenOn, activeWorkoutId, isEditingOldWorkout, currentExerciseName, timerStatus, settings.keepScreenAwake]);
+    // `rest` bağımlılığı sayesinde dinlenme başlayıp bittiğinde kart anında tazelenir;
+    // aradaki geri sayımı iOS kendi saatinden ilerletir.
+  }, [lockScreenOn, activeWorkoutId, isEditingOldWorkout, currentExerciseName, timerStatus, rest, settings.keepScreenAwake]);
 
   // --- ANTRENMAN MANTIĞI ---
   const updateInteraction = () => {
@@ -784,7 +1022,8 @@ export default function App() {
       newExercises = preWorkoutModal.sourceData.exercises.map(ex => ({
         id: generateId(), name: ex.name,
         sets: Array.isArray(ex.sets) ? ex.sets.map(s => ({
-          id: generateId(), weight: s.weight || '', reps: s.reps || '', rir: s.rir || 2, tempo: s.tempo || '', formRating: s.formRating || 8
+          id: generateId(), weight: s.weight || '', reps: s.reps || '', rir: s.rir || 2,
+          tempo: s.tempo || '', formRating: s.formRating || 8, setType: s.setType || 'normal'
         })) : []
       }));
     }
@@ -922,10 +1161,30 @@ export default function App() {
       setWorkouts([finalizedWorkout, ...workouts].sort((a, b) => new Date(b.date) - new Date(a.date)));
     }
 
+    // Bu seansta kırılan rekorlar (ısınma setleri hariç)
+    const brokenRecords = [];
+    for (const ex of cleanedExercises) {
+      const best = ex.sets
+        .filter(isWorkingSet)
+        .reduce((max, s) => Math.max(max, estimate1RM(s.weight, s.reps, s.rir)), 0);
+      const previous = personalRecords.get(ex.name);
+      if (best > 0 && (!previous || best > previous.e1rm)) {
+        brokenRecords.push({ name: ex.name, e1rm: best });
+      }
+    }
+
     endLiveSession();
     setActiveWorkout(null);
     setIsEndWorkoutModalOpen(false);
     setView('home');
+
+    if (brokenRecords.length === 1) {
+      showToast(`Yeni rekor: ${brokenRecords[0].name} — ${brokenRecords[0].e1rm} kg`);
+    } else if (brokenRecords.length > 1) {
+      showToast(`${brokenRecords.length} hareketde yeni rekor kırdın.`);
+    } else {
+      showToast('Antrenman kaydedildi.');
+    }
   };
 
   const saveAsTemplate = (workout) => {
@@ -942,16 +1201,6 @@ export default function App() {
   const getRecentExerciseData = (exerciseName) => {
     const entry = exerciseHistoryIndex.get(exerciseName);
     return entry ? { date: entry.date, sets: entry.sets } : null;
-  };
-
-  const calcEstimated1RM = (weight, reps, rir) => {
-    const w = parseNumber(weight);
-    const r = parseNumber(reps);
-    const reserve = parseNumber(rir);
-    if (w > 0 && r > 0) {
-      return Math.round(w * (1 + (r + reserve) / 30)); // Epley
-    }
-    return 0;
   };
 
   const allExercisesNames = [...new Set([
@@ -996,8 +1245,12 @@ export default function App() {
     setActiveWorkout(prev => ({
       ...prev, activeExerciseId: exerciseId, exercises: (prev?.exercises || []).map(ex => {
         if (ex.id === exerciseId) {
-          const lastSet = ex.sets[ex.sets.length - 1] || { weight: '', reps: '', rir: 2, tempo: '', formRating: 8 };
-          const newSet = settings.autoCopyLastSet ? { ...lastSet, id: generateId() } : { id: generateId(), weight: '', reps: '', rir: 2, tempo: '', formRating: 8 };
+          const lastSet = ex.sets[ex.sets.length - 1] || { weight: '', reps: '', rir: 2, tempo: '', formRating: 8, setType: 'normal' };
+          // Kopyalarken set tipi de taşınır: arka arkaya ısınma seti eklemek yaygın.
+          // Isınma satırları turuncu göründüğü için yanlışlıkla kalması fark edilir.
+          const newSet = settings.autoCopyLastSet
+            ? { ...lastSet, id: generateId() }
+            : { id: generateId(), weight: '', reps: '', rir: 2, tempo: '', formRating: 8, setType: 'normal' };
           return { ...ex, sets: [...ex.sets, newSet] };
         }
         return ex;
@@ -1025,25 +1278,25 @@ export default function App() {
     const data = [];
     workouts.forEach(w => {
       const ex = (w.exercises || []).find(e => e.name === exerciseName);
-      if (ex && Array.isArray(ex.sets) && ex.sets.length > 0) {
-        let max1RM = 0;
-        ex.sets.forEach(s => {
-          if (s.setType === 'warmup') return; // Isınma setleri güç göstergesi değildir
-          const weight = parseNumber(s.weight); const reps = parseNumber(s.reps);
-          const reserve = parseNumber(s.rir);
-          // Set içinde gösterilen tahminle aynı formül: yedekte kalan tekrarlar da sayılır.
-          // Epley 15 efektif tekrarın üzerinde güvenilirliğini kaybettiği için sınır konur.
-          const totalReps = reps + reserve;
-          if (weight > 0 && reps > 0 && totalReps <= 15) {
-            const epley1RM = weight * (1 + totalReps / 30);
-            if (epley1RM > max1RM) max1RM = epley1RM;
-          }
-        });
-        if (max1RM > 0) data.push({ date: w.date, rm: Math.round(max1RM) });
-      }
+      if (!ex || !Array.isArray(ex.sets)) return;
+      // Isınma setleri güç göstergesi değildir; estimate1RM içindeki tekrar sınırı da
+      // set satırında gösterilen tahminle tutarlılığı sağlar.
+      const max1RM = ex.sets
+        .filter(isWorkingSet)
+        .reduce((best, s) => Math.max(best, estimate1RM(s.weight, s.reps, s.rir)), 0);
+      if (max1RM > 0) data.push({ date: w.date, value: max1RM });
     });
     return data.sort((a, b) => new Date(a.date) - new Date(b.date));
   };
+
+  // Ölçüm arşivinden seçili serinin zaman dizisi
+  const bodyTrendData = useMemo(() => {
+    const metric = BODY_METRICS.find(m => m.key === bodyMetricKey) || BODY_METRICS[0];
+    return metricsHistoryWithComposition
+      .map(m => ({ date: m.date, value: metric.pick(m) }))
+      .filter(p => Number.isFinite(p.value) && p.value > 0)
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+  }, [metricsHistoryWithComposition, bodyMetricKey]);
 
   const exportJSON = () => {
     const data = { workouts, templates, customExercises, metricsHistory, nutritionHistory, mealTemplates, dayTemplates, settings };
@@ -1421,6 +1674,9 @@ export default function App() {
         {(activeWorkout.exercises || []).map((ex, exIndex) => {
           const effSets = calcEffectiveSets([ex]);
           const recentData = getRecentExerciseData(ex.name);
+          const { muscle } = detectMuscleGroup(ex.name, customExercises);
+          const target = recentData ? suggestNextTarget(recentData.sets, settings, muscle) : null;
+          const record = personalRecords.get(ex.name);
 
           return (
             <div key={ex.id} className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
@@ -1429,12 +1685,32 @@ export default function App() {
                 <button onClick={() => setActiveWorkout(prev => ({ ...prev, exercises: prev.exercises.filter(e => e.id !== ex.id) }))} className="text-zinc-600 p-1"><X size={14} /></button>
               </div>
 
+              {/* Progresif yükleme hedefi: geçen seansın çalışma setlerinden türetilir */}
+              {target && (
+                <div className="bg-emerald-950/25 px-3 py-2 border-b border-emerald-900/40">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] font-bold uppercase tracking-widest text-emerald-500 flex items-center">
+                      <TrendingUp size={11} className="mr-1.5" /> Bugünkü Hedef
+                    </span>
+                    <span className="font-mono text-sm font-bold text-emerald-400">{target.weight} kg × {target.reps}</span>
+                  </div>
+                  <div className="text-[9px] text-emerald-700 font-mono mt-1">{target.note}</div>
+                </div>
+              )}
+
               {recentData && (
                 <div className="bg-cyan-950/20 px-3 py-1.5 border-b border-zinc-800 text-[9px] text-cyan-500/70 font-mono flex gap-3 overflow-x-auto hide-scrollbar items-center">
-                  <span className="text-cyan-600 font-bold shrink-0">Geçmiş:</span>
+                  <span className="text-cyan-600 font-bold shrink-0">Geçen ({new Date(recentData.date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}):</span>
                   {recentData.sets.map((s, i) => (
-                    <span key={i} className="shrink-0">{s.weight}x{s.reps} {s.rir && `(RIR:${s.rir})`}</span>
+                    <span key={i} className="shrink-0">{s.weight}x{s.reps} {s.rir !== '' && s.rir !== undefined && `(RIR:${s.rir})`}</span>
                   ))}
+                </div>
+              )}
+
+              {record && (
+                <div className="bg-yellow-950/15 px-3 py-1.5 border-b border-zinc-800 text-[9px] font-mono flex items-center gap-2">
+                  <Trophy size={10} className="text-yellow-500 shrink-0" />
+                  <span className="text-yellow-600/80">Rekor: <span className="text-yellow-500 font-bold">{record.e1rm} kg</span> (1RM tahmini · {record.weight}×{record.reps})</span>
                 </div>
               )}
 
@@ -1444,13 +1720,40 @@ export default function App() {
                 </div>
 
                 {(ex.sets || []).map((set, setIndex) => {
-                  const isEffective = parseNumber(set.rir) <= 3 && parseNumber(set.reps) > 0;
-                  const e1rm = calcEstimated1RM(set.weight, set.reps, set.rir);
+                  const warmup = isWarmupSet(set);
+                  const isEffective = !warmup && parseNumber(set.rir) <= 3 && parseNumber(set.reps) > 0;
+                  const e1rm = warmup ? 0 : estimate1RM(set.weight, set.reps, set.rir);
+                  const isNewRecord = e1rm > 0 && (!record || e1rm > record.e1rm);
+                  // Isınma setleri numaralandırmaya dahil edilmez.
+                  const workingIndex = (ex.sets || []).slice(0, setIndex + 1).filter(isWorkingSet).length;
+
                   return (
-                    <div key={set.id} className={`grid grid-cols-12 gap-1 items-center bg-zinc-950 p-1 rounded-xl border transition-colors ${isEffective ? 'border-cyan-900/50' : 'border-zinc-800'} relative`}>
-                      <div className="col-span-1 text-center text-[10px] font-mono text-zinc-500">{setIndex + 1}</div>
-                      <div className="col-span-3"><input type="number" inputMode="decimal" value={set.weight} onChange={(e) => updateSet(ex.id, set.id, 'weight', e.target.value)} onFocus={e => e.target.select()} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-cyan-400 font-mono text-sm outline-none text-center focus:bg-zinc-800 h-10 transition-colors" placeholder="0" /></div>
-                      <div className="col-span-2"><input type="number" inputMode="decimal" value={set.reps} onChange={(e) => updateSet(ex.id, set.id, 'reps', e.target.value)} onFocus={e => e.target.select()} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-zinc-100 font-mono text-sm outline-none text-center focus:bg-zinc-800 h-10 transition-colors" placeholder="0" /></div>
+                    <div key={set.id} className={`grid grid-cols-12 gap-1 items-center p-1 rounded-xl border transition-colors relative ${warmup ? 'bg-zinc-950/50 border-orange-900/40' : isEffective ? 'bg-zinc-950 border-cyan-900/50' : 'bg-zinc-950 border-zinc-800'}`}>
+                      <button
+                        onClick={() => updateSet(ex.id, set.id, 'setType', warmup ? 'normal' : 'warmup')}
+                        title={warmup ? 'Isınma seti — dokun: çalışma setine çevir' : 'Çalışma seti — dokun: ısınma yap'}
+                        className={`col-span-1 text-center text-[10px] font-mono font-bold h-10 rounded-lg transition-colors ${warmup ? 'text-orange-400 bg-orange-950/30' : 'text-zinc-500 active:bg-zinc-800'}`}
+                      >
+                        {warmup ? 'W' : workingIndex}
+                      </button>
+                      <div className="col-span-3"><input type="number" inputMode="decimal" value={set.weight} onChange={(e) => updateSet(ex.id, set.id, 'weight', e.target.value)} onFocus={e => e.target.select()} className={`w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 font-mono text-sm outline-none text-center focus:bg-zinc-800 h-10 transition-colors ${warmup ? 'text-orange-300/70' : 'text-cyan-400'}`} placeholder="0" /></div>
+                      <div className="col-span-2">
+                        <input
+                          type="number" inputMode="decimal" value={set.reps}
+                          onChange={(e) => updateSet(ex.id, set.id, 'reps', e.target.value)}
+                          onFocus={(e) => { e.target.select(); repsOnFocusRef.current = e.target.value; }}
+                          onBlur={(e) => {
+                            // Dinlenme yalnızca gerçekten yeni bir tekrar girildiğinde başlar;
+                            // alanlar arasında gezinmek sayacı sıfırdan başlatmamalı.
+                            const changed = repsOnFocusRef.current !== e.target.value;
+                            repsOnFocusRef.current = null;
+                            if (changed && settings.autoRestTimer && !warmup && parseNumber(e.target.value) > 0) {
+                              startRest(settings.restSeconds);
+                            }
+                          }}
+                          className={`w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 font-mono text-sm outline-none text-center focus:bg-zinc-800 h-10 transition-colors ${warmup ? 'text-zinc-500' : 'text-zinc-100'}`}
+                          placeholder="0" />
+                      </div>
                       <div className="col-span-2"><input type="number" inputMode="decimal" step="0.5" value={set.rir} onChange={(e) => updateSet(ex.id, set.id, 'rir', e.target.value)} onFocus={e => e.target.select()} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-zinc-300 font-mono text-xs outline-none text-center focus:bg-zinc-800 h-10 transition-colors" placeholder="0" /></div>
                       <div className="col-span-2"><input type="text" maxLength="4" value={set.tempo || ''} onChange={(e) => updateSet(ex.id, set.id, 'tempo', e.target.value)} onFocus={e => e.target.select()} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-zinc-400 font-mono text-[10px] outline-none text-center focus:bg-zinc-800 h-10 transition-colors" placeholder="TUT" /></div>
                       <div className="col-span-2 flex items-center pr-1">
@@ -1462,7 +1765,16 @@ export default function App() {
                         <button onClick={() => removeSet(ex.id, set.id)} className="text-zinc-700 active:text-red-500 hover:text-red-500 p-1 -m-1 transition-colors" title="Bu seti sil">
                           <Trash2 size={11} />
                         </button>
-                        <span className="text-[8px] text-cyan-600/70 font-mono tracking-widest">1RM: {e1rm}kg</span>
+                        {warmup ? (
+                          <span className="text-[8px] text-orange-600/70 font-mono tracking-widest uppercase">Isınma · hacme sayılmaz</span>
+                        ) : (
+                          <span className="text-[8px] font-mono tracking-widest flex items-center gap-1.5">
+                            {isNewRecord && (
+                              <span className="text-yellow-400 font-bold flex items-center"><Trophy size={9} className="mr-0.5" /> REKOR</span>
+                            )}
+                            <span className="text-cyan-600/70">1RM: {e1rm > 0 ? `${e1rm}kg` : '—'}</span>
+                          </span>
+                        )}
                       </div>
                     </div>
                   );
@@ -1471,9 +1783,9 @@ export default function App() {
                 <div className="flex items-center justify-between pt-1 px-1">
                   <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">Etkili Set: <span className="font-mono text-cyan-400">{effSets}</span></span>
                   <div className="flex space-x-1">
-                    <button onClick={() => setRestTimer(60)} className="bg-zinc-950 active:bg-zinc-800 text-zinc-400 text-[10px] font-bold py-1.5 px-2.5 rounded-lg border border-zinc-800 uppercase transition-colors">60s</button>
-                    <button onClick={() => setRestTimer(90)} className="bg-zinc-950 active:bg-zinc-800 text-zinc-400 text-[10px] font-bold py-1.5 px-2.5 rounded-lg border border-zinc-800 uppercase transition-colors">90s</button>
-                    <button onClick={() => setRestTimer(120)} className="bg-zinc-950 active:bg-zinc-800 text-zinc-400 text-[10px] font-bold py-1.5 px-2.5 rounded-lg border border-zinc-800 uppercase transition-colors">120s</button>
+                    <button onClick={() => startRest(60)} className="bg-zinc-950 active:bg-zinc-800 text-zinc-400 text-[10px] font-bold py-1.5 px-2.5 rounded-lg border border-zinc-800 uppercase transition-colors">60s</button>
+                    <button onClick={() => startRest(90)} className="bg-zinc-950 active:bg-zinc-800 text-zinc-400 text-[10px] font-bold py-1.5 px-2.5 rounded-lg border border-zinc-800 uppercase transition-colors">90s</button>
+                    <button onClick={() => startRest(settings.restSeconds)} className="bg-zinc-950 active:bg-zinc-800 text-cyan-500 text-[10px] font-bold py-1.5 px-2.5 rounded-lg border border-cyan-900/50 uppercase transition-colors">{settings.restSeconds}s</button>
                     <button onClick={() => addSet(ex.id)} className="bg-zinc-800 active:bg-zinc-700 text-zinc-300 text-[10px] font-bold py-1.5 px-3 rounded-lg border border-zinc-700 uppercase tracking-wider flex items-center transition-colors"><Plus size={12} className="mr-1" /> Set</button>
                   </div>
                 </div>
@@ -1487,12 +1799,31 @@ export default function App() {
         </button>
       </div>
 
-      {restTimer > 0 && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-zinc-800 border border-zinc-700 text-cyan-400 px-5 py-3 rounded-full shadow-2xl flex items-center space-x-3 z-50">
-          <Timer size={18} className="animate-pulse" />
-          <span className="font-mono font-bold text-xl tracking-widest">{Math.floor(restTimer / 60)}:{(restTimer % 60).toString().padStart(2, '0')}</span>
-          <div className="w-px h-6 bg-zinc-700 mx-1"></div>
-          <button onClick={() => setRestTimer(0)} className="text-zinc-400 hover:text-red-400 bg-zinc-900 p-2 rounded-full"><X size={14} /></button>
+      {rest && restSecondsLeft > 0 && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-[360px]">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl px-4 py-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[9px] font-bold uppercase tracking-widest text-cyan-500 flex items-center">
+                <Timer size={12} className="mr-1.5 animate-pulse" /> Dinlenme
+              </span>
+              <div className="flex items-center gap-2">
+                <button onClick={() => startRest(restSecondsLeft + 30)} className="text-[9px] font-bold text-zinc-400 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 active:bg-zinc-800 transition-colors">+30s</button>
+                <button onClick={stopRest} className="text-zinc-500 hover:text-red-400 bg-zinc-950 border border-zinc-800 p-1.5 rounded-lg transition-colors"><X size={12} /></button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span className="font-mono font-bold text-3xl text-cyan-400 tabular-nums tracking-tight">
+                {Math.floor(restSecondsLeft / 60)}:{(restSecondsLeft % 60).toString().padStart(2, '0')}
+              </span>
+              <div className="flex-1 bg-zinc-950 rounded-full h-2 border border-zinc-800 overflow-hidden">
+                <div
+                  className="h-full bg-cyan-500 rounded-full transition-all duration-500"
+                  style={{ width: `${Math.max(0, Math.min(100, (restSecondsLeft / rest.total) * 100))}%` }}
+                />
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -1717,11 +2048,32 @@ export default function App() {
           <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
             <div className="p-4 border-b border-zinc-800 bg-zinc-950/50 flex flex-col space-y-3">
               <div className="flex bg-zinc-900 rounded-xl p-1 border border-zinc-800">
+                <button onClick={() => setAnalysisType('body')} className={`flex-1 py-1.5 text-[10px] font-bold uppercase rounded-lg transition-colors ${analysisType === 'body' ? 'bg-zinc-800 text-cyan-400 shadow' : 'text-zinc-500'}`}>Vücut</button>
                 <button onClick={() => setAnalysisType('1rm')} className={`flex-1 py-1.5 text-[10px] font-bold uppercase rounded-lg transition-colors ${analysisType === '1rm' ? 'bg-zinc-800 text-cyan-400 shadow' : 'text-zinc-500'}`}>1RM</button>
-                <button onClick={() => setAnalysisType('volume')} className={`flex-1 py-1.5 text-[10px] font-bold uppercase rounded-lg transition-colors ${analysisType === 'volume' ? 'bg-zinc-800 text-cyan-400 shadow' : 'text-zinc-500'}`}>Hacim Yükü</button>
+                <button onClick={() => setAnalysisType('volume')} className={`flex-1 py-1.5 text-[10px] font-bold uppercase rounded-lg transition-colors ${analysisType === 'volume' ? 'bg-zinc-800 text-cyan-400 shadow' : 'text-zinc-500'}`}>Hacim</button>
               </div>
 
-              {analysisType === '1rm' ? (
+              {analysisType === 'body' && (
+                <>
+                  <h2 className="text-xs font-bold text-zinc-100 uppercase tracking-wider flex items-center mt-2">
+                    <RulerIcon size={14} className="mr-2 text-cyan-500" /> Vücut Gelişim Trendi
+                  </h2>
+                  <div className="flex flex-wrap gap-1.5">
+                    {BODY_METRICS.map(m => (
+                      <button
+                        key={m.key}
+                        onClick={() => setBodyMetricKey(m.key)}
+                        className={`text-[9px] font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-lg border transition-colors ${bodyMetricKey === m.key ? 'bg-zinc-800 border-zinc-600 text-zinc-100' : 'bg-zinc-950 border-zinc-800 text-zinc-500'}`}
+                        style={bodyMetricKey === m.key ? { color: m.color, borderColor: m.color } : undefined}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {analysisType === '1rm' && (
                 <>
                   <h2 className="text-xs font-bold text-zinc-100 uppercase tracking-wider flex items-center mt-2"><LineChart size={14} className="mr-2 text-cyan-500" /> Tahmini 1RM Trendi</h2>
                   {performedExercises.length > 0 ? (
@@ -1732,59 +2084,35 @@ export default function App() {
                     <div className="text-xs text-zinc-500 font-mono">Antrenman verisi bulunamadı.</div>
                   )}
                 </>
-              ) : (
+              )}
+
+              {analysisType === 'volume' && (
                 <h2 className="text-xs font-bold text-zinc-100 uppercase tracking-wider flex items-center mt-2"><BarChart size={14} className="mr-2 text-cyan-500" /> Haftalık İş Kapasitesi (Kg)</h2>
               )}
             </div>
 
-            <div className="p-4 h-64 bg-zinc-950 relative flex items-end justify-between overflow-x-auto hide-scrollbar">
+            <div className="p-4 bg-zinc-950">
+              {analysisType === 'body' && (() => {
+                const metric = BODY_METRICS.find(m => m.key === bodyMetricKey) || BODY_METRICS[0];
+                if (metricsHistoryWithComposition.length === 0) {
+                  return <div className="h-52 flex items-center justify-center text-zinc-600 text-xs font-mono">Ölçüm kaydı yok.</div>;
+                }
+                return <TrendChart data={bodyTrendData} color={metric.color} unit={metric.unit} decimals={metric.key === 'ffmi' ? 1 : 1} />;
+              })()}
+
               {analysisType === '1rm' && (() => {
-                if (performedExercises.length === 0) return <div className="absolute inset-0 flex items-center justify-center text-zinc-600 text-xs font-mono">Kayıt Yok</div>;
-
-                const data = get1RMData(activeAnalysisExercise);
-                if (data.length < 2) return <div className="absolute inset-0 flex items-center justify-center text-zinc-600 text-[10px] font-mono text-center px-4">Gelişim analizi için (Maks 15 tekrarlı) en az 2 kayıt gereklidir.</div>;
-
-                const maxRm = Math.max(...data.map(d => d.rm));
-                const minRm = Math.min(...data.map(d => d.rm));
-                const range = maxRm - minRm || 1;
-
-                return (
-                  <div className="min-w-full h-full flex items-end justify-start space-x-6 pt-6 pb-4 px-2">
-                    {data.map((point, i) => {
-                      const heightPercent = ((point.rm - minRm) / range) * 70 + 15;
-                      return (
-                        <div key={i} className="relative flex flex-col items-center group w-6 shrink-0">
-                          <div className="absolute bottom-full mb-1 text-[9px] font-bold font-mono text-cyan-400 bg-zinc-800 px-1.5 py-0.5 rounded shadow">{point.rm} PR</div>
-                          <div className="w-full bg-cyan-600 rounded-t-md transition-all duration-500 hover:bg-cyan-400" style={{ height: `${heightPercent}%` }}></div>
-                          <div className="absolute top-full mt-2 text-[8px] text-zinc-500 font-mono whitespace-nowrap">{new Date(point.date).toLocaleDateString('tr-TR', { month: 'short', day: 'numeric' })}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
+                if (performedExercises.length === 0) {
+                  return <div className="h-52 flex items-center justify-center text-zinc-600 text-xs font-mono">Kayıt Yok</div>;
+                }
+                return <TrendChart data={get1RMData(activeAnalysisExercise)} color="#22d3ee" unit=" kg" decimals={0} />;
               })()}
 
-              {analysisType === 'volume' && (() => {
-                if (weeklyVolumeData.length === 0) return <div className="absolute inset-0 flex items-center justify-center text-zinc-600 text-xs font-mono">Kayıt Yok</div>;
-
-                const maxVol = Math.max(...weeklyVolumeData.map(d => d.tonnage));
-                if (maxVol === 0) return <div className="absolute inset-0 flex items-center justify-center text-zinc-600 text-[10px] font-mono text-center px-4">Hacim verisi hesaplanamadı.</div>;
-
-                return (
-                  <div className="min-w-full h-full flex items-end justify-start space-x-8 pt-6 pb-4 px-2">
-                    {weeklyVolumeData.map((point, i) => {
-                      const heightPercent = (point.tonnage / maxVol) * 85;
-                      return (
-                        <div key={i} className="relative flex flex-col items-center group w-8 shrink-0">
-                          <div className="absolute bottom-full mb-1 text-[8px] font-bold font-mono text-cyan-400 bg-zinc-800 px-1.5 py-0.5 rounded shadow">{(point.tonnage / 1000).toFixed(1)}k</div>
-                          <div className="w-full bg-cyan-700/80 rounded-t-md transition-all duration-500 hover:bg-cyan-500" style={{ height: `${heightPercent}%` }}></div>
-                          <div className="absolute top-full mt-2 text-[7px] text-zinc-500 font-mono whitespace-nowrap">{point.label}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
+              {analysisType === 'volume' && (
+                <TrendChart
+                  data={weeklyVolumeData.map(w => ({ date: getLocalDateString(w.date), value: w.tonnage }))}
+                  color="#818cf8" unit=" kg" decimals={0}
+                />
+              )}
             </div>
           </div>
         )}
@@ -2266,6 +2594,60 @@ export default function App() {
                     </button>
                   </div>
                 )}
+
+                <div className="flex items-center justify-between">
+                  <div className="pr-4">
+                    <div className="text-xs text-zinc-200 font-bold uppercase tracking-wider flex items-center"><Timer size={12} className="mr-1.5 text-cyan-500" /> Dinlenmeyi Otomatik Başlat</div>
+                    <div className="text-[10px] text-zinc-500 mt-1 leading-tight">Bir sete tekrar girdiğinde sayaç kendiliğinden başlar.</div>
+                  </div>
+                  <button onClick={() => setSettings(p => ({ ...p, autoRestTimer: !p.autoRestTimer }))} className={`w-12 h-6 rounded-full relative transition-colors shrink-0 ${settings.autoRestTimer ? 'bg-cyan-600' : 'bg-zinc-700'}`}>
+                    <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${settings.autoRestTimer ? 'translate-x-7' : 'translate-x-1'}`}></div>
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="pr-4">
+                    <div className="text-xs text-zinc-200 font-bold uppercase tracking-wider">Bitişte Sesli Uyarı</div>
+                    <div className="text-[10px] text-zinc-500 mt-1 leading-tight">Dinlenme bitince çift bip çalar. iOS titreşimi desteklemediği için ses tek güvenilir uyarıdır.</div>
+                  </div>
+                  <button onClick={() => setSettings(p => ({ ...p, restAlert: !p.restAlert }))} className={`w-12 h-6 rounded-full relative transition-colors shrink-0 ${settings.restAlert ? 'bg-cyan-600' : 'bg-zinc-700'}`}>
+                    <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${settings.restAlert ? 'translate-x-7' : 'translate-x-1'}`}></div>
+                  </button>
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-bold uppercase text-zinc-500 mb-2">Varsayılan Dinlenme Süresi</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[60, 90, 120, 180].map(sec => (
+                      <button key={sec} onClick={() => setSettings(p => ({ ...p, restSeconds: sec }))} className={`py-2 rounded-lg text-[10px] font-bold uppercase transition-colors border ${settings.restSeconds === sec ? 'bg-cyan-900/30 border-cyan-500 text-cyan-400' : 'bg-zinc-950 border-zinc-800 text-zinc-500'}`}>
+                        {sec}s
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-bold uppercase text-zinc-500 mb-2">Hedef Tekrar Aralığı (Progresyon)</label>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <div className="text-[8px] text-zinc-600 uppercase mb-1">Alt</div>
+                      <input type="number" inputMode="numeric" value={settings.repRangeMin}
+                        onChange={(e) => setSettings(p => ({ ...p, repRangeMin: Math.max(1, parseNumber(e.target.value) || 1) }))}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-zinc-100 font-mono text-xs outline-none text-center" />
+                    </div>
+                    <span className="text-zinc-600 mt-4">—</span>
+                    <div className="flex-1">
+                      <div className="text-[8px] text-zinc-600 uppercase mb-1">Üst</div>
+                      <input type="number" inputMode="numeric" value={settings.repRangeMax}
+                        onChange={(e) => setSettings(p => ({ ...p, repRangeMax: Math.max(1, parseNumber(e.target.value) || 1) }))}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-zinc-100 font-mono text-xs outline-none text-center" />
+                    </div>
+                  </div>
+                  <p className="text-[8px] text-zinc-500 font-mono mt-2 leading-relaxed">
+                    Çift progresyon: üst sınıra ulaşınca ağırlık artar ve alt sınıra dönülür.
+                    Aksi halde aynı ağırlıkta bir tekrar daha hedeflenir.
+                  </p>
+                </div>
               </div>
 
               <div className="border-t border-zinc-800 pt-5 mb-6 space-y-4">

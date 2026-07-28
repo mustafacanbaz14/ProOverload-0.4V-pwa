@@ -89,7 +89,7 @@ export const formatDuration = (totalSeconds) => {
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 };
 
-const drawArtwork = ({ elapsedSeconds, exerciseName, previousSets, previousDate, effectiveSets, isPaused }) => {
+const drawArtwork = ({ elapsedSeconds, exerciseName, previousSets, previousDate, effectiveSets, isPaused, restSecondsLeft }) => {
   const SIZE = 512;
   const PAD = 36;
   const BOTTOM_LIMIT = SIZE - 16; // Hiçbir şey bu çizginin altına taşmamalı
@@ -123,17 +123,43 @@ const drawArtwork = ({ elapsedSeconds, exerciseName, previousSets, previousDate,
   ctx.font = 'bold 88px ui-monospace, SFMono-Regular, Menlo, monospace';
   ctx.fillText(formatDuration(elapsedSeconds), PAD, 64);
 
+  let y = 176;
+
+  // Dinlenme sayacı — set arasındayken en dikkat çekici bilgi bu olduğu için
+  // hareket adının üstünde, vurgulu bir şeritte gösterilir.
+  const isResting = Number(restSecondsLeft) > 0;
+  if (isResting) {
+    const barH = 62;
+    ctx.fillStyle = '#164e63';
+    ctx.fillRect(PAD, y, SIZE - PAD * 2, barH);
+    ctx.fillStyle = '#06b6d4';
+    ctx.fillRect(PAD, y, 6, barH);
+
+    ctx.fillStyle = '#67e8f9';
+    ctx.font = 'bold 17px system-ui, -apple-system, sans-serif';
+    ctx.fillText('DİNLENME', PAD + 20, y + 10);
+
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#ecfeff';
+    ctx.font = 'bold 40px ui-monospace, SFMono-Regular, Menlo, monospace';
+    ctx.fillText(formatDuration(restSecondsLeft), SIZE - PAD - 20, y + 12);
+    ctx.textAlign = 'left';
+
+    y += barH + 16;
+  }
+
   // Mevcut hareket
   ctx.fillStyle = '#52525b';
   ctx.font = 'bold 18px system-ui, -apple-system, sans-serif';
-  ctx.fillText('MEVCUT HAREKET', PAD, 176);
+  ctx.fillText('MEVCUT HAREKET', PAD, y);
+  y += 24;
 
   ctx.fillStyle = '#fafafa';
   ctx.font = 'bold 34px system-ui, -apple-system, sans-serif';
   const nameLines = wrapText(ctx, exerciseName || 'Hareket seçilmedi', SIZE - PAD * 2).slice(0, 2);
-  nameLines.forEach((line, i) => ctx.fillText(line, PAD, 200 + i * 40));
+  nameLines.forEach((line, i) => ctx.fillText(line, PAD, y + i * 40));
 
-  let y = 200 + nameLines.length * 40 + 16;
+  y += nameLines.length * 40 + 16;
 
   ctx.fillStyle = '#27272a';
   ctx.fillRect(PAD, y, SIZE - PAD * 2, 2);
@@ -227,17 +253,20 @@ export const updateLockScreenActivity = async ({
   previousDate = '',
   effectiveSets = 0,
   isPaused = false,
+  restSecondsLeft = 0,
+  restTotalSeconds = 0,
 }) => {
   if (!isLockScreenSupported() || !isActive) return;
 
   const mySequence = ++updateSequence;
+  const isResting = restSecondsLeft > 0 && restTotalSeconds > 0;
 
   const summary = previousSets.length > 0
     ? previousSets.slice(0, 3).map((s) => `${s.weight || 0}×${s.reps || 0} (RIR ${s.rir ?? '-'})`).join('  ')
     : 'Geçmiş kayıt yok';
 
   const nextArtwork = await drawArtwork({
-    elapsedSeconds, exerciseName, previousSets, previousDate, effectiveSets, isPaused,
+    elapsedSeconds, exerciseName, previousSets, previousDate, effectiveSets, isPaused, restSecondsLeft,
   });
 
   // Bu çağrı beklerken daha yenisi başladıysa sonucu at, aksi halde eski veriyi yazardık.
@@ -248,7 +277,9 @@ export const updateLockScreenActivity = async ({
 
   try {
     navigator.mediaSession.metadata = new MediaMetadata({
-      title: exerciseName || 'Antrenman sürüyor',
+      title: isResting
+        ? `Dinlenme ${formatDuration(restSecondsLeft)} · ${exerciseName || 'Antrenman'}`
+        : (exerciseName || 'Antrenman sürüyor'),
       artist: `Geçen antrenman: ${summary}`,
       album: `${formatDuration(elapsedSeconds)} · ${effectiveSets} etkili set`,
       artwork: nextArtwork
@@ -258,13 +289,23 @@ export const updateLockScreenActivity = async ({
 
     navigator.mediaSession.playbackState = isPaused ? 'paused' : 'playing';
 
-    // iOS bu değeri kendi saatinden ilerletir: ekran kapalıyken bile süre akar.
+    // iOS konum durumunu kendi saatinden ilerletir; ekran kapalıyken JavaScript
+    // dursa bile burada bildirilen sayaç akmaya devam eder. Set arasındayken
+    // kullanıcıyı ilgilendiren asıl sayaç dinlenme olduğu için ona geçilir.
     if (navigator.mediaSession.setPositionState) {
-      navigator.mediaSession.setPositionState({
-        duration: MAX_SESSION_SECONDS,
-        position: Math.min(Math.max(0, elapsedSeconds), MAX_SESSION_SECONDS),
-        playbackRate: isPaused ? 0.0001 : 1, // 0 kabul edilmiyor
-      });
+      navigator.mediaSession.setPositionState(
+        isResting
+          ? {
+            duration: restTotalSeconds,
+            position: Math.min(Math.max(0, restTotalSeconds - restSecondsLeft), restTotalSeconds),
+            playbackRate: 1,
+          }
+          : {
+            duration: MAX_SESSION_SECONDS,
+            position: Math.min(Math.max(0, elapsedSeconds), MAX_SESSION_SECONDS),
+            playbackRate: isPaused ? 0.0001 : 1, // 0 kabul edilmiyor
+          }
+      );
     }
   } catch { /* metadata desteklenmiyor olabilir */ }
 
@@ -296,6 +337,41 @@ export const stopLockScreenActivity = () => {
     URL.revokeObjectURL(artworkUrl);
     artworkUrl = null;
   }
+};
+
+// --- Dinlenme bitiş uyarısı ---
+
+/**
+ * Kısa çift bip. iOS Safari titreşim API'sini desteklemediği için
+ * telefon cepteyken tek güvenilir uyarı yolu sestir.
+ */
+export const playRestAlert = () => {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const now = ctx.currentTime;
+
+    [0, 0.24].forEach((offset) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, now + offset);
+      gain.gain.exponentialRampToValueAtTime(0.4, now + offset + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.2);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now + offset);
+      osc.stop(now + offset + 0.22);
+    });
+
+    setTimeout(() => { try { ctx.close(); } catch { /* yoksay */ } }, 1000);
+  } catch { /* ses çalınamadı */ }
+};
+
+/** Destekleyen cihazlarda (Android) titreşim. iOS'ta sessizce yok sayılır. */
+export const vibrateAlert = () => {
+  try { navigator.vibrate?.([140, 70, 140]); } catch { /* yoksay */ }
 };
 
 // --- Ekranı açık tutma (Wake Lock) ---
