@@ -21,14 +21,10 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
-    
-    <!-- Load Vite PWA service worker registration -->
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js', { scope: '/' })
-        })
-      }
-    </script>
+    <!--
+      Servis worker kaydı vite-plugin-pwa tarafından otomatik enjekte edilir
+      (registerSW.js). Burada elle ikinci bir kayıt yapmak autoUpdate akışını
+      baypas ettiği için kaldırıldı.
+    -->
   </body>
 </html>

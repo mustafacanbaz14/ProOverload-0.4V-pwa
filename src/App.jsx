@@ -4,6 +4,18 @@ import { Plus, Save, Activity, TrendingUp, X, ChevronRight, Search, User, Scale,
 // --- BİLİMSEL SABİTLER VE YARDIMCI FONKSİYONLAR ---
 const FORM_RATINGS = Array.from({ length: 10 }, (_, i) => ({ value: i + 1, label: `${i + 1}/10` }));
 
+const FAT_METHOD_LABELS = { skinfold: 'Kaliper Bazlı', navy: 'Mezura Bazlı', average: 'Ortalama', manual: 'Manuel' };
+
+const DEFAULT_SETTINGS = { autoCopyLastSet: true, nutritionGoal: 'bulk', proteinPerFfmBulk: 2.2, proteinPerFfmCut: 2.6 };
+
+const DELETE_LABELS = {
+  workout: 'Antrenman kaydı', metric: 'Ölçüm kaydı', nutrition: 'Beslenme kaydı',
+  template: 'Antrenman şablonu', mealTemplate: 'Öğün şablonu', dayTemplate: 'Beslenme şablonu'
+};
+
+// Yedek dosyasında bulunmasını beklediğimiz alanlar
+const BACKUP_KEYS = ['workouts', 'templates', 'customExercises', 'metricsHistory', 'nutritionHistory', 'mealTemplates', 'dayTemplates', 'settings'];
+
 const DEFAULT_EXERCISES = [
   "Barbell Back Squat", "Barbell Front Squat", "Zercher Squat", "Hack Squat", "Bulgarian Split Squat", "Leg Press", "Walking Lunges",
   "Romanian Deadlift (RDL)", "Conventional Deadlift", "Sumo Deadlift", "Trap Bar Deadlift", "Good Morning",
@@ -36,29 +48,49 @@ const getMondayOfCurrentWeek = () => {
   return monday;
 };
 
+// Hareket adından kas grubu ve mekanik türü çıkarımı.
+// Sıra kritiktir: ilk eşleşen kural kazanır, bu yüzden en spesifik kalıplar üsttedir.
+// (Örn. "Hanging Leg Raise" bacak değil merkez; "Close Grip Bench Press" göğüs değil koldur.)
+const EXERCISE_RULES = [
+  // Merkez — "leg raise" bacak sanılmasın diye en üstte
+  [/crunch|plank|russian twist|ab wheel|rollout|hanging leg raise|hanging knee|toes to bar|sit-?up|dead bug|pallof|farmer|\bab /, 'Merkez', 'Core'],
+
+  // Omuz — çekiş görünümlü ("upright row") ve itiş görünümlü izolasyonlar
+  [/face pull|reverse pec|rear delt|upright row/, 'Omuz', 'Pull'],
+  [/lateral raise|front raise/, 'Omuz', 'Push'],
+  [/overhead press|\bohp\b|shoulder press|arnold press|push press|military press/, 'Omuz', 'Push'],
+
+  // Kol — "close grip bench press" göğüsten önce yakalanmalı
+  [/tricep|skull crusher|pushdown|kickback|close grip bench/, 'Kol', 'Push'],
+
+  // Bacak — "leg curl"/"leg extension" genel curl kuralından önce
+  [/squat|leg press|leg curl|leg extension|lunge|deadlift|hip thrust|good morning|nordic|glute|calf raise/, 'Bacak', 'Legs'],
+
+  // Sırt
+  [/shrug/, 'Sırt', 'Pull'],
+  [/pull-?up|chin-?up|pulldown|\brow\b/, 'Sırt', 'Pull'],
+
+  // Göğüs
+  [/bench press|chest press|\bfly\b|pec deck|crossover|dips|push-?up/, 'Göğüs', 'Push'],
+
+  // Kalan izolasyonlar
+  [/curl/, 'Kol', 'Pull'],
+
+  // Yukarıdakilere takılmayan tüm bas hareketleri (incline/decline dumbbell press vb.)
+  [/press/, 'Göğüs', 'Push'],
+];
+
 const detectMuscleGroup = (name, customList = []) => {
   const customEx = customList.find(ex => (typeof ex === 'object' ? ex.name === name : ex === name));
   if (customEx && typeof customEx === 'object' && customEx.muscle) {
     return { muscle: customEx.muscle, mechanics: customEx.mechanics || 'Diğer' };
   }
 
-  const lower = name.toLowerCase();
-  let muscle = 'Diğer';
-  let mechanics = 'Diğer';
-
-  if (/bench|press|push|dips|fly|crossover|extension|kickback/.test(lower)) mechanics = 'Push';
-  if (/pull|row|chin|curl|shrug/.test(lower)) mechanics = 'Pull';
-  if (/squat|leg|deadlift|thrust|calf|lunge|morning/.test(lower)) mechanics = 'Legs';
-  if (/crunch|core|plank|twist|raise/.test(lower) && !lower.includes('lateral') && !lower.includes('calf')) mechanics = 'Core';
-
-  if (/bench|fly|pec|crossover|dips|push-up/.test(lower)) muscle = 'Göğüs';
-  else if (/pull-up|chin-up|row|lat |pulldown|shrug/.test(lower)) muscle = 'Sırt';
-  else if (/squat|leg|deadlift|thrust|calf|lunge|morning/.test(lower)) muscle = 'Bacak';
-  else if (/overhead|shoulder|lateral|face pull|press|upright/.test(lower) && !lower.includes('bench') && !lower.includes('leg')) muscle = 'Omuz';
-  else if (/curl|tricep|crusher|pushdown|extension|kickback/.test(lower) && !lower.includes('leg')) muscle = 'Kol';
-  else if (/crunch|ab |core|raise|plank|twist|farmer/.test(lower) && !lower.includes('calf') && !lower.includes('lateral')) muscle = 'Merkez';
-
-  return { muscle, mechanics };
+  const lower = (name || '').toLowerCase();
+  for (const [pattern, muscle, mechanics] of EXERCISE_RULES) {
+    if (pattern.test(lower)) return { muscle, mechanics };
+  }
+  return { muscle: 'Diğer', mechanics: 'Diğer' };
 };
 
 const parseNumber = (val) => {
@@ -95,12 +127,15 @@ const mergeNutrition = (data) => ({
   meals: Array.isArray(data?.meals) && data.meals.length > 0 ? data.meals : [{ id: generateId(), name: '1. Öğün', calories: '', protein: '', carbs: '', fats: '' }]
 });
 
+// Kayıt anahtarı sürümleri: en yeniden en eskiye doğru denenir (geriye dönük uyumluluk).
+const STORAGE_VERSIONS = ['_v16', '_v15', '_v14', '_v13'];
+
 const loadWithFallback = (keys, defaultVal, parser = (d) => d) => {
   for (let key of keys) {
     try {
       const data = JSON.parse(localStorage.getItem(key));
       if (data !== null && data !== undefined) return parser(data);
-    } catch (e) { }
+    } catch { /* bozuk kayıt: bir sonraki sürüm anahtarını dene */ }
   }
   return defaultVal;
 };
@@ -110,44 +145,235 @@ const calcTonnage = (exercises) => {
   return exercises.reduce((acc, ex) => acc + (ex.sets || []).reduce((sAcc, s) => sAcc + (parseNumber(s.weight) * parseNumber(s.reps)), 0), 0);
 };
 
+// Uygulama ana ekrana kurulu (standalone) modda mı çalışıyor?
+const detectStandalone = () =>
+  window.matchMedia('(display-mode: standalone)').matches ||
+  window.navigator.standalone ||
+  document.referrer.includes('android-app://');
+
+// Tüm kalıcı veriyi açılışta tek seferde okur.
+// Efekt yerine kullanılır: ilk render'da veri hazır olur, böylece kaydetme
+// efektlerinin boş başlangıç state'ini mevcut kaydın üzerine yazma ihtimali kalmaz.
+const loadPersistedState = () => {
+  const keys = (name) => STORAGE_VERSIONS.map(v => `po_${name}${v}`);
+  const todayStr = getLocalDateString();
+
+  const metricsRaw = loadWithFallback(keys('metrics'), []);
+  const metricsHistory = Array.isArray(metricsRaw) ? metricsRaw.map(mergeMetrics) : [];
+  let currentMetricsForm = mergeMetrics({});
+  if (metricsHistory.length > 0) {
+    const todayData = metricsHistory.find(m => m.date === todayStr);
+    currentMetricsForm = todayData
+      ? mergeMetrics(todayData)
+      // Bugüne kayıt yoksa en son ölçümü şablon alıp yeni bir güne taşı.
+      : mergeMetrics({ ...metricsHistory[0], id: generateId(), date: todayStr });
+  }
+
+  const nutritionRaw = loadWithFallback(keys('nutrition'), []);
+  const nutritionHistory = Array.isArray(nutritionRaw) ? nutritionRaw.map(mergeNutrition) : [];
+  const todayNutrition = nutritionHistory.find(n => n.date === todayStr);
+
+  const savedSettings = loadWithFallback(keys('settings'), {}) || {};
+
+  return {
+    workouts: loadWithFallback(keys('workouts'), []),
+    templates: loadWithFallback(keys('templates'), []),
+    customExercises: loadWithFallback(keys('custom_exercises'), []),
+    mealTemplates: loadWithFallback(keys('meal_templates'), []),
+    dayTemplates: loadWithFallback(keys('day_templates'), []),
+    activeWorkout: loadWithFallback(keys('active_workout'), null),
+    metricsHistory,
+    currentMetricsForm,
+    nutritionHistory,
+    currentNutritionForm: todayNutrition ? mergeNutrition(todayNutrition) : mergeNutrition({ date: todayStr }),
+    settings: {
+      autoCopyLastSet: savedSettings.autoCopyLastSet ?? DEFAULT_SETTINGS.autoCopyLastSet,
+      nutritionGoal: savedSettings.nutritionGoal || DEFAULT_SETTINGS.nutritionGoal,
+      proteinPerFfmBulk: savedSettings.proteinPerFfmBulk || DEFAULT_SETTINGS.proteinPerFfmBulk,
+      proteinPerFfmCut: savedSettings.proteinPerFfmCut || DEFAULT_SETTINGS.proteinPerFfmCut
+    },
+    lastBackupDate: localStorage.getItem('po_last_backup')
+  };
+};
+
+// Vücut kompozisyonu hesabı (saf fonksiyon: herhangi bir ölçüm kaydı için çalışır)
+const computeComposition = (metrics) => {
+  const age = parseNumber(metrics.age);
+  const heightCm = parseNumber(metrics.height);
+  const weightKg = parseNumber(metrics.weight);
+  const gender = metrics.gender;
+  const method = metrics.method;
+
+  const { neck, waist, hip, wrist } = metrics.measurements || {};
+  const sf = metrics.skinfolds || {};
+
+  const nNeck = parseNumber(neck); const nWaist = parseNumber(waist); const nHip = parseNumber(hip); const nWrist = parseNumber(wrist);
+
+  let sumSkinfolds = 0; let isValidSkinfold = false;
+
+  if (method === '7') {
+    const vals = [sf.chest, sf.axilla, sf.triceps, sf.subscapular, sf.abdomen, sf.suprailiac, sf.thigh].map(parseNumber);
+    if (vals.every(v => v > 0)) { sumSkinfolds = vals.reduce((a, b) => a + b, 0); isValidSkinfold = true; }
+  } else {
+    if (gender === 'male') {
+      const vals = [sf.chest, sf.abdomen, sf.thigh].map(parseNumber);
+      if (vals.every(v => v > 0)) { sumSkinfolds = vals.reduce((a, b) => a + b, 0); isValidSkinfold = true; }
+    } else {
+      const vals = [sf.triceps, sf.suprailiac, sf.thigh].map(parseNumber);
+      if (vals.every(v => v > 0)) { sumSkinfolds = vals.reduce((a, b) => a + b, 0); isValidSkinfold = true; }
+    }
+  }
+
+  let density = 0;
+  if (isValidSkinfold && age > 0) {
+    if (method === '7') {
+      density = gender === 'male'
+        ? 1.112 - (0.00043499 * sumSkinfolds) + (0.00000055 * Math.pow(sumSkinfolds, 2)) - (0.00028826 * age)
+        : 1.097 - (0.00046971 * sumSkinfolds) + (0.00000056 * Math.pow(sumSkinfolds, 2)) - (0.00012828 * age);
+    } else {
+      density = gender === 'male'
+        ? 1.10938 - (0.0008267 * sumSkinfolds) + (0.0000016 * Math.pow(sumSkinfolds, 2)) - (0.0002574 * age)
+        : 1.0994921 - (0.0009929 * sumSkinfolds) + (0.0000023 * Math.pow(sumSkinfolds, 2)) - (0.0001392 * age);
+    }
+  }
+
+  let siriBF = 0;
+  if (density > 0) { siriBF = Math.max(3.0, Math.min((4.95 / density - 4.50) * 100, 60.0)); }
+
+  let navyBF = 0;
+  if (heightCm > 0 && nWaist > 0 && nNeck > 0) {
+    if (gender === 'male' && nWaist > nNeck) {
+      const denom = 1.0324 - 0.19077 * Math.log10(nWaist - nNeck) + 0.15456 * Math.log10(heightCm);
+      if (denom !== 0) navyBF = Math.max(3.0, Math.min(495 / denom - 450, 60.0));
+    } else if (gender === 'female' && (nWaist + nHip > nNeck)) {
+      const denom = 1.29579 - 0.35004 * Math.log10(nWaist + nHip - nNeck) + 0.22100 * Math.log10(heightCm);
+      if (denom !== 0) navyBF = Math.max(3.0, Math.min(495 / denom - 450, 60.0));
+    }
+  }
+
+  let averageBF = 0;
+  if (siriBF > 0 && navyBF > 0) averageBF = (siriBF + navyBF) / 2;
+
+  let activeBF = parseNumber(metrics.bodyFat) || 15.0;
+  const pref = metrics.fatPreference;
+  if (pref === 'skinfold' && siriBF > 0) activeBF = siriBF;
+  else if (pref === 'navy' && navyBF > 0) activeBF = navyBF;
+  else if (pref === 'average' && averageBF > 0) activeBF = averageBF;
+  else if (pref === 'manual' && parseNumber(metrics.bodyFat) > 0) activeBF = parseNumber(metrics.bodyFat);
+  else activeBF = siriBF > 0 ? siriBF : (navyBF > 0 ? navyBF : (parseNumber(metrics.bodyFat) || 15.0));
+
+  const fatMass = weightKg * (activeBF / 100);
+  const leanMass = weightKg - fatMass;
+  const heightM = heightCm / 100;
+  const ffmi = heightM > 0 ? leanMass / Math.pow(heightM, 2) : 0;
+  const bmr = leanMass > 0 ? Math.round(370 + (21.6 * leanMass)) : 0;
+
+  let whtr = 0; if (heightCm > 0) whtr = nWaist / heightCm;
+  let frameSize = "-";
+  if (heightCm > 0 && nWrist > 0) {
+    const rValue = heightCm / nWrist;
+    if (gender === 'male') frameSize = (rValue > 10.4) ? "İnce" : (rValue < 9.6) ? "Kalın" : "Orta";
+    else frameSize = (rValue > 11.0) ? "İnce" : (rValue < 10.1) ? "Kalın" : "Orta";
+  }
+
+  let maxPotentialFFMI = 0;
+  if (gender === 'male') {
+    if (frameSize === 'İnce') maxPotentialFFMI = 24.0;
+    else if (frameSize === 'Orta') maxPotentialFFMI = 25.5;
+    else if (frameSize === 'Kalın') maxPotentialFFMI = 27.0;
+  } else {
+    if (frameSize === 'İnce') maxPotentialFFMI = 20.0;
+    else if (frameSize === 'Orta') maxPotentialFFMI = 21.5;
+    else if (frameSize === 'Kalın') maxPotentialFFMI = 23.0;
+  }
+
+  const potentialAchieved = maxPotentialFFMI > 0 && ffmi > 0 ? Math.min((ffmi / maxPotentialFFMI) * 100, 100) : 0;
+
+  let maxNaturalWeight = 0;
+  if (heightM > 0 && activeBF < 100 && maxPotentialFFMI > 0) {
+    const maxFFM = maxPotentialFFMI * Math.pow(heightM, 2);
+    maxNaturalWeight = maxFFM / (1 - (activeBF / 100));
+  }
+
+  let trainingAdvice = "";
+  let nutritionAdvice = "";
+
+  if (potentialAchieved === 0) {
+    trainingAdvice = "Yeterli veri yok.";
+    nutritionAdvice = "Yeterli veri yok.";
+  } else if (potentialAchieved < 80) {
+    trainingAdvice = "Doğal sınırın oldukça altındasınız (Acemi/Orta). Ana bileşke egzersizlerde lineer progresyon (sürekli ağırlık/tekrar artışı) yapabilirsiniz. Antrenman hacmi tolere edilebilir seviyededir.";
+    nutritionAdvice = "Kas inşası için kalori fazlası (surplus) elzemdir. Günlük +300-500 kcal ekleyerek büyümeyi hızlandırabilirsiniz, yağlanma riski görece daha düşüktür.";
+  } else if (potentialAchieved < 92) {
+    trainingAdvice = "Genetik sınırlarınıza yaklaşıyorsunuz (İleri Seviye). Gelişim ivmesi düşmüştür. Sürekli ağırlık artırmak yerine hacim/yoğunluk periyotlaması (periodization) ve deload stratejileri uygulanmalıdır.";
+    nutritionAdvice = "Agresif kalori fazlası artık çoğunlukla yağ olarak depolanır. Yavaş ve temiz büyüme (lean bulk) için kalori fazlası +150-250 kcal ile sınırlandırılmalıdır.";
+  } else {
+    trainingAdvice = "Doğal hipertrofi limitlerinizdesiniz (Elit Seviye). Kas eklemek mekanik olarak çok zordur. Zayıf kas gruplarına spesifik izolasyon ve çok yüksek teknik uzmanlık gerekir.";
+    nutritionAdvice = "Fazla kalori alımı direkt yağlanmaya yol açar. Vücut kompozisyonunu koruma (maintenance) veya çok küçük kalori dalgalanmaları (recomp) ile form korunmalıdır.";
+  }
+
+  return {
+    siriBF: siriBF > 0 ? siriBF.toFixed(2) : "-",
+    navyBF: navyBF > 0 ? navyBF.toFixed(2) : "-",
+    averageBF: averageBF > 0 ? averageBF.toFixed(2) : "-",
+    activeBF,
+    ffm: leanMass.toFixed(1), fm: fatMass.toFixed(1), ffmi: ffmi.toFixed(1), bmr,
+    whtr: whtr > 0 ? whtr.toFixed(2) : "-", frameSize, maxNaturalWeight: maxNaturalWeight > 0 ? maxNaturalWeight.toFixed(1) : "-",
+    maxPotentialFFMI: maxPotentialFFMI > 0 ? maxPotentialFFMI.toFixed(1) : "-",
+    potentialAchieved: potentialAchieved.toFixed(1),
+    trainingAdvice, nutritionAdvice
+  };
+};
+
+// Verilen tarihte geçerli olan ölçüm kaydını bulur (o tarihten önceki en yakın kayıt).
+const findMetricsForDate = (history, dateStr, fallback) => {
+  if (!Array.isArray(history) || history.length === 0 || !dateStr) return fallback;
+  const sorted = [...history].filter(m => m?.date).sort((a, b) => a.date.localeCompare(b.date));
+  if (sorted.length === 0) return fallback;
+  const before = sorted.filter(m => m.date <= dateStr);
+  // O tarihten önce kayıt yoksa, elimizdeki en eski kaydı kullan.
+  return before.length > 0 ? before[before.length - 1] : sorted[0];
+};
+
 // Bağımsız Canlı Süre Bileşeni
+// Geçen süre state'te tutulmaz, her render'da Date.now() üzerinden yeniden hesaplanır.
+// Saniyelik interval yalnızca yeniden render tetikler. Böylece uygulama arka plana
+// alınıp geri dönüldüğünde de gösterilen süre daima doğrudur.
 const WorkoutTimer = ({ timer, isEditing, initialDuration }) => {
-  const [elapsed, setElapsed] = useState(0);
+  const [, forceTick] = useState(0);
+  const isRunning = timer?.status === 'running';
 
   useEffect(() => {
-    if (isEditing || !timer) return;
-
-    const calcElapsed = () => {
-      let total = timer.accumulatedSeconds || 0;
-      if (timer.status === 'running' && timer.startTime) {
-        total += Math.floor((Date.now() - timer.startTime) / 1000);
-      }
-      return total;
-    };
-
-    setElapsed(calcElapsed());
-
-    if (timer.status === 'running') {
-      const interval = setInterval(() => {
-        setElapsed(calcElapsed());
-      }, 1000);
-      return () => clearInterval(interval);
-    }
-  }, [timer, isEditing]);
+    if (isEditing || !isRunning) return;
+    const interval = setInterval(() => forceTick(t => t + 1), 1000);
+    return () => clearInterval(interval);
+  }, [isEditing, isRunning]);
 
   if (isEditing) return <span className="font-mono">{initialDuration || 0} dk (Geçmiş)</span>;
+
+  let elapsed = timer?.accumulatedSeconds || 0;
+  if (isRunning && timer?.startTime) {
+    // Kronometre tanımı gereği duvar saatini okur; bu değeri state'te tutmak
+    // uygulama arka plandayken sayacın donmasına yol açardı (setInterval kısıtlanır).
+    // eslint-disable-next-line react-hooks/purity
+    elapsed += Math.floor((Date.now() - timer.startTime) / 1000);
+  }
 
   const h = Math.floor(elapsed / 3600);
   const m = Math.floor((elapsed % 3600) / 60).toString().padStart(2, '0');
   const s = (elapsed % 60).toString().padStart(2, '0');
-  return <span className={`font-mono font-bold ${timer?.status === 'running' ? 'text-emerald-400' : 'text-zinc-500'}`}>{h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`}</span>;
+  return <span className={`font-mono font-bold ${isRunning ? 'text-emerald-400' : 'text-zinc-500'}`}>{h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`}</span>;
 };
 
 export default function App() {
+  // Kalıcı veri, efekt içinde değil lazy initializer ile okunur. Böylece ilk render'da
+  // veri hazır olur ve "boş başlangıç state'ini diske yazma" yarışı hiç oluşmaz.
+  const [initial] = useState(loadPersistedState);
+
   // --- STATE YÖNETİMİ ---
-  const [workouts, setWorkouts] = useState([]);
-  const [templates, setTemplates] = useState([]);
-  const [activeWorkout, setActiveWorkout] = useState(null);
+  const [workouts, setWorkouts] = useState(initial.workouts);
+  const [templates, setTemplates] = useState(initial.templates);
+  const [activeWorkout, setActiveWorkout] = useState(initial.activeWorkout);
 
   const [preWorkoutModal, setPreWorkoutModal] = useState(null);
   const [isEndWorkoutModalOpen, setIsEndWorkoutModalOpen] = useState(false);
@@ -158,7 +384,7 @@ export default function App() {
   const [profileTab, setProfileTab] = useState('metrics');
   const [analysisType, setAnalysisType] = useState('1rm'); // '1rm' or 'volume'
 
-  const [customExercises, setCustomExercises] = useState([]);
+  const [customExercises, setCustomExercises] = useState(initial.customExercises);
   const [isExerciseModalOpen, setIsExerciseModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [exerciseSearchQuery, setExerciseSearchQuery] = useState('');
@@ -168,24 +394,28 @@ export default function App() {
   const [newExMuscle, setNewExMuscle] = useState('Göğüs');
   const [newExMechanics, setNewExMechanics] = useState('Push');
 
-  const [settings, setSettings] = useState({ autoCopyLastSet: true, nutritionGoal: 'bulk', proteinPerFfmBulk: 2.2, proteinPerFfmCut: 2.6 });
+  const [settings, setSettings] = useState(initial.settings);
 
-  const [metricsHistory, setMetricsHistory] = useState([]);
-  const [currentMetricsForm, setCurrentMetricsForm] = useState(() => mergeMetrics({}));
+  const [metricsHistory, setMetricsHistory] = useState(initial.metricsHistory);
+  const [currentMetricsForm, setCurrentMetricsForm] = useState(initial.currentMetricsForm);
 
-  const [nutritionHistory, setNutritionHistory] = useState([]);
-  const [mealTemplates, setMealTemplates] = useState([]);
-  const [dayTemplates, setDayTemplates] = useState([]);
-  const [currentNutritionForm, setCurrentNutritionForm] = useState(() => mergeNutrition({}));
+  const [nutritionHistory, setNutritionHistory] = useState(initial.nutritionHistory);
+  const [mealTemplates, setMealTemplates] = useState(initial.mealTemplates);
+  const [dayTemplates, setDayTemplates] = useState(initial.dayTemplates);
+  const [currentNutritionForm, setCurrentNutritionForm] = useState(initial.currentNutritionForm);
 
   const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, type: null, id: null });
   const [restTimer, setRestTimer] = useState(0);
   const [analysisExercise, setAnalysisExercise] = useState('');
 
-  const [lastBackupDate, setLastBackupDate] = useState(null);
+  const [lastBackupDate, setLastBackupDate] = useState(initial.lastBackupDate);
   const [isStoragePersisted, setIsStoragePersisted] = useState(false);
   const [isMeasurementGuideOpen, setIsMeasurementGuideOpen] = useState(false);
-  const [isStandalone, setIsStandalone] = useState(false);
+  // Uygulama ana ekrana kurulmuş mu — mount sonrası değişmez, bu yüzden setter'ı yok.
+  const [isStandalone] = useState(detectStandalone);
+
+  const [toast, setToast] = useState(null);           // { message, type }
+  const [importConfirm, setImportConfirm] = useState(null); // { data, counts }
 
   const fileInputRef = useRef(null);
   const activeWorkoutRef = useRef(activeWorkout);
@@ -198,15 +428,9 @@ export default function App() {
   }, [activeWorkout, currentMetricsForm]);
 
   // --- INIT & PERSISTENCE ---
-  const vKeys = ['_v16', '_v15', '_v14', '_v13'];
-
+  // Veri yükleme yukarıda lazy initializer ile yapıldı. Burada yalnızca tarayıcıdan
+  // kalıcı depolama izni istenir (asenkron olduğu için efekte ait bir iş).
   useEffect(() => {
-    // PWA (Standalone) Kontrolü
-    const checkStandalone = () => {
-      return (window.matchMedia('(display-mode: standalone)').matches) || (window.navigator.standalone) || document.referrer.includes('android-app://');
-    };
-    setIsStandalone(checkStandalone());
-
     const requestPersistentStorage = async () => {
       if (navigator.storage && navigator.storage.persist) {
         try {
@@ -215,50 +439,12 @@ export default function App() {
             isPersisted = await navigator.storage.persist();
           }
           setIsStoragePersisted(isPersisted);
-        } catch (error) {
+        } catch {
           setIsStoragePersisted(false);
         }
       }
     };
     requestPersistentStorage();
-
-    setLastBackupDate(localStorage.getItem('po_last_backup'));
-
-    setWorkouts(loadWithFallback(vKeys.map(k => `po_workouts${k}`), []));
-    setTemplates(loadWithFallback(vKeys.map(k => `po_templates${k}`), []));
-    setCustomExercises(loadWithFallback(vKeys.map(k => `po_custom_exercises${k}`), []));
-
-    const savedSettings = loadWithFallback(vKeys.map(k => `po_settings${k}`), {});
-    setSettings({
-      autoCopyLastSet: savedSettings.autoCopyLastSet ?? true,
-      nutritionGoal: savedSettings.nutritionGoal || 'bulk',
-      proteinPerFfmBulk: savedSettings.proteinPerFfmBulk || 2.2,
-      proteinPerFfmCut: savedSettings.proteinPerFfmCut || 2.6
-    });
-
-    setMealTemplates(loadWithFallback(vKeys.map(k => `po_meal_templates${k}`), []));
-    setDayTemplates(loadWithFallback(vKeys.map(k => `po_day_templates${k}`), []));
-    setActiveWorkout(loadWithFallback(vKeys.map(k => `po_active_workout${k}`), null));
-
-    const loadedMetrics = loadWithFallback(vKeys.map(k => `po_metrics${k}`), []);
-    if (Array.isArray(loadedMetrics) && loadedMetrics.length > 0) {
-      const parsedMetrics = loadedMetrics.map(mergeMetrics);
-      setMetricsHistory(parsedMetrics);
-      const todayStr = getLocalDateString();
-      const todayData = parsedMetrics.find(m => m.date === todayStr);
-      if (todayData) setCurrentMetricsForm(mergeMetrics(todayData));
-      else setCurrentMetricsForm(mergeMetrics({ ...parsedMetrics[0], id: generateId(), date: todayStr }));
-    }
-
-    const loadedNutri = loadWithFallback(vKeys.map(k => `po_nutrition${k}`), []);
-    if (Array.isArray(loadedNutri)) {
-      const parsedNutri = loadedNutri.map(mergeNutrition);
-      setNutritionHistory(parsedNutri);
-      const todayStr = getLocalDateString();
-      const todayData = parsedNutri.find(n => n.date === todayStr);
-      if (todayData) setCurrentNutritionForm(mergeNutrition(todayData));
-      else setCurrentNutritionForm(mergeNutrition({ date: todayStr }));
-    }
   }, []);
 
   useEffect(() => { localStorage.setItem('po_workouts_v16', JSON.stringify(workouts)); }, [workouts]);
@@ -283,6 +469,15 @@ export default function App() {
     if (restTimer > 0) interval = setInterval(() => setRestTimer(t => t - 1), 1000);
     return () => clearInterval(interval);
   }, [restTimer]);
+
+  // Kısa bildirimler (kaydetme onayı, hata mesajı vb.)
+  const showToast = (message, type = 'success') => setToast({ message, type, id: Date.now() });
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = setTimeout(() => setToast(null), 2600);
+    return () => clearTimeout(timeout);
+  }, [toast]);
 
   // Optimizasyon: Hareketsizlik Kontrolü (Memory Leak ve Re-render döngüsü giderildi)
   useEffect(() => {
@@ -347,133 +542,21 @@ export default function App() {
   }, []); // Boş bağımlılık dizisi sayesinde sadece bir kez mount edilir.
 
   // --- MEMOIZED ANALİZLER ---
-  const composition = useMemo(() => {
-    const age = parseNumber(currentMetricsForm.age);
-    const heightCm = parseNumber(currentMetricsForm.height);
-    const weightKg = parseNumber(currentMetricsForm.weight);
-    const gender = currentMetricsForm.gender;
-    const method = currentMetricsForm.method;
+  // Ölçümler ekranında düzenlenmekte olan forma ait kompozisyon.
+  const composition = useMemo(() => computeComposition(currentMetricsForm), [currentMetricsForm]);
 
-    const { neck, waist, hip, wrist } = currentMetricsForm.measurements || {};
-    const sf = currentMetricsForm.skinfolds || {};
+  // Beslenme ekranı, o güne ait BMR'yi kullanmalı; ölçüm formunda hangi tarih açıksa
+  // ondan etkilenmemeli. Bu yüzden beslenme tarihine en yakın ölçüm kaydından hesaplanır.
+  const nutritionComposition = useMemo(() => {
+    const relevant = findMetricsForDate(metricsHistory, currentNutritionForm.date, currentMetricsForm);
+    return computeComposition(mergeMetrics(relevant));
+  }, [metricsHistory, currentNutritionForm.date, currentMetricsForm]);
 
-    const nNeck = parseNumber(neck); const nWaist = parseNumber(waist); const nHip = parseNumber(hip); const nWrist = parseNumber(wrist);
-
-    let sumSkinfolds = 0; let isValidSkinfold = false;
-
-    if (method === '7') {
-      const vals = [sf.chest, sf.axilla, sf.triceps, sf.subscapular, sf.abdomen, sf.suprailiac, sf.thigh].map(parseNumber);
-      if (vals.every(v => v > 0)) { sumSkinfolds = vals.reduce((a, b) => a + b, 0); isValidSkinfold = true; }
-    } else {
-      if (gender === 'male') {
-        const vals = [sf.chest, sf.abdomen, sf.thigh].map(parseNumber);
-        if (vals.every(v => v > 0)) { sumSkinfolds = vals.reduce((a, b) => a + b, 0); isValidSkinfold = true; }
-      } else {
-        const vals = [sf.triceps, sf.suprailiac, sf.thigh].map(parseNumber);
-        if (vals.every(v => v > 0)) { sumSkinfolds = vals.reduce((a, b) => a + b, 0); isValidSkinfold = true; }
-      }
-    }
-
-    let density = 0;
-    if (isValidSkinfold && age > 0) {
-      if (method === '7') {
-        density = gender === 'male'
-          ? 1.112 - (0.00043499 * sumSkinfolds) + (0.00000055 * Math.pow(sumSkinfolds, 2)) - (0.00028826 * age)
-          : 1.097 - (0.00046971 * sumSkinfolds) + (0.00000056 * Math.pow(sumSkinfolds, 2)) - (0.00012828 * age);
-      } else {
-        density = gender === 'male'
-          ? 1.10938 - (0.0008267 * sumSkinfolds) + (0.0000016 * Math.pow(sumSkinfolds, 2)) - (0.0002574 * age)
-          : 1.0994921 - (0.0009929 * sumSkinfolds) + (0.0000023 * Math.pow(sumSkinfolds, 2)) - (0.0001392 * age);
-      }
-    }
-
-    let siriBF = 0;
-    if (density > 0) { siriBF = Math.max(3.0, Math.min((4.95 / density - 4.50) * 100, 60.0)); }
-
-    let navyBF = 0;
-    if (heightCm > 0 && nWaist > 0 && nNeck > 0) {
-      if (gender === 'male' && nWaist > nNeck) {
-        const denom = 1.0324 - 0.19077 * Math.log10(nWaist - nNeck) + 0.15456 * Math.log10(heightCm);
-        if (denom !== 0) navyBF = Math.max(3.0, Math.min(495 / denom - 450, 60.0));
-      } else if (gender === 'female' && (nWaist + nHip > nNeck)) {
-        const denom = 1.29579 - 0.35004 * Math.log10(nWaist + nHip - nNeck) + 0.22100 * Math.log10(heightCm);
-        if (denom !== 0) navyBF = Math.max(3.0, Math.min(495 / denom - 450, 60.0));
-      }
-    }
-
-    let averageBF = 0;
-    if (siriBF > 0 && navyBF > 0) averageBF = (siriBF + navyBF) / 2;
-
-    let activeBF = parseNumber(currentMetricsForm.bodyFat) || 15.0;
-    const pref = currentMetricsForm.fatPreference;
-    if (pref === 'skinfold' && siriBF > 0) activeBF = siriBF;
-    else if (pref === 'navy' && navyBF > 0) activeBF = navyBF;
-    else if (pref === 'average' && averageBF > 0) activeBF = averageBF;
-    else if (pref === 'manual' && parseNumber(currentMetricsForm.bodyFat) > 0) activeBF = parseNumber(currentMetricsForm.bodyFat);
-    else activeBF = siriBF > 0 ? siriBF : (navyBF > 0 ? navyBF : (parseNumber(currentMetricsForm.bodyFat) || 15.0));
-
-    const fatMass = weightKg * (activeBF / 100);
-    const leanMass = weightKg - fatMass;
-    const heightM = heightCm / 100;
-    const ffmi = heightM > 0 ? leanMass / Math.pow(heightM, 2) : 0;
-    const bmr = leanMass > 0 ? Math.round(370 + (21.6 * leanMass)) : 0;
-
-    let whtr = 0; if (heightCm > 0) whtr = nWaist / heightCm;
-    let frameSize = "-";
-    if (heightCm > 0 && nWrist > 0) {
-      const rValue = heightCm / nWrist;
-      if (gender === 'male') frameSize = (rValue > 10.4) ? "İnce" : (rValue < 9.6) ? "Kalın" : "Orta";
-      else frameSize = (rValue > 11.0) ? "İnce" : (rValue < 10.1) ? "Kalın" : "Orta";
-    }
-
-    let maxPotentialFFMI = 0;
-    if (gender === 'male') {
-      if (frameSize === 'İnce') maxPotentialFFMI = 24.0;
-      else if (frameSize === 'Orta') maxPotentialFFMI = 25.5;
-      else if (frameSize === 'Kalın') maxPotentialFFMI = 27.0;
-    } else {
-      if (frameSize === 'İnce') maxPotentialFFMI = 20.0;
-      else if (frameSize === 'Orta') maxPotentialFFMI = 21.5;
-      else if (frameSize === 'Kalın') maxPotentialFFMI = 23.0;
-    }
-
-    const potentialAchieved = maxPotentialFFMI > 0 && ffmi > 0 ? Math.min((ffmi / maxPotentialFFMI) * 100, 100) : 0;
-
-    let maxNaturalWeight = 0;
-    if (heightM > 0 && activeBF < 100 && maxPotentialFFMI > 0) {
-      const maxFFM = maxPotentialFFMI * Math.pow(heightM, 2);
-      maxNaturalWeight = maxFFM / (1 - (activeBF / 100));
-    }
-
-    let trainingAdvice = "";
-    let nutritionAdvice = "";
-
-    if (potentialAchieved === 0) {
-      trainingAdvice = "Yeterli veri yok.";
-      nutritionAdvice = "Yeterli veri yok.";
-    } else if (potentialAchieved < 80) {
-      trainingAdvice = "Doğal sınırın oldukça altındasınız (Acemi/Orta). Ana bileşke egzersizlerde lineer progresyon (sürekli ağırlık/tekrar artışı) yapabilirsiniz. Antrenman hacmi tolere edilebilir seviyededir.";
-      nutritionAdvice = "Kas inşası için kalori fazlası (surplus) elzemdir. Günlük +300-500 kcal ekleyerek büyümeyi hızlandırabilirsiniz, yağlanma riski görece daha düşüktür.";
-    } else if (potentialAchieved < 92) {
-      trainingAdvice = "Genetik sınırlarınıza yaklaşıyorsunuz (İleri Seviye). Gelişim ivmesi düşmüştür. Sürekli ağırlık artırmak yerine hacim/yoğunluk periyotlaması (periodization) ve deload stratejileri uygulanmalıdır.";
-      nutritionAdvice = "Agresif kalori fazlası artık çoğunlukla yağ olarak depolanır. Yavaş ve temiz büyüme (lean bulk) için kalori fazlası +150-250 kcal ile sınırlandırılmalıdır.";
-    } else {
-      trainingAdvice = "Doğal hipertrofi limitlerinizdesiniz (Elit Seviye). Kas eklemek mekanik olarak çok zordur. Zayıf kas gruplarına spesifik izolasyon ve çok yüksek teknik uzmanlık gerekir.";
-      nutritionAdvice = "Fazla kalori alımı direkt yağlanmaya yol açar. Vücut kompozisyonunu koruma (maintenance) veya çok küçük kalori dalgalanmaları (recomp) ile form korunmalıdır.";
-    }
-
-    return {
-      siriBF: siriBF > 0 ? siriBF.toFixed(2) : "-",
-      navyBF: navyBF > 0 ? navyBF.toFixed(2) : "-",
-      averageBF: averageBF > 0 ? averageBF.toFixed(2) : "-",
-      activeBF,
-      ffm: leanMass.toFixed(1), fm: fatMass.toFixed(1), ffmi: ffmi.toFixed(1), bmr,
-      whtr: whtr > 0 ? whtr.toFixed(2) : "-", frameSize, maxNaturalWeight: maxNaturalWeight > 0 ? maxNaturalWeight.toFixed(1) : "-",
-      maxPotentialFFMI: maxPotentialFFMI > 0 ? maxPotentialFFMI.toFixed(1) : "-",
-      potentialAchieved: potentialAchieved.toFixed(1),
-      trainingAdvice, nutritionAdvice
-    };
-  }, [currentMetricsForm]);
+  // Arşivdeki her ölçüm kaydının gerçek (hesaplanmış) yağ oranı ve kompozisyonu.
+  const metricsHistoryWithComposition = useMemo(
+    () => metricsHistory.map(m => ({ ...m, composition: computeComposition(mergeMetrics(m)) })),
+    [metricsHistory]
+  );
 
   const performedExercises = useMemo(() => {
     const exerciseSet = new Set();
@@ -485,11 +568,11 @@ export default function App() {
     return Array.from(exerciseSet).sort();
   }, [workouts]);
 
-  useEffect(() => {
-    if (performedExercises.length > 0 && (!analysisExercise || !performedExercises.includes(analysisExercise))) {
-      setAnalysisExercise(performedExercises[0]);
-    }
-  }, [performedExercises, analysisExercise]);
+  // Seçili hareket listeden düşmüşse (ör. o antrenman silindiyse) ilk harekete düş.
+  // Efekt içinde setState yapmak yerine render sırasında türetilir.
+  const activeAnalysisExercise = performedExercises.includes(analysisExercise)
+    ? analysisExercise
+    : (performedExercises[0] || '');
 
   const dashboardStats = useMemo(() => {
     const monday = getLocalDateString(getMondayOfCurrentWeek());
@@ -667,10 +750,13 @@ export default function App() {
     delete finalizedWorkout.lastInteraction;
 
     // Kalori Senkronizasyonu
-    const userWeight = parseNumber(currentMetricsForm.weight) || 75;
+    // Sadece yeni tamamlanan seanslarda yapılır. Geçmiş bir seans düzenlenip tekrar
+    // kaydedildiğinde kalori yeniden eklenmemeli (aksi halde her düzenlemede birikirdi).
+    const relevantMetrics = findMetricsForDate(metricsHistory, finalizedWorkout.date, currentMetricsForm);
+    const userWeight = parseNumber(relevantMetrics?.weight) || 75;
     const burnedCals = Math.round(durationMinutes * userWeight * 0.08); // Ortalama 4.8 METs Ağırlık Antrenmanı
 
-    if (burnedCals > 0) {
+    if (burnedCals > 0 && !activeWorkout.isEditingOld) {
       setCurrentNutritionForm(prev => {
         if (prev.date === getLocalDateString()) {
           return { ...prev, dayType: 'training', activeCaloriesOut: String(parseNumber(prev.activeCaloriesOut) + burnedCals) };
@@ -705,27 +791,30 @@ export default function App() {
     setTemplates([...templates, { id: generateId(), name, exercises: templateExercises }]);
   };
 
-  const getPreviousPerformance = (exerciseName) => {
-    for (let w of workouts) {
-      if (!Array.isArray(w.exercises)) continue;
-      if (activeWorkout && w.id === activeWorkout.id) continue;
-      const ex = w.exercises.find(e => e.name === exerciseName);
-      if (ex && Array.isArray(ex.sets) && ex.sets.length > 0) {
-        return ex.sets.reduce((prev, current) => ((parseNumber(prev.weight) * parseNumber(prev.reps)) > (parseNumber(current.weight) * parseNumber(current.reps)) ? prev : current));
+  // Hareket adı -> en son yapılan seansın verisi. Tek seferde kurulur; aksi halde
+  // her render'da (her tuş vuruşunda) tüm antrenman geçmişi baştan taranırdı.
+  const activeWorkoutId = activeWorkout ? activeWorkout.id : null;
+  const exerciseHistoryIndex = useMemo(() => {
+    const index = new Map();
+    const sorted = [...workouts].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    for (const w of sorted) {
+      if (!Array.isArray(w.exercises) || w.id === activeWorkoutId) continue;
+      for (const ex of w.exercises) {
+        if (index.has(ex.name) || !Array.isArray(ex.sets) || ex.sets.length === 0) continue;
+        const best = ex.sets.reduce((prev, current) =>
+          ((parseNumber(prev.weight) * parseNumber(prev.reps)) > (parseNumber(current.weight) * parseNumber(current.reps)) ? prev : current));
+        index.set(ex.name, { date: w.date, sets: ex.sets, best });
       }
     }
-    return null;
-  };
+    return index;
+  }, [workouts, activeWorkoutId]);
+
+  const getPreviousPerformance = (exerciseName) => exerciseHistoryIndex.get(exerciseName)?.best || null;
 
   const getRecentExerciseData = (exerciseName) => {
-    for (let w of workouts) {
-      if (activeWorkout && w.id === activeWorkout.id) continue;
-      const ex = (w.exercises || []).find(e => e.name === exerciseName);
-      if (ex && Array.isArray(ex.sets) && ex.sets.length > 0) {
-        return { date: w.date, sets: ex.sets };
-      }
-    }
-    return null;
+    const entry = exerciseHistoryIndex.get(exerciseName);
+    return entry ? { date: entry.date, sets: entry.sets } : null;
   };
 
   const calcEstimated1RM = (weight, reps, rir) => {
@@ -810,9 +899,14 @@ export default function App() {
       if (ex && Array.isArray(ex.sets) && ex.sets.length > 0) {
         let max1RM = 0;
         ex.sets.forEach(s => {
+          if (s.setType === 'warmup') return; // Isınma setleri güç göstergesi değildir
           const weight = parseNumber(s.weight); const reps = parseNumber(s.reps);
-          if (weight > 0 && reps > 0 && reps <= 15) {
-            const epley1RM = weight * (1 + reps / 30);
+          const reserve = parseNumber(s.rir);
+          // Set içinde gösterilen tahminle aynı formül: yedekte kalan tekrarlar da sayılır.
+          // Epley 15 efektif tekrarın üzerinde güvenilirliğini kaybettiği için sınır konur.
+          const totalReps = reps + reserve;
+          if (weight > 0 && reps > 0 && totalReps <= 15) {
+            const epley1RM = weight * (1 + totalReps / 30);
             if (epley1RM > max1RM) max1RM = epley1RM;
           }
         });
@@ -833,26 +927,63 @@ export default function App() {
     const now = new Date().toISOString();
     localStorage.setItem('po_last_backup', now);
     setLastBackupDate(now);
+    showToast('Yedek indirildi.');
   };
 
+  // Yedek yükleme iki adımlıdır: önce dosya doğrulanır, sonra kullanıcıya
+  // ne yükleneceği gösterilip onay istenir. Mevcut veriyi sessizce ezmemek önemli.
   const importJSON = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    e.target.value = ''; // aynı dosya tekrar seçilebilsin
+
     const reader = new FileReader();
+    reader.onerror = () => showToast('Dosya okunamadı.', 'error');
     reader.onload = (event) => {
+      let data;
       try {
-        const data = JSON.parse(event.target.result);
-        if (Array.isArray(data.workouts)) setWorkouts(data.workouts);
-        if (Array.isArray(data.templates)) setTemplates(data.templates);
-        if (Array.isArray(data.customExercises)) setCustomExercises(data.customExercises);
-        if (Array.isArray(data.metricsHistory)) setMetricsHistory(data.metricsHistory);
-        if (Array.isArray(data.nutritionHistory)) setNutritionHistory(data.nutritionHistory);
-        if (Array.isArray(data.mealTemplates)) setMealTemplates(data.mealTemplates);
-        if (Array.isArray(data.dayTemplates)) setDayTemplates(data.dayTemplates);
-        if (data.settings) setSettings(data.settings);
-      } catch (err) { }
+        data = JSON.parse(event.target.result);
+      } catch {
+        showToast('Geçersiz dosya: JSON çözümlenemedi.', 'error');
+        return;
+      }
+
+      if (!data || typeof data !== 'object' || Array.isArray(data) || !BACKUP_KEYS.some(k => k in data)) {
+        showToast('Bu dosya bir ProOverload yedeği değil.', 'error');
+        return;
+      }
+
+      setImportConfirm({
+        data,
+        counts: {
+          workouts: Array.isArray(data.workouts) ? data.workouts.length : 0,
+          metrics: Array.isArray(data.metricsHistory) ? data.metricsHistory.length : 0,
+          nutrition: Array.isArray(data.nutritionHistory) ? data.nutritionHistory.length : 0,
+        }
+      });
     };
     reader.readAsText(file);
+  };
+
+  const applyImport = () => {
+    const data = importConfirm?.data;
+    if (!data) return;
+
+    if (Array.isArray(data.workouts)) setWorkouts(data.workouts);
+    if (Array.isArray(data.templates)) setTemplates(data.templates);
+    if (Array.isArray(data.customExercises)) setCustomExercises(data.customExercises);
+    if (Array.isArray(data.metricsHistory)) setMetricsHistory(data.metricsHistory.map(mergeMetrics));
+    if (Array.isArray(data.nutritionHistory)) setNutritionHistory(data.nutritionHistory.map(mergeNutrition));
+    if (Array.isArray(data.mealTemplates)) setMealTemplates(data.mealTemplates);
+    if (Array.isArray(data.dayTemplates)) setDayTemplates(data.dayTemplates);
+    // Eksik alanlar varsayılanlarla tamamlanır, aksi halde ayarlar bozuk kalabilir.
+    if (data.settings && typeof data.settings === 'object') {
+      setSettings({ ...DEFAULT_SETTINGS, ...data.settings });
+    }
+
+    setImportConfirm(null);
+    setIsSettingsModalOpen(false);
+    showToast('Yedek başarıyla yüklendi.');
   };
 
   // --- BESLENME YÖNETİMİ ---
@@ -942,13 +1073,14 @@ export default function App() {
   const saveNutrition = () => {
     const safeMeals = Array.isArray(currentNutritionForm.meals) ? currentNutritionForm.meals : [];
     const totalCals = safeMeals.reduce((sum, m) => sum + parseNumber(m.calories), 0);
-    if (!currentNutritionForm.date || totalCals === 0) return;
+    if (!currentNutritionForm.date) { showToast('Önce bir tarih seçin.', 'error'); return; }
+    if (totalCals === 0) { showToast('Kaydetmek için en az bir öğüne kalori girin.', 'error'); return; }
 
     const totalPro = safeMeals.reduce((sum, m) => sum + parseNumber(m.protein), 0);
     const totalCarbs = safeMeals.reduce((sum, m) => sum + parseNumber(m.carbs), 0);
     const totalFats = safeMeals.reduce((sum, m) => sum + parseNumber(m.fats), 0);
 
-    const currentBMR = composition.bmr;
+    const currentBMR = nutritionComposition.bmr;
 
     const existingEntry = nutritionHistory.find(n => n.date === currentNutritionForm.date);
     const entryId = existingEntry ? existingEntry.id : generateId();
@@ -964,6 +1096,7 @@ export default function App() {
     updatedHistory.sort((a, b) => new Date(b.date) - new Date(a.date));
 
     setNutritionHistory(updatedHistory);
+    showToast(existingEntry ? 'Beslenme kaydı güncellendi.' : 'Beslenme kaydedildi.');
   };
 
   // --- BİYOMETRİ YÖNETİMİ ---
@@ -988,6 +1121,7 @@ export default function App() {
 
     updatedHistory.sort((a, b) => new Date(b.date) - new Date(a.date));
     setMetricsHistory(updatedHistory);
+    showToast(existingIndex >= 0 ? 'Ölçüm güncellendi.' : 'Ölçüm kaydedildi.');
   };
 
   const editMetric = (metric) => {
@@ -1186,7 +1320,10 @@ export default function App() {
                           {FORM_RATINGS.map(r => <option key={r.value} value={r.value}>{r.value}</option>)}
                         </select>
                       </div>
-                      <div className="col-span-12 flex justify-end px-2 -mt-0.5 mb-0.5">
+                      <div className="col-span-12 flex justify-between items-center px-1.5 -mt-0.5 mb-0.5">
+                        <button onClick={() => removeSet(ex.id, set.id)} className="text-zinc-700 active:text-red-500 hover:text-red-500 p-1 -m-1 transition-colors" title="Bu seti sil">
+                          <Trash2 size={11} />
+                        </button>
                         <span className="text-[8px] text-cyan-600/70 font-mono tracking-widest">1RM: {e1rm}kg</span>
                       </div>
                     </div>
@@ -1242,7 +1379,7 @@ export default function App() {
                 <div className="flex items-center justify-between bg-cyan-900/10 p-3 rounded-xl border border-cyan-900/30 mb-4">
                   <div>
                     <div className="text-[9px] uppercase text-cyan-500 font-bold mb-1">Geçerli Yağ Oranı</div>
-                    <div className="text-[8px] text-cyan-600/70">{currentMetricsForm.fatPreference === 'skinfold' ? 'Kaliper Bazlı' : currentMetricsForm.fatPreference === 'navy' ? 'Mezura Bazlı' : currentMetricsForm.fatPreference === 'average' ? 'Ortalama' : 'Manuel'}</div>
+                    <div className="text-[8px] text-cyan-600/70">{FAT_METHOD_LABELS[currentMetricsForm.fatPreference] || 'Manuel'}</div>
                   </div>
                   <div className="text-3xl font-mono text-zinc-100 font-bold">%{composition.activeBF.toFixed(1)}</div>
                 </div>
@@ -1368,7 +1505,7 @@ export default function App() {
                           <span className="text-[9px] font-bold uppercase mb-1">Manuel</span>
                           <div className="flex items-center">
                             <span className="text-[10px] font-mono mr-0.5">%</span>
-                            <input type="number" inputMode="decimal" value={currentMetricsForm.bodyFat || ''} onChange={(e) => { handleMetricChange('bodyFat', e.target.value); handleMetricChange('fatPreference', 'manual'); }} onClick={(e) => { handleMetricChange('fatPreference', 'manual'); }} className="w-8 bg-transparent text-center font-mono text-[10px] outline-none text-inherit border-b border-zinc-700/50 focus:border-cyan-500" placeholder="0" />
+                            <input type="number" inputMode="decimal" value={currentMetricsForm.bodyFat || ''} onChange={(e) => { handleMetricChange('bodyFat', e.target.value); handleMetricChange('fatPreference', 'manual'); }} onClick={() => handleMetricChange('fatPreference', 'manual')} className="w-8 bg-transparent text-center font-mono text-[10px] outline-none text-inherit border-b border-zinc-700/50 focus:border-cyan-500" placeholder="0" />
                           </div>
                         </label>
                       </div>
@@ -1450,7 +1587,7 @@ export default function App() {
                 <>
                   <h2 className="text-xs font-bold text-zinc-100 uppercase tracking-wider flex items-center mt-2"><LineChart size={14} className="mr-2 text-cyan-500" /> Tahmini 1RM Trendi</h2>
                   {performedExercises.length > 0 ? (
-                    <select value={analysisExercise || ''} onChange={(e) => setAnalysisExercise(e.target.value)} className="w-full bg-zinc-900 border border-zinc-700 rounded-xl p-3 text-zinc-300 font-mono text-xs outline-none transition-colors">
+                    <select value={activeAnalysisExercise} onChange={(e) => setAnalysisExercise(e.target.value)} className="w-full bg-zinc-900 border border-zinc-700 rounded-xl p-3 text-zinc-300 font-mono text-xs outline-none transition-colors">
                       {performedExercises.map(ex => <option key={ex} value={ex}>{ex}</option>)}
                     </select>
                   ) : (
@@ -1466,7 +1603,7 @@ export default function App() {
               {analysisType === '1rm' && (() => {
                 if (performedExercises.length === 0) return <div className="absolute inset-0 flex items-center justify-center text-zinc-600 text-xs font-mono">Kayıt Yok</div>;
 
-                const data = get1RMData(analysisExercise);
+                const data = get1RMData(activeAnalysisExercise);
                 if (data.length < 2) return <div className="absolute inset-0 flex items-center justify-center text-zinc-600 text-[10px] font-mono text-center px-4">Gelişim analizi için (Maks 15 tekrarlı) en az 2 kayıt gereklidir.</div>;
 
                 const maxRm = Math.max(...data.map(d => d.rm));
@@ -1525,15 +1662,16 @@ export default function App() {
     const totalF = safeMeals.reduce((sum, m) => sum + parseNumber(m.fats), 0);
 
     const calOut = parseNumber(currentNutritionForm.activeCaloriesOut);
-    const netEnergy = totalCalIn - composition.bmr - calOut;
+    const netEnergy = totalCalIn - nutritionComposition.bmr - calOut;
 
     const isUpdating = nutritionHistory.some(n => n.date === currentNutritionForm.date);
 
     // LBM Bazlı Makro Hedefleyici
     const getMacroTargets = () => {
-      const bmr = composition.bmr || 2000;
-      const weight = parseNumber(currentMetricsForm.weight) || 75;
-      const leanMass = parseNumber(composition.ffm) || (weight * 0.85);
+      const bmr = nutritionComposition.bmr || 2000;
+      const relevantMetrics = findMetricsForDate(metricsHistory, currentNutritionForm.date, currentMetricsForm);
+      const weight = parseNumber(relevantMetrics?.weight) || 75;
+      const leanMass = parseNumber(nutritionComposition.ffm) || (weight * 0.85);
 
       const goal = settings.nutritionGoal || 'bulk';
       const pMultiplierBulk = parseNumber(settings.proteinPerFfmBulk) || 2.2;
@@ -1633,7 +1771,7 @@ export default function App() {
                 <button onClick={saveDayAsTemplate} className="text-zinc-500 hover:text-cyan-400 flex items-center text-[9px] uppercase font-bold transition-colors" title="Günü Şablon Yap"><BookmarkPlus size={12} className="mr-1" /> Günü Kaydet</button>
               </div>
 
-              {safeMeals.map((meal, index) => (
+              {safeMeals.map((meal) => (
                 <div key={meal.id} className="bg-zinc-950 rounded-xl border border-zinc-800 p-3 relative">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-[10px] font-bold text-orange-500 uppercase tracking-wider">{meal.name}</span>
@@ -1683,7 +1821,7 @@ export default function App() {
 
             <div className="bg-zinc-950 rounded-2xl border border-zinc-800 p-4 space-y-2 font-mono text-xs mt-4">
               <div className="flex justify-between text-zinc-400"><span>Toplam Alınan:</span> <span className="text-emerald-400">+{totalCalIn}</span></div>
-              <div className="flex justify-between text-zinc-400"><span>Dinlenik Harcanan:</span> <span className="text-orange-400">-{composition.bmr}</span></div>
+              <div className="flex justify-between text-zinc-400"><span>Dinlenik Harcanan:</span> <span className="text-orange-400">-{nutritionComposition.bmr}</span></div>
               <div className="flex justify-between text-zinc-400 border-b border-zinc-800 pb-2"><span>Aktif Harcanan:</span> <span className="text-orange-400">-{calOut}</span></div>
               <div className="flex justify-between font-bold pt-1 text-sm">
                 <span className="text-zinc-300">Günlük Net Kalori:</span>
@@ -1755,12 +1893,17 @@ export default function App() {
                   {w.notes && <div className="text-[10px] bg-zinc-950 p-2 rounded-lg border border-zinc-800 text-zinc-400 font-mono mb-2"><span className="text-cyan-700 font-bold">NOT:</span> {w.notes}</div>}
 
                   <div className="space-y-2 mt-3 border-t border-zinc-800 pt-3">
-                    {(w.exercises || []).map(ex => (
-                      <div key={ex.id} className="text-[10px] flex justify-between text-zinc-400 font-mono">
-                        <span className="truncate w-2/3 font-bold">{ex.sets.length}x {ex.name}</span>
-                        <span className="w-1/3 text-right">PR: {Math.max(...ex.sets.map(s => parseNumber(s.weight)))}kg</span>
-                      </div>
-                    ))}
+                    {(w.exercises || []).map(ex => {
+                      const sets = Array.isArray(ex.sets) ? ex.sets : [];
+                      // Boş set dizisinde Math.max(-Infinity) döndüğü için önce kontrol edilir.
+                      const topWeight = sets.length > 0 ? Math.max(...sets.map(s => parseNumber(s.weight))) : 0;
+                      return (
+                        <div key={ex.id} className="text-[10px] flex justify-between text-zinc-400 font-mono">
+                          <span className="truncate w-2/3 font-bold">{sets.length}x {ex.name}</span>
+                          <span className="w-1/3 text-right">PR: {topWeight}kg</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -1771,12 +1914,13 @@ export default function App() {
 
       {historyTab === 'metrics' && (
         <div className="space-y-3">
-          {metricsHistory.length === 0 ? <p className="text-zinc-600 font-mono text-xs text-center py-10 bg-zinc-900 border border-zinc-800 rounded-2xl">Kayıt bulunamadı.</p> : null}
-          {metricsHistory.map(m => (
+          {metricsHistoryWithComposition.length === 0 ? <p className="text-zinc-600 font-mono text-xs text-center py-10 bg-zinc-900 border border-zinc-800 rounded-2xl">Kayıt bulunamadı.</p> : null}
+          {metricsHistoryWithComposition.map(m => (
             <div key={m.id} className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 relative flex items-center justify-between">
               <div>
                 <div className="text-xs font-bold text-cyan-400 mb-2">{new Date(m.date).toLocaleDateString('tr-TR')}</div>
-                <div className="text-[10px] text-zinc-400 font-mono mb-1">Ağırlık: <span className="text-zinc-200 font-bold">{m.weight}kg</span> | Yağ: <span className="text-zinc-200 font-bold">{m.bodyFat}%</span></div>
+                <div className="text-[10px] text-zinc-400 font-mono mb-1">Ağırlık: <span className="text-zinc-200 font-bold">{m.weight}kg</span> | Yağ: <span className="text-zinc-200 font-bold">%{m.composition.activeBF.toFixed(1)}</span> <span className="text-zinc-600">({FAT_METHOD_LABELS[m.fatPreference] || 'Manuel'})</span></div>
+                <div className="text-[10px] text-zinc-400 font-mono mb-1">Yağsız Kütle: <span className="text-emerald-400 font-bold">{m.composition.ffm}kg</span> | FFMI: <span className="text-emerald-400 font-bold">{m.composition.ffmi}</span></div>
                 <div className="text-[9px] text-zinc-500 font-mono mt-1">Kol: {m.measurements?.arm || '-'} | Bel: {m.measurements?.waist || '-'} | Kalça: {m.measurements?.hip || '-'}</div>
               </div>
               <div className="flex flex-col space-y-1">
@@ -2101,11 +2245,49 @@ export default function App() {
             <div className="bg-zinc-900 w-full rounded-2xl shadow-2xl border border-red-900/50 p-6 flex flex-col items-center text-center">
               <AlertCircle size={36} className="text-red-500 mb-4" />
               <h3 className="text-sm font-bold text-zinc-100 mb-2 uppercase tracking-wide">Kalıcı Silme</h3>
-              <p className="text-xs text-zinc-400 mb-6 font-mono">Veri yerel bellekten kalıcı olarak silinecektir.</p>
+              <p className="text-xs text-zinc-300 mb-1 font-mono font-bold">{DELETE_LABELS[deleteConfirm.type] || 'Kayıt'}</p>
+              <p className="text-xs text-zinc-400 mb-6 font-mono">Yerel bellekten kalıcı olarak silinecek, geri alınamaz.</p>
               <div className="flex w-full space-x-3">
                 <button onClick={() => setDeleteConfirm({ isOpen: false, type: null, id: null })} className="flex-1 bg-zinc-800 text-zinc-300 font-bold py-3.5 rounded-xl uppercase text-xs transition-colors">İptal</button>
                 <button onClick={executeDelete} className="flex-1 bg-red-600/90 text-white font-bold py-3.5 rounded-xl uppercase text-xs transition-colors">Sil</button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* IMPORT CONFIRM MODAL */}
+        {importConfirm && (
+          <div className="absolute inset-0 bg-black/90 z-[70] flex justify-center items-center px-4 backdrop-blur-sm">
+            <div className="bg-zinc-900 w-full rounded-2xl shadow-2xl border border-orange-900/50 p-6 flex flex-col">
+              <h3 className="text-sm font-bold text-zinc-100 mb-2 uppercase tracking-wide flex items-center">
+                <Upload size={16} className="mr-2 text-orange-500" /> Yedeği Yükle
+              </h3>
+              <p className="text-[10px] text-orange-300 mb-4 font-mono leading-relaxed bg-orange-900/10 border border-orange-900/30 rounded-lg p-3">
+                Bu işlem cihazdaki <strong>mevcut tüm verilerin üzerine yazar</strong> ve geri alınamaz.
+                Emin değilseniz önce mevcut verinizi indirin.
+              </p>
+
+              <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 mb-6 space-y-1.5 font-mono text-[10px]">
+                <div className="text-[8px] uppercase tracking-widest text-zinc-500 font-bold mb-2">Dosyadaki Kayıtlar</div>
+                <div className="flex justify-between text-zinc-400"><span>Antrenman</span> <span className="text-cyan-400 font-bold">{importConfirm.counts.workouts}</span></div>
+                <div className="flex justify-between text-zinc-400"><span>Ölçüm</span> <span className="text-cyan-400 font-bold">{importConfirm.counts.metrics}</span></div>
+                <div className="flex justify-between text-zinc-400"><span>Beslenme</span> <span className="text-orange-400 font-bold">{importConfirm.counts.nutrition}</span></div>
+              </div>
+
+              <div className="flex space-x-3">
+                <button onClick={() => setImportConfirm(null)} className="flex-1 bg-zinc-800 active:bg-zinc-700 text-zinc-300 font-bold py-3.5 rounded-xl uppercase text-xs transition-colors">İptal</button>
+                <button onClick={applyImport} className="flex-1 bg-orange-600 active:bg-orange-700 text-white font-bold py-3.5 rounded-xl uppercase text-xs transition-colors">Üzerine Yaz</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TOAST */}
+        {toast && (
+          <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-[80] px-4 w-full max-w-[380px] pointer-events-none">
+            <div className={`flex items-center space-x-2 px-4 py-3 rounded-xl border shadow-2xl backdrop-blur-sm ${toast.type === 'error' ? 'bg-red-950/90 border-red-800 text-red-300' : 'bg-emerald-950/90 border-emerald-800 text-emerald-300'}`}>
+              {toast.type === 'error' ? <AlertCircle size={14} className="shrink-0" /> : <Save size={14} className="shrink-0" />}
+              <span className="text-[11px] font-bold">{toast.message}</span>
             </div>
           </div>
         )}

@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(git add *)",
+      "Bash(git -c user.name=Mustafa -c user.email=mustafacanbaz448@gmail.com commit -q -m 'Kritik hataları düzelt ve veri yükleme yapısını sağlamlaştır *)"
     ]
   }
 }
