@@ -12,7 +12,8 @@
       "Bash(git merge -q --no-ff iyilestirmeler -m 'İyileştirmeleri ana dala al *)",
       "Bash(git branch *)",
       "Bash(git -c user.name=Mustafa -c user.email=mustafacanbaz448@gmail.com commit -q -m 'Claude Code yerel ayarlarını güncelle *)",
-      "Bash(git -c user.name=Mustafa -c user.email=mustafacanbaz448@gmail.com commit -q -m 'README'\\\\''yi kurulum ve veri taşıma rehberiyle değiştir *)"
+      "Bash(git -c user.name=Mustafa -c user.email=mustafacanbaz448@gmail.com commit -q -m 'README'\\\\''yi kurulum ve veri taşıma rehberiyle değiştir *)",
+      "Bash(gh --version)"
     ]
   }
 }
