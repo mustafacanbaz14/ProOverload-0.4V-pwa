@@ -90,6 +90,22 @@ const ActiveWorkoutView = memo(({
           </div>
         )}
 
+        {(activeWorkout.exercises || []).length === 0 && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 text-center space-y-3 my-4">
+            <div className="p-3 bg-zinc-950 rounded-full w-12 h-12 mx-auto flex items-center justify-center border border-zinc-800 text-cyan-400">
+              <Plus size={24} />
+            </div>
+            <h3 className="text-xs font-bold text-zinc-200 uppercase tracking-wider">Antrenmana Hareket Ekle</h3>
+            <p className="text-[10px] text-zinc-500 font-mono">Antrenmanınıza henüz bir hareket eklenmedi. Aşağıdaki butondan ilk hareketinizi seçin.</p>
+            <button
+              onClick={() => setIsExerciseModalOpen(true)}
+              className="w-full bg-cyan-600 active:bg-cyan-700 text-white font-bold py-3 px-4 rounded-xl flex justify-center items-center uppercase tracking-wide text-xs transition-colors shadow-lg shadow-cyan-900/30"
+            >
+              <Plus size={16} className="mr-1.5" /> İlk Hareketi Seç
+            </button>
+          </div>
+        )}
+
         {(activeWorkout.exercises || []).map((ex, exIndex) => {
           const recentData = getRecentExerciseData(ex.name);
           const { muscle } = detectMuscleGroup(ex.name, customExercises);
