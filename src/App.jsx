@@ -339,7 +339,7 @@ export default function App() {
     setPreWorkoutModal({ template: templateOrWorkout });
   }, []);
 
-  const confirmStartWorkout = async () => {
+  const confirmStartWorkout = () => {
     const template = preWorkoutModal?.template;
     const todayStr = getLocalDateString();
     const readinessScore = readinessForm.sleep + (6 - readinessForm.stress) + (6 - readinessForm.soreness);
@@ -375,11 +375,14 @@ export default function App() {
     }
 
     if (settings.lockScreenActivity) {
-      const ok = await startLockScreenActivity({
-        onPause: () => setActiveWorkout(p => p ? { ...p, timer: { ...p.timer, status: 'paused' } } : p),
-        onResume: () => setActiveWorkout(p => p ? { ...p, timer: { ...p.timer, status: 'running', startTime: Date.now() } } : p)
-      });
-      setLockScreenOn(ok);
+      try {
+        startLockScreenActivity({
+          onPause: () => setActiveWorkout(p => p ? { ...p, timer: { ...p.timer, status: 'paused' } } : p),
+          onResume: () => setActiveWorkout(p => p ? { ...p, timer: { ...p.timer, status: 'running', startTime: Date.now() } } : p)
+        }).then(ok => setLockScreenOn(!!ok)).catch(() => setLockScreenOn(false));
+      } catch {
+        setLockScreenOn(false);
+      }
     }
   };
 
@@ -785,7 +788,7 @@ export default function App() {
 
         {/* EXERCISE SELECTION MODAL */}
         {isExerciseModalOpen && (
-          <div className="absolute inset-0 bg-zinc-950 z-[80] flex flex-col h-[100dvh]">
+          <div className="fixed inset-0 bg-zinc-950 z-[100] flex flex-col h-[100dvh] max-w-[420px] mx-auto shadow-2xl">
             <div className="p-4 border-b border-zinc-800 bg-zinc-900 flex justify-between items-center pt-safe">
               <h3 className="text-xs font-bold text-zinc-100 uppercase tracking-wider flex items-center"><Database size={14} className="mr-2 text-cyan-500" /> Hareket Seçimi</h3>
               <button onClick={() => { setIsExerciseModalOpen(false); setIsAddingCustom(false); setNewCustomExercise(''); }} className="text-zinc-500 p-2"><X size={18} /></button>
