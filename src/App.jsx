@@ -1,12 +1,19 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Plus, Save, Activity, TrendingUp, X, ChevronRight, Search, User, Scale, Ruler, Trash2, AlertCircle, Target, Zap, Database, Flame, Beef, Droplets, Wheat, Copy, History, Settings, Star, Pencil, BookmarkPlus, Timer, Download, Upload, LineChart, BrainCircuit, Info, Play, Pause, BarChart } from 'lucide-react';
+import { Plus, Save, Activity, TrendingUp, X, ChevronRight, Search, User, Scale, Ruler, Trash2, AlertCircle, Target, Zap, Database, Flame, Beef, Droplets, Wheat, Copy, History, Settings, Star, Pencil, BookmarkPlus, Timer, Download, Upload, LineChart, BrainCircuit, Info, Play, Pause, BarChart, Smartphone, Sun } from 'lucide-react';
+import {
+  isLockScreenSupported, startLockScreenActivity, updateLockScreenActivity, stopLockScreenActivity,
+  isWakeLockSupported, requestWakeLock, releaseWakeLock
+} from './lockScreen';
 
 // --- BİLİMSEL SABİTLER VE YARDIMCI FONKSİYONLAR ---
 const FORM_RATINGS = Array.from({ length: 10 }, (_, i) => ({ value: i + 1, label: `${i + 1}/10` }));
 
 const FAT_METHOD_LABELS = { skinfold: 'Kaliper Bazlı', navy: 'Mezura Bazlı', average: 'Ortalama', manual: 'Manuel' };
 
-const DEFAULT_SETTINGS = { autoCopyLastSet: true, nutritionGoal: 'bulk', proteinPerFfmBulk: 2.2, proteinPerFfmCut: 2.6 };
+const DEFAULT_SETTINGS = {
+  autoCopyLastSet: true, nutritionGoal: 'bulk', proteinPerFfmBulk: 2.2, proteinPerFfmCut: 2.6,
+  lockScreenActivity: true, keepScreenAwake: true
+};
 
 const DELETE_LABELS = {
   workout: 'Antrenman kaydı', metric: 'Ölçüm kaydı', nutrition: 'Beslenme kaydı',
@@ -145,6 +152,14 @@ const calcTonnage = (exercises) => {
   return exercises.reduce((acc, ex) => acc + (ex.sets || []).reduce((sAcc, s) => sAcc + (parseNumber(s.weight) * parseNumber(s.reps)), 0), 0);
 };
 
+// Etkili set: RIR <= 3 ile tamamlanan, yani hipertrofi uyaranı sağlayan setler.
+// Hem bir antrenman nesnesi hem de doğrudan hareket dizisi kabul eder.
+const calcEffectiveSets = (workoutOrExercises) => {
+  const exercises = workoutOrExercises?.exercises || workoutOrExercises;
+  if (!Array.isArray(exercises)) return 0;
+  return exercises.reduce((acc, ex) => acc + (ex.sets || []).filter(s => parseNumber(s.rir) <= 3 && parseNumber(s.reps) > 0).length, 0);
+};
+
 // Uygulama ana ekrana kurulu (standalone) modda mı çalışıyor?
 const detectStandalone = () =>
   window.matchMedia('(display-mode: standalone)').matches ||
@@ -190,7 +205,9 @@ const loadPersistedState = () => {
       autoCopyLastSet: savedSettings.autoCopyLastSet ?? DEFAULT_SETTINGS.autoCopyLastSet,
       nutritionGoal: savedSettings.nutritionGoal || DEFAULT_SETTINGS.nutritionGoal,
       proteinPerFfmBulk: savedSettings.proteinPerFfmBulk || DEFAULT_SETTINGS.proteinPerFfmBulk,
-      proteinPerFfmCut: savedSettings.proteinPerFfmCut || DEFAULT_SETTINGS.proteinPerFfmCut
+      proteinPerFfmCut: savedSettings.proteinPerFfmCut || DEFAULT_SETTINGS.proteinPerFfmCut,
+      lockScreenActivity: savedSettings.lockScreenActivity ?? DEFAULT_SETTINGS.lockScreenActivity,
+      keepScreenAwake: savedSettings.keepScreenAwake ?? DEFAULT_SETTINGS.keepScreenAwake
     },
     lastBackupDate: localStorage.getItem('po_last_backup')
   };
@@ -417,15 +434,12 @@ export default function App() {
   const [toast, setToast] = useState(null);           // { message, type }
   const [importConfirm, setImportConfirm] = useState(null); // { data, counts }
 
+  const [lockScreenOn, setLockScreenOn] = useState(false);
+
   const fileInputRef = useRef(null);
   const activeWorkoutRef = useRef(activeWorkout);
   const currentMetricsFormRef = useRef(currentMetricsForm);
-
-  // Optimizasyon: State referanslarını interval için senkronize et
-  useEffect(() => {
-    activeWorkoutRef.current = activeWorkout;
-    currentMetricsFormRef.current = currentMetricsForm;
-  }, [activeWorkout, currentMetricsForm]);
+  const exerciseHistoryRef = useRef(null);
 
   // --- INIT & PERSISTENCE ---
   // Veri yükleme yukarıda lazy initializer ile yapıldı. Burada yalnızca tarayıcıdan
@@ -471,7 +485,8 @@ export default function App() {
   }, [restTimer]);
 
   // Kısa bildirimler (kaydetme onayı, hata mesajı vb.)
-  const showToast = (message, type = 'success') => setToast({ message, type, id: Date.now() });
+  // Her çağrıda yeni bir nesne üretilir; efekt bu referans değişimiyle tetiklenir.
+  const showToast = (message, type = 'success') => setToast({ message, type });
 
   useEffect(() => {
     if (!toast) return;
@@ -491,6 +506,11 @@ export default function App() {
           ...ex,
           sets: (ex.sets || []).filter(s => parseNumber(s.weight) > 0 || parseNumber(s.reps) > 0)
         })).filter(ex => ex.sets.length > 0);
+
+        // Seans bittiği için kilit ekranı kartı ve ekran kilidi bırakılır.
+        stopLockScreenActivity();
+        setLockScreenOn(false);
+        releaseWakeLock();
 
         if (cleanedExercises.length === 0) {
           setActiveWorkout(null);
@@ -640,6 +660,109 @@ export default function App() {
     return daysSinceBackup > 7;
   }, [lastBackupDate, workouts, metricsHistory]);
 
+  const activeWorkoutId = activeWorkout ? activeWorkout.id : null;
+
+  // Hareket adı -> en son yapılan seansın verisi. Tek seferde kurulur; aksi halde
+  // her render'da (her tuş vuruşunda) tüm antrenman geçmişi baştan taranırdı.
+  const exerciseHistoryIndex = useMemo(() => {
+    const index = new Map();
+    const sorted = [...workouts].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    for (const w of sorted) {
+      if (!Array.isArray(w.exercises) || w.id === activeWorkoutId) continue;
+      for (const ex of w.exercises) {
+        if (index.has(ex.name) || !Array.isArray(ex.sets) || ex.sets.length === 0) continue;
+        const best = ex.sets.reduce((prev, current) =>
+          ((parseNumber(prev.weight) * parseNumber(prev.reps)) > (parseNumber(current.weight) * parseNumber(current.reps)) ? prev : current));
+        index.set(ex.name, { date: w.date, sets: ex.sets, best });
+      }
+    }
+    return index;
+  }, [workouts, activeWorkoutId]);
+
+  // Interval ve olay dinleyicilerinin güncel state'i görebilmesi için referansları senkronla.
+  // Bu efekt, referansları okuyan aşağıdaki efektlerden ÖNCE tanımlanmalıdır; aksi halde
+  // onlar bir render geriden gelen veriyi okur.
+  useEffect(() => {
+    activeWorkoutRef.current = activeWorkout;
+    currentMetricsFormRef.current = currentMetricsForm;
+    exerciseHistoryRef.current = exerciseHistoryIndex;
+  }, [activeWorkout, currentMetricsForm, exerciseHistoryIndex]);
+
+  // --- KİLİT EKRANI CANLI KARTI ---
+  const timerStatus = activeWorkout?.timer?.status || null;
+  const isEditingOldWorkout = Boolean(activeWorkout?.isEditingOld);
+
+  // Kartta gösterilecek "mevcut hareket": son dokunulan, yoksa listedeki son hareket.
+  const currentExerciseName = useMemo(() => {
+    const exercises = activeWorkout?.exercises || [];
+    if (exercises.length === 0) return '';
+    const active = exercises.find(e => e.id === activeWorkout.activeExerciseId);
+    return (active || exercises[exercises.length - 1]).name || '';
+  }, [activeWorkout]);
+
+  const enableLockScreen = async () => {
+    const started = await startLockScreenActivity({
+      onPause: () => setWorkoutTimerRunning(false),
+      onResume: () => setWorkoutTimerRunning(true),
+    });
+    setLockScreenOn(started);
+    if (!started) showToast('Kilit ekranı kartı başlatılamadı.', 'error');
+    return started;
+  };
+
+  const disableLockScreen = () => {
+    stopLockScreenActivity();
+    setLockScreenOn(false);
+  };
+
+  // Kart aktifken bilgileri taze tut. Ekran kapalıyken JavaScript askıya alındığı
+  // için asıl kritik an, uygulama arka plana geçmeden hemen önceki son güncellemedir.
+  useEffect(() => {
+    if (!lockScreenOn || !activeWorkoutId || isEditingOldWorkout) return;
+
+    const pushUpdate = () => {
+      const workout = activeWorkoutRef.current;
+      if (!workout) return;
+
+      const exercises = workout.exercises || [];
+      const active = exercises.find(e => e.id === workout.activeExerciseId) || exercises[exercises.length - 1];
+      const history = active ? exerciseHistoryRef.current?.get(active.name) : null;
+
+      let elapsed = workout.timer?.accumulatedSeconds || 0;
+      if (workout.timer?.status === 'running' && workout.timer.startTime) {
+        elapsed += Math.floor((Date.now() - workout.timer.startTime) / 1000);
+      }
+
+      updateLockScreenActivity({
+        elapsedSeconds: elapsed,
+        exerciseName: active?.name || '',
+        previousSets: history?.sets || [],
+        previousDate: history ? new Date(history.date).toLocaleDateString('tr-TR') : '',
+        effectiveSets: calcEffectiveSets(exercises),
+        isPaused: workout.timer?.status !== 'running',
+      });
+    };
+
+    pushUpdate();
+    const interval = setInterval(pushUpdate, 15000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        pushUpdate();
+      } else if (settings.keepScreenAwake) {
+        // iOS arka plana geçince ekran kilidini bırakır; geri dönünce yeniden istenir.
+        requestWakeLock();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [lockScreenOn, activeWorkoutId, isEditingOldWorkout, currentExerciseName, timerStatus, settings.keepScreenAwake]);
+
   // --- ANTRENMAN MANTIĞI ---
   const updateInteraction = () => {
     if (activeWorkout && !activeWorkout.isEditingOld) {
@@ -666,41 +789,62 @@ export default function App() {
       }));
     }
 
-    setActiveWorkout({
-      id: generateId(),
-      date: getLocalDateString(),
-      timer: {
-        status: 'running',
-        startTime: Date.now(),
-        accumulatedSeconds: 0
-      },
-      lastInteraction: Date.now(),
-      notes: '',
-      rating: 0,
-      readiness: { sleep, stress, soreness, score },
-      exercises: newExercises
+    // Zaman damgaları güncelleyici içinde okunur: hem render'dan bağımsız kalır
+    // hem de kronometre, state gerçekten uygulandığı anda başlamış olur.
+    setActiveWorkout(() => {
+      const now = Date.now();
+      return {
+        id: generateId(),
+        date: getLocalDateString(),
+        timer: { status: 'running', startTime: now, accumulatedSeconds: 0 },
+        lastInteraction: now,
+        notes: '',
+        rating: 0,
+        readiness: { sleep, stress, soreness, score },
+        exercises: newExercises
+      };
     });
     setPreWorkoutModal(null);
     setView('active');
+
+    // iOS ses çalmayı kullanıcı hareketine bağlar; bu çağrı bir tıklama akışının
+    // içinde olduğu için kilit ekranı kartı burada başlatılabiliyor.
+    if (settings.lockScreenActivity) enableLockScreen();
+    if (settings.keepScreenAwake) requestWakeLock();
   };
 
-  const toggleWorkoutTimer = () => {
-    updateInteraction();
+  // Seans bittiğinde/iptal edildiğinde kilit ekranı kartını ve ekran kilidini bırak.
+  const endLiveSession = () => {
+    stopLockScreenActivity();
+    setLockScreenOn(false);
+    releaseWakeLock();
+  };
+
+  // Kronometre kilit ekranındaki oynat/duraklat düğmelerinden de yönetildiği için
+  // "değiştir" değil, açık şekilde "çalıştır/durdur" olarak modellenir.
+  const setWorkoutTimerRunning = (shouldRun) => {
     setActiveWorkout(prev => {
-      if (prev.timer.status === 'running') {
+      if (!prev || !prev.timer) return prev;
+      const isRunning = prev.timer.status === 'running';
+      if (isRunning === shouldRun) return prev;
+
+      if (isRunning) {
         const elapsedSinceStart = Math.floor((Date.now() - prev.timer.startTime) / 1000);
         return {
           ...prev,
+          lastInteraction: Date.now(),
           timer: { status: 'paused', startTime: null, accumulatedSeconds: prev.timer.accumulatedSeconds + elapsedSinceStart }
         };
-      } else {
-        return {
-          ...prev,
-          timer: { status: 'running', startTime: Date.now(), accumulatedSeconds: prev.timer.accumulatedSeconds }
-        };
       }
+      return {
+        ...prev,
+        lastInteraction: Date.now(),
+        timer: { status: 'running', startTime: Date.now(), accumulatedSeconds: prev.timer.accumulatedSeconds }
+      };
     });
   };
+
+  const toggleWorkoutTimer = () => setWorkoutTimerRunning(activeWorkout?.timer?.status !== 'running');
 
   const editWorkout = (workout) => {
     setActiveWorkout(JSON.parse(JSON.stringify({ ...workout, isEditingOld: true })));
@@ -713,6 +857,7 @@ export default function App() {
 
     // Eğer hiçbir set girilmediyse idmanı kaydetmeden direkt çöp kutusuna at
     if (!hasSets) {
+      endLiveSession();
       setActiveWorkout(null);
       setView('home');
       return;
@@ -777,6 +922,7 @@ export default function App() {
       setWorkouts([finalizedWorkout, ...workouts].sort((a, b) => new Date(b.date) - new Date(a.date)));
     }
 
+    endLiveSession();
     setActiveWorkout(null);
     setIsEndWorkoutModalOpen(false);
     setView('home');
@@ -790,25 +936,6 @@ export default function App() {
     const templateExercises = Array.isArray(workout.exercises) ? workout.exercises.map(ex => ({ name: ex.name, sets: [{ weight: '', reps: '', rir: 2, tempo: '', formRating: 8 }] })) : [];
     setTemplates([...templates, { id: generateId(), name, exercises: templateExercises }]);
   };
-
-  // Hareket adı -> en son yapılan seansın verisi. Tek seferde kurulur; aksi halde
-  // her render'da (her tuş vuruşunda) tüm antrenman geçmişi baştan taranırdı.
-  const activeWorkoutId = activeWorkout ? activeWorkout.id : null;
-  const exerciseHistoryIndex = useMemo(() => {
-    const index = new Map();
-    const sorted = [...workouts].sort((a, b) => new Date(b.date) - new Date(a.date));
-
-    for (const w of sorted) {
-      if (!Array.isArray(w.exercises) || w.id === activeWorkoutId) continue;
-      for (const ex of w.exercises) {
-        if (index.has(ex.name) || !Array.isArray(ex.sets) || ex.sets.length === 0) continue;
-        const best = ex.sets.reduce((prev, current) =>
-          ((parseNumber(prev.weight) * parseNumber(prev.reps)) > (parseNumber(current.weight) * parseNumber(current.reps)) ? prev : current));
-        index.set(ex.name, { date: w.date, sets: ex.sets, best });
-      }
-    }
-    return index;
-  }, [workouts, activeWorkoutId]);
 
   const getPreviousPerformance = (exerciseName) => exerciseHistoryIndex.get(exerciseName)?.best || null;
 
@@ -841,7 +968,13 @@ export default function App() {
       ? { id: generateId(), weight: prevPerf.weight, reps: prevPerf.reps, rir: prevPerf.rir, tempo: prevPerf.tempo || '', formRating: prevPerf.formRating || 8 }
       : { id: generateId(), weight: '', reps: '', rir: 2, tempo: '', formRating: 8 };
 
-    setActiveWorkout(prev => ({ ...prev, exercises: [...(prev?.exercises || []), { id: generateId(), name: exerciseName, sets: [initialSet] }] }));
+    const newExerciseId = generateId();
+    setActiveWorkout(prev => ({
+      ...prev,
+      // Kilit ekranı kartının "mevcut hareket" bilgisi buradan beslenir.
+      activeExerciseId: newExerciseId,
+      exercises: [...(prev?.exercises || []), { id: newExerciseId, name: exerciseName, sets: [initialSet] }]
+    }));
     setIsExerciseModalOpen(false);
     setExerciseSearchQuery('');
   };
@@ -861,7 +994,7 @@ export default function App() {
   const addSet = (exerciseId) => {
     updateInteraction();
     setActiveWorkout(prev => ({
-      ...prev, exercises: (prev?.exercises || []).map(ex => {
+      ...prev, activeExerciseId: exerciseId, exercises: (prev?.exercises || []).map(ex => {
         if (ex.id === exerciseId) {
           const lastSet = ex.sets[ex.sets.length - 1] || { weight: '', reps: '', rir: 2, tempo: '', formRating: 8 };
           const newSet = settings.autoCopyLastSet ? { ...lastSet, id: generateId() } : { id: generateId(), weight: '', reps: '', rir: 2, tempo: '', formRating: 8 };
@@ -875,7 +1008,9 @@ export default function App() {
   const updateSet = (exerciseId, setId, field, value) => {
     updateInteraction();
     setActiveWorkout(prev => ({
-      ...prev, exercises: (prev?.exercises || []).map(ex => ex.id === exerciseId
+      ...prev,
+      activeExerciseId: exerciseId,
+      exercises: (prev?.exercises || []).map(ex => ex.id === exerciseId
         ? { ...ex, sets: (ex.sets || []).map(s => s.id === setId ? { ...s, [field]: value } : s) } : ex)
     }));
   };
@@ -883,12 +1018,6 @@ export default function App() {
   const removeSet = (exerciseId, setId) => {
     updateInteraction();
     setActiveWorkout(prev => ({ ...prev, exercises: (prev?.exercises || []).map(ex => ex.id === exerciseId ? { ...ex, sets: (ex.sets || []).filter(s => s.id !== setId) } : ex) }));
-  };
-
-  const calcEffectiveSets = (workoutOrExercises) => {
-    const exercises = workoutOrExercises?.exercises || workoutOrExercises;
-    if (!Array.isArray(exercises)) return 0;
-    return exercises.reduce((acc, ex) => acc + (ex.sets || []).filter(s => parseNumber(s.rir) <= 3 && parseNumber(s.reps) > 0).length, 0);
   };
 
   const get1RMData = (exerciseName) => {
@@ -1254,6 +1383,15 @@ export default function App() {
               {!activeWorkout.isEditingOld && (
                 <button onClick={toggleWorkoutTimer} className="ml-3 text-zinc-300 hover:text-white bg-zinc-800 rounded-lg p-1.5 transition-colors border border-zinc-700 flex items-center justify-center">
                   {activeWorkout.timer?.status === 'running' ? <Pause size={14} /> : <Play size={14} />}
+                </button>
+              )}
+              {!activeWorkout.isEditingOld && isLockScreenSupported() && (
+                <button
+                  onClick={() => (lockScreenOn ? disableLockScreen() : enableLockScreen())}
+                  title={lockScreenOn ? 'Kilit ekranı kartı açık' : 'Kilit ekranı kartını aç'}
+                  className={`ml-2 rounded-lg p-1.5 transition-colors border flex items-center justify-center ${lockScreenOn ? 'text-cyan-400 bg-cyan-950/40 border-cyan-800' : 'text-zinc-500 bg-zinc-800 border-zinc-700'}`}
+                >
+                  <Smartphone size={14} />
                 </button>
               )}
             </div>
@@ -2100,6 +2238,34 @@ export default function App() {
                 <button onClick={() => setSettings(p => ({ ...p, autoCopyLastSet: !p.autoCopyLastSet }))} className={`w-12 h-6 rounded-full relative transition-colors shrink-0 ${settings.autoCopyLastSet ? 'bg-cyan-600' : 'bg-zinc-700'}`}>
                   <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${settings.autoCopyLastSet ? 'translate-x-7' : 'translate-x-1'}`}></div>
                 </button>
+              </div>
+
+              <div className="border-t border-zinc-800 pt-5 mb-6 space-y-5">
+                <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Antrenman Sırasında</h4>
+
+                {isLockScreenSupported() && (
+                  <div className="flex items-center justify-between">
+                    <div className="pr-4">
+                      <div className="text-xs text-zinc-200 font-bold uppercase tracking-wider flex items-center"><Smartphone size={12} className="mr-1.5 text-cyan-500" /> Kilit Ekranı Kartı</div>
+                      <div className="text-[10px] text-zinc-500 mt-1 leading-tight">Ekran kapandığında geçen süre, mevcut hareket ve geçen antrenmanın setleri kilit ekranında görünür. Sessiz bir ses akışı gerektirir.</div>
+                    </div>
+                    <button onClick={() => setSettings(p => ({ ...p, lockScreenActivity: !p.lockScreenActivity }))} className={`w-12 h-6 rounded-full relative transition-colors shrink-0 ${settings.lockScreenActivity ? 'bg-cyan-600' : 'bg-zinc-700'}`}>
+                      <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${settings.lockScreenActivity ? 'translate-x-7' : 'translate-x-1'}`}></div>
+                    </button>
+                  </div>
+                )}
+
+                {isWakeLockSupported() && (
+                  <div className="flex items-center justify-between">
+                    <div className="pr-4">
+                      <div className="text-xs text-zinc-200 font-bold uppercase tracking-wider flex items-center"><Sun size={12} className="mr-1.5 text-yellow-500" /> Ekranı Açık Tut</div>
+                      <div className="text-[10px] text-zinc-500 mt-1 leading-tight">Seans boyunca ekranın kendiliğinden kapanmasını engeller.</div>
+                    </div>
+                    <button onClick={() => setSettings(p => ({ ...p, keepScreenAwake: !p.keepScreenAwake }))} className={`w-12 h-6 rounded-full relative transition-colors shrink-0 ${settings.keepScreenAwake ? 'bg-cyan-600' : 'bg-zinc-700'}`}>
+                      <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${settings.keepScreenAwake ? 'translate-x-7' : 'translate-x-1'}`}></div>
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="border-t border-zinc-800 pt-5 mb-6 space-y-4">
