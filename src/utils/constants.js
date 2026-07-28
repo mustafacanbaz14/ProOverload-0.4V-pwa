@@ -32,36 +32,91 @@ export const DEFAULT_EXERCISES = [
   "Cable Crunch", "Hanging Leg Raise", "Ab Wheel Rollout", "Plank", "Russian Twist", "Farmer's Walk"
 ].sort();
 
+export const MUSCLE_GROUPS = [
+  'Göğüs', 'Sırt', 'Omuz', 'Ön Kol', 'Arka Kol',
+  'Ön Bacak', 'Arka Bacak', 'Kalça', 'Kalf', 'Karın', 'Bel'
+];
+
+// Hareket -> kas katkı ağırlıkları.
+//
+// Bir set, çalıştırdığı her kasa aynı oranda uyaran vermez. Ağırlıklar
+// hipertrofi hacim sayımında yaygın kullanılan kademeyi izler:
+//   1     birincil hedef   — hareketin asıl çalıştırdığı, yorgunluğu belirleyen kas
+//   0.5   belirgin yardımcı — büyüme uyaranı alacak kadar yüklenir
+//   0.25  hafif katkı      — stabilizasyon veya kısmi yüklenme
+//
+// Örnek: Barbell Bench Press -> Göğüs 1, Arka Kol 0.5, Omuz 0.5.
+// Incline varyantında ön deltoid payı arttığı için Omuz 0.5'te kalır ama
+// Decline'da omuz katkısı düşer (0.25).
+//
+// Sıra kritiktir: ilk eşleşen kural kazanır, bu yüzden özel kalıplar üsttedir.
+// (Örn. "Lying Leg Curl" genel /curl/ kuralına düşerse biseps sayılırdı.)
 export const EXERCISE_RULES = [
-  // Karın & Bel
-  [/crunch|plank|russian twist|ab wheel|rollout|hanging leg raise|hanging knee|toes to bar|sit-?up|dead bug|pallof/, 'Karın', 'Core', []],
-  [/farmer|back extension|hyper-?extension|good morning/, 'Bel', 'Core', ['Karın']],
+  // --- KARIN & BEL ---
+  [/ab wheel|rollout/, 'Core', { 'Karın': 1, 'Bel': 0.25 }],
+  [/hanging (leg|knee) raise|toes to bar|captain'?s chair|sit-?up|crunch|dead bug|pallof|russian twist|plank|hollow/, 'Core', { 'Karın': 1 }],
+  [/back extension|hyper-?extension|reverse hyper/, 'Core', { 'Bel': 1, 'Kalça': 0.5, 'Arka Bacak': 0.5 }],
+  [/farmer|suitcase carry|carry/, 'Core', { 'Karın': 0.5, 'Bel': 0.5, 'Sırt': 0.5 }],
 
-  // Ön Kol & Arka Kol
-  [/bicep|curl|preacher|hammer/, 'Ön Kol', 'Pull', []],
-  [/tricep|skull crusher|pushdown|kickback|close grip bench/, 'Arka Kol', 'Push', []],
+  // --- KALF ---
+  [/calf raise|calf press|donkey calf/, 'Legs', { 'Kalf': 1 }],
 
-  // Omuz
-  [/face pull|reverse pec|rear delt/, 'Omuz', 'Pull', []],
-  [/lateral raise|front raise/, 'Omuz', 'Push', []],
-  [/overhead press|\bohp\b|shoulder press|arnold press|push press|military press/, 'Omuz', 'Push', ['Arka Kol']],
+  // --- KALÇA BASKIN ---
+  [/hip thrust|glute bridge|glute kickback|glute/, 'Legs', { 'Kalça': 1, 'Arka Bacak': 0.25 }],
 
-  // Bacak & Kalça
-  [/squat|leg press|hack squat|lunge/, 'Ön Bacak', 'Legs', ['Kalça']],
-  [/leg extension/, 'Ön Bacak', 'Legs', []],
-  [/leg curl|nordic/, 'Arka Bacak', 'Legs', []],
-  [/rdl|romanian deadlift|stiff-?leg|deadlift/, 'Arka Bacak', 'Legs', ['Kalça', 'Bel']],
-  [/hip thrust|glute/, 'Kalça', 'Legs', ['Arka Bacak']],
-  [/calf raise/, 'Ön Bacak', 'Legs', []],
+  // --- HAMSTRING BASKIN (genel /curl/ kuralından önce olmalı) ---
+  [/nordic|leg curl|hamstring curl/, 'Legs', { 'Arka Bacak': 1 }],
+  [/romanian deadlift|\brdl\b|stiff-?leg/, 'Legs', { 'Arka Bacak': 1, 'Kalça': 0.5, 'Bel': 0.5 }],
+  [/good morning/, 'Legs', { 'Arka Bacak': 1, 'Bel': 0.5, 'Kalça': 0.25 }],
 
-  // Sırt
-  [/shrug/, 'Sırt', 'Pull', []],
-  [/pull-?up|chin-?up|pulldown/, 'Sırt', 'Pull', ['Ön Kol']],
-  [/row|pendlay|t-bar/, 'Sırt', 'Pull', ['Ön Kol', 'Bel']],
+  // --- DEADLIFT VARYANTLARI ---
+  // Sumo'da duruş dik olduğu için kalça/quad payı artar, bel payı azalır.
+  [/sumo deadlift/, 'Legs', { 'Kalça': 1, 'Ön Bacak': 0.5, 'Arka Bacak': 0.5, 'Bel': 0.5, 'Sırt': 0.25 }],
+  [/trap bar deadlift|hex bar/, 'Legs', { 'Ön Bacak': 1, 'Kalça': 0.5, 'Bel': 0.5, 'Sırt': 0.25 }],
+  [/deadlift/, 'Legs', { 'Bel': 1, 'Kalça': 1, 'Arka Bacak': 0.5, 'Sırt': 0.5 }],
 
-  // Göğüs
-  [/bench press|chest press|\bfly\b|pec deck|crossover|dips|push-?up/, 'Göğüs', 'Push', ['Arka Kol', 'Omuz']],
-  [/press/, 'Göğüs', 'Push', ['Omuz']],
+  // --- QUAD BASKIN ---
+  [/leg extension/, 'Legs', { 'Ön Bacak': 1 }],
+  [/hack squat|leg press/, 'Legs', { 'Ön Bacak': 1, 'Kalça': 0.5 }],
+  [/front squat|zercher/, 'Legs', { 'Ön Bacak': 1, 'Kalça': 0.5, 'Bel': 0.5, 'Karın': 0.25 }],
+  [/bulgarian|split squat|lunge|step-?up/, 'Legs', { 'Ön Bacak': 1, 'Kalça': 0.5 }],
+  [/squat/, 'Legs', { 'Ön Bacak': 1, 'Kalça': 0.5, 'Bel': 0.25 }],
+
+  // --- OMUZ İZOLASYON ---
+  [/face pull|reverse pec|rear delt|reverse fly/, 'Pull', { 'Omuz': 1, 'Sırt': 0.5 }],
+  [/lateral raise|side raise|front raise/, 'Push', { 'Omuz': 1 }],
+  [/upright row/, 'Pull', { 'Omuz': 1, 'Sırt': 0.5 }],
+  [/shrug/, 'Pull', { 'Sırt': 1 }],
+
+  // --- OMUZ BİLEŞKE ---
+  [/overhead press|\bohp\b|shoulder press|arnold press|military press|push press/, 'Push', { 'Omuz': 1, 'Arka Kol': 0.5, 'Göğüs': 0.25 }],
+
+  // --- KOL ---
+  // Close grip bench triceps baskındır; göğüs kuralından önce yakalanmalı.
+  [/close grip bench/, 'Push', { 'Arka Kol': 1, 'Göğüs': 0.5, 'Omuz': 0.25 }],
+  [/tricep|skull crusher|pushdown|kickback|overhead extension/, 'Push', { 'Arka Kol': 1 }],
+  // Bacak curl'leri yukarıda yakalandığı için buradaki genel /curl/ güvenlidir.
+  // Göğüs kurallarından önce gelmesi şart: aksi halde "Incline Dumbbell Curl"
+  // eğik bas hareketi sanılıp göğüs sayılırdı.
+  [/preacher|bicep|hammer|concentration|spider|curl/, 'Pull', { 'Ön Kol': 1 }],
+
+  // --- SIRT ---
+  [/straight arm pulldown|pullover/, 'Pull', { 'Sırt': 1 }],
+  [/pull-?up|chin-?up|lat pulldown|pulldown/, 'Pull', { 'Sırt': 1, 'Ön Kol': 0.5, 'Omuz': 0.25 }],
+  // Serbest ağırlıkla öne eğik çekişlerde bel izometrik olarak belirgin yüklenir.
+  [/pendlay|barbell row|t-?bar row|meadows/, 'Pull', { 'Sırt': 1, 'Ön Kol': 0.5, 'Bel': 0.5, 'Omuz': 0.25 }],
+  [/\brow\b/, 'Pull', { 'Sırt': 1, 'Ön Kol': 0.5, 'Omuz': 0.25 }],
+
+  // --- GÖĞÜS ---
+  [/pec deck|\bfly\b|crossover/, 'Push', { 'Göğüs': 1 }],
+  [/\bdips?\b/, 'Push', { 'Göğüs': 1, 'Arka Kol': 0.5, 'Omuz': 0.25 }],
+  // Decline'da omuz payı düşer, incline'da artar.
+  [/decline.*(press|bench|fly)/, 'Push', { 'Göğüs': 1, 'Arka Kol': 0.5, 'Omuz': 0.25 }],
+  [/incline.*(press|bench|fly)/, 'Push', { 'Göğüs': 1, 'Omuz': 0.5, 'Arka Kol': 0.5 }],
+  [/bench press|chest press|push-?up/, 'Push', { 'Göğüs': 1, 'Arka Kol': 0.5, 'Omuz': 0.5 }],
+
+  // --- GENEL YAKALAYICI (en sonda) ---
+  [/press/, 'Push', { 'Göğüs': 1, 'Omuz': 0.5, 'Arka Kol': 0.5 }],
 ];
 
 export const STORAGE_VERSIONS = ['_v16', '_v15', '_v14', '_v13'];
@@ -89,6 +144,10 @@ export const SET_TYPES = {
 
 export const SET_TYPE_KEYS = ['normal', 'warmup', 'drop', 'failure', 'rest_pause'];
 
+// Haftalık set hacmi referansları (kas grubu başına):
+//   MEV  koruma için gereken en az hacim
+//   MAV  gelişimin en verimli olduğu aralığın üst ucu
+//   MRV  toparlanmanın bozulmaya başladığı tavan
 export const MUSCLE_VOLUME_LANDMARKS = {
   'Göğüs': { mev: 8, mav: 16, mrv: 22 },
   'Sırt': { mev: 10, mav: 18, mrv: 25 },
@@ -98,6 +157,7 @@ export const MUSCLE_VOLUME_LANDMARKS = {
   'Ön Bacak': { mev: 8, mav: 16, mrv: 22 },
   'Arka Bacak': { mev: 6, mav: 12, mrv: 18 },
   'Kalça': { mev: 6, mav: 14, mrv: 20 },
+  'Kalf': { mev: 6, mav: 14, mrv: 20 },
   'Karın': { mev: 4, mav: 10, mrv: 16 },
   'Bel': { mev: 4, mav: 8, mrv: 14 },
 };

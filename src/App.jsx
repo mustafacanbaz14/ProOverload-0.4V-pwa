@@ -7,7 +7,7 @@ import {
   requestWakeLock, playRestAlert, vibrateAlert
 } from './lockScreen';
 
-import { DEFAULT_EXERCISES } from './utils/constants';
+import { DEFAULT_EXERCISES, MUSCLE_GROUPS, MUSCLE_VOLUME_LANDMARKS } from './utils/constants';
 
 import {
   generateId, getLocalDateString, getMondayOfCurrentWeek, detectMuscleGroup,
@@ -195,28 +195,31 @@ export default function App() {
     const thisWeekSessions = thisWeekWorkouts.length;
     const thisWeekEffectiveSets = thisWeekWorkouts.reduce((sum, w) => sum + calcEffectiveSets(w.exercises), 0);
 
-    const muscleVolume = {
-      'Göğüs': 0, 'Sırt': 0, 'Omuz': 0,
-      'Ön Kol': 0, 'Arka Kol': 0,
-      'Ön Bacak': 0, 'Arka Bacak': 0, 'Kalça': 0,
-      'Karın': 0, 'Bel': 0
-    };
+    const muscleVolume = Object.fromEntries(MUSCLE_GROUPS.map(m => [m, 0]));
 
+    // Her çalışma seti, hareketin katkı tablosundaki ağırlıkla ilgili kaslara yazılır:
+    // birincil kas 1, belirgin yardımcılar 0.5, hafif katkılar 0.25 set sayılır.
     thisWeekWorkouts.forEach(w => {
       (w.exercises || []).forEach(ex => {
-        const { muscle, secondary } = detectMuscleGroup(ex.name, customExercises);
+        const { contributions } = detectMuscleGroup(ex.name, customExercises);
         const count = (ex.sets || []).filter(isWorkingSet).length;
+        if (count === 0) return;
 
-        if (count > 0) {
-          if (muscleVolume[muscle] !== undefined) muscleVolume[muscle] += count;
-          (secondary || []).forEach(sec => {
-            if (muscleVolume[sec] !== undefined) muscleVolume[sec] += count * 0.5;
-          });
-        }
+        Object.entries(contributions || {}).forEach(([muscle, weight]) => {
+          if (muscleVolume[muscle] !== undefined) muscleVolume[muscle] += count * weight;
+        });
       });
     });
 
-    const isDeloadNeeded = Object.values(muscleVolume).some(v => v > 22);
+    // Yarım set katkıları ondalık biriktirdiği için yuvarlanır.
+    Object.keys(muscleVolume).forEach(m => {
+      muscleVolume[m] = Math.round(muscleVolume[m] * 4) / 4;
+    });
+
+    // Deload kararı kasa özel MRV tavanına göre verilir, sabit bir eşiğe göre değil.
+    const isDeloadNeeded = Object.entries(muscleVolume).some(
+      ([muscle, volume]) => volume > (MUSCLE_VOLUME_LANDMARKS[muscle]?.mrv ?? 22)
+    );
 
     // İtme/çekme dengesi: bu haftaki etkili setlerin mekanik dağılımı.
     let pushSets = 0;
@@ -477,17 +480,37 @@ export default function App() {
   };
 
   const handleSaveMetrics = () => {
+    if (!currentMetricsForm.date) { showToast('Önce bir tarih seç.'); return; }
+
+    let updated = false;
     setMetricsHistory(prev => {
       const idx = prev.findIndex(m => m.date === currentMetricsForm.date);
       if (idx >= 0) {
+        updated = true;
         const next = [...prev];
-        next[idx] = currentMetricsForm;
+        // Mevcut kaydın kimliği korunur; aksi halde aynı güne ikinci bir kayıt
+        // gibi davranıp geçmişteki referanslar kopardı.
+        next[idx] = { ...currentMetricsForm, id: prev[idx].id };
         return next;
       }
-      return [currentMetricsForm, ...prev];
+      return [{ ...currentMetricsForm, id: currentMetricsForm.id || generateId() }, ...prev];
     });
-    showToast('Ölçümler kaydedildi.');
+    showToast(updated ? 'Ölçüm güncellendi.' : 'Ölçüm kaydedildi.');
   };
+
+  // Geçmişteki bir ölçümü ölçüm sayfasında düzenlemeye açar.
+  const handleEditMetric = useCallback((metric) => {
+    setCurrentMetricsForm(mergeMetrics(metric));
+    setView('profile');
+    showToast('Ölçüm düzenleniyor.');
+  }, [showToast]);
+
+  // Geçmişteki bir beslenme kaydını beslenme sayfasında düzenlemeye açar.
+  const handleEditNutrition = useCallback((entry) => {
+    setCurrentNutritionForm(mergeNutrition(entry));
+    setView('nutrition');
+    showToast('Beslenme kaydı düzenleniyor.');
+  }, [showToast]);
 
   const handleSaveNutrition = () => {
     setNutritionHistory(prev => {
@@ -650,6 +673,8 @@ export default function App() {
               setIsMeasurementGuideOpen={setIsMeasurementGuideOpen}
               isMeasurementGuideOpen={isMeasurementGuideOpen}
               setIsComparisonOpen={setIsComparisonOpen}
+              latestMetrics={sortedMetrics[0] || null}
+              isExistingRecord={metricsHistory.some(m => m.date === currentMetricsForm.date)}
             />
           )}
 
@@ -703,6 +728,8 @@ export default function App() {
               handleEditOldWorkoutDate={handleEditOldWorkoutDate}
               handleEditOldWorkout={handleEditOldWorkout}
               handleRepeatWorkout={handleRepeatWorkout}
+              handleEditMetric={handleEditMetric}
+              handleEditNutrition={handleEditNutrition}
             />
           )}
 

@@ -1,6 +1,40 @@
 import React, { memo } from 'react';
-import { User, Scale, Ruler, Info, Save, ArrowRightLeft } from 'lucide-react';
-import { BODY_METRICS } from '../utils/constants';
+import { User, Scale, Ruler, Info, Save, ArrowRightLeft, Calendar, Droplet, History } from 'lucide-react';
+import { BODY_METRICS, FAT_METHOD_LABELS } from '../utils/constants';
+import { parseNumber } from '../utils/helpers';
+
+// Kaliper ölçüm noktaları. 3 bölge yöntemi cinsiyete göre farklı noktalar kullanır,
+// 7 bölge yönteminde hepsi girilir.
+const SKINFOLD_SITES = [
+  { key: 'chest', label: 'Göğüs', male3: true, female3: false },
+  { key: 'abdomen', label: 'Karın', male3: true, female3: false },
+  { key: 'thigh', label: 'Uyluk', male3: true, female3: true },
+  { key: 'triceps', label: 'Triceps', male3: false, female3: true },
+  { key: 'suprailiac', label: 'Suprailiak', male3: false, female3: true },
+  { key: 'axilla', label: 'Aksilla', male3: false, female3: false },
+  { key: 'subscapular', label: 'Subskapular', male3: false, female3: false },
+];
+
+const Section = ({ icon, title, action, children }) => (
+  <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
+    <div className="flex justify-between items-center px-4 py-3 border-b border-zinc-800 bg-zinc-950/60">
+      <h3 className="text-[11px] font-bold text-zinc-200 uppercase tracking-wider flex items-center">
+        <span className="mr-2 text-cyan-400 flex items-center">{icon}</span>{title}
+      </h3>
+      {action}
+    </div>
+    <div className="p-4 space-y-3">{children}</div>
+  </div>
+);
+
+const Field = ({ label, children }) => (
+  <div>
+    <label className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider block mb-1.5">{label}</label>
+    {children}
+  </div>
+);
+
+const inputClass = 'w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-200 font-mono text-sm outline-none focus:border-cyan-600 transition-colors';
 
 const MetricsView = memo(({
   currentMetricsForm,
@@ -10,159 +44,245 @@ const MetricsView = memo(({
   setIsMeasurementGuideOpen,
   isMeasurementGuideOpen,
   setIsComparisonOpen,
+  latestMetrics,
+  isExistingRecord,
 }) => {
-  const updateMetricsField = (field, value) => {
-    setCurrentMetricsForm(prev => ({ ...prev, [field]: value }));
-  };
+  const form = currentMetricsForm;
 
-  const updateMeasurement = (field, value) => {
+  const updateField = (field, value) =>
+    setCurrentMetricsForm(prev => ({ ...prev, [field]: value }));
+
+  const updateMeasurement = (field, value) =>
     setCurrentMetricsForm(prev => ({
       ...prev,
       measurements: { ...(prev.measurements || {}), [field]: value }
     }));
+
+  const updateSkinfold = (field, value) =>
+    setCurrentMetricsForm(prev => ({
+      ...prev,
+      skinfolds: { ...(prev.skinfolds || {}), [field]: value }
+    }));
+
+  // Son kaydedilen ölçümün tüm değerlerini forma taşır, tarihi korur.
+  const fillFromLatest = () => {
+    if (!latestMetrics) return;
+    setCurrentMetricsForm(prev => ({
+      ...latestMetrics,
+      id: prev.id,
+      date: prev.date
+    }));
   };
 
+  const visibleSites = SKINFOLD_SITES.filter(site => {
+    if (form.method === '7') return true;
+    return form.gender === 'female' ? site.female3 : site.male3;
+  });
+
+  const fatOptions = [
+    { key: 'skinfold', value: computedComp.siriBF },
+    { key: 'navy', value: computedComp.navyBF },
+    { key: 'average', value: computedComp.averageBF },
+    { key: 'manual', value: null },
+  ];
+
   return (
-    <div className="p-4 space-y-4 pb-24 h-full overflow-y-auto hide-scrollbar bg-black">
-      {/* Kıyaslama Butonu */}
+    <div className="p-4 space-y-4 pb-28 h-full overflow-y-auto hide-scrollbar bg-black">
+
       <button
         onClick={() => setIsComparisonOpen(true)}
-        className="w-full bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-cyan-400 font-bold py-3 px-4 rounded-2xl flex justify-center items-center uppercase tracking-wide text-xs transition-colors"
+        className="w-full bg-zinc-900 active:bg-zinc-800 border border-zinc-800 text-cyan-400 font-bold py-3 px-4 rounded-2xl flex justify-center items-center uppercase tracking-wide text-[11px] transition-colors"
       >
-        <ArrowRightLeft size={16} className="mr-2" /> Dönemsel Ölçüm Kıyaslayıcı (Before / After)
+        <ArrowRightLeft size={15} className="mr-2" /> Dönemsel Kıyaslama
       </button>
 
-      {/* Genel Profil Formu */}
-      <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 space-y-3">
-        <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center border-b border-zinc-800 pb-2">
-          <User size={12} className="mr-1.5 text-cyan-400" /> Profil ve Temel Ölçümler
-        </h3>
-
-        <div className="grid grid-cols-2 gap-3 text-xs">
-          <div>
-            <label className="text-[9px] font-mono text-zinc-500 uppercase block mb-1">Cinsiyet</label>
-            <select
-              value={currentMetricsForm.gender}
-              onChange={(e) => updateMetricsField('gender', e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-200 font-mono outline-none"
+      {/* --- KAYIT TARİHİ --- */}
+      <Section icon={<Calendar size={13} />}
+        title="Kayıt Tarihi"
+        action={
+          latestMetrics && (
+            <button
+              onClick={fillFromLatest}
+              className="text-[9px] font-mono text-cyan-400 active:text-cyan-300 flex items-center border border-cyan-900/50 rounded-lg px-2 py-1"
             >
+              <History size={10} className="mr-1" /> Son ölçümden doldur
+            </button>
+          )
+        }
+      >
+        <input
+          type="date"
+          value={form.date || ''}
+          onChange={(e) => updateField('date', e.target.value)}
+          className={inputClass}
+        />
+        <p className="text-[9px] font-mono text-zinc-500 leading-relaxed">
+          {isExistingRecord
+            ? 'Bu tarihte kayıt var — kaydettiğinde üzerine yazılır.'
+            : 'Bu tarihte kayıt yok — kaydettiğinde yeni kayıt oluşur.'}
+        </p>
+      </Section>
+
+      {/* --- PROFİL --- */}
+      <Section icon={<User size={13} />} title="Profil">
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Cinsiyet">
+            <select value={form.gender} onChange={(e) => updateField('gender', e.target.value)} className={inputClass}>
               <option value="male">Erkek</option>
               <option value="female">Kadın</option>
             </select>
-          </div>
-          <div>
-            <label className="text-[9px] font-mono text-zinc-500 uppercase block mb-1">Yaş</label>
+          </Field>
+          <Field label="Yaş">
+            <input type="number" inputMode="numeric" value={form.age} onChange={(e) => updateField('age', e.target.value)} className={`${inputClass} text-center`} />
+          </Field>
+          <Field label="Boy (cm)">
+            <input type="number" inputMode="decimal" value={form.height} onChange={(e) => updateField('height', e.target.value)} className={`${inputClass} text-center`} />
+          </Field>
+          <Field label="Kilo (kg)">
+            <input type="number" inputMode="decimal" step="0.1" value={form.weight} onChange={(e) => updateField('weight', e.target.value)} className={`${inputClass} text-center text-cyan-400 font-bold`} />
+          </Field>
+        </div>
+      </Section>
+
+      {/* --- YAĞ ORANI YÖNTEMİ --- */}
+      <Section icon={<Droplet size={13} />} title="Yağ Oranı Kaynağı">
+        <div className="grid grid-cols-4 gap-2">
+          {fatOptions.map(opt => {
+            const selected = form.fatPreference === opt.key;
+            return (
+              <button
+                key={opt.key}
+                onClick={() => updateField('fatPreference', opt.key)}
+                className={`py-2 px-1 rounded-xl border text-center transition-colors ${selected ? 'bg-cyan-900/25 border-cyan-600' : 'bg-zinc-950 border-zinc-800'}`}
+              >
+                <span className={`block text-[8px] font-bold uppercase tracking-wide ${selected ? 'text-cyan-400' : 'text-zinc-500'}`}>
+                  {FAT_METHOD_LABELS[opt.key].replace(' Bazlı', '')}
+                </span>
+                <span className={`block text-[10px] font-mono mt-0.5 ${selected ? 'text-zinc-100' : 'text-zinc-500'}`}>
+                  {opt.key === 'manual' ? `%${parseNumber(form.bodyFat) || 0}` : (opt.value !== '-' ? `%${opt.value}` : '—')}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {form.fatPreference === 'manual' && (
+          <Field label="Manuel Yağ Oranı (%)">
             <input
-              type="number"
-              value={currentMetricsForm.age}
-              onChange={(e) => updateMetricsField('age', e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-200 font-mono outline-none text-center"
+              type="number" inputMode="decimal" step="0.1"
+              value={form.bodyFat || ''}
+              onChange={(e) => updateField('bodyFat', e.target.value)}
+              placeholder="örn. 14.5"
+              className={`${inputClass} text-center`}
             />
+          </Field>
+        )}
+
+        <div className="border-t border-zinc-800 pt-3">
+          <div className="flex gap-2 mb-3">
+            {['3', '7'].map(m => (
+              <button
+                key={m}
+                onClick={() => updateField('method', m)}
+                className={`flex-1 py-2 rounded-xl border text-[10px] font-bold uppercase tracking-wider transition-colors ${form.method === m ? 'bg-cyan-900/25 border-cyan-600 text-cyan-400' : 'bg-zinc-950 border-zinc-800 text-zinc-500'}`}
+              >
+                {m} Bölge Kaliper
+              </button>
+            ))}
           </div>
-          <div>
-            <label className="text-[9px] font-mono text-zinc-500 uppercase block mb-1">Boy (cm)</label>
-            <input
-              type="number"
-              value={currentMetricsForm.height}
-              onChange={(e) => updateMetricsField('height', e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-200 font-mono outline-none text-center"
-            />
-          </div>
-          <div>
-            <label className="text-[9px] font-mono text-zinc-500 uppercase block mb-1">Kilo (kg)</label>
-            <input
-              type="number"
-              step="0.1"
-              value={currentMetricsForm.weight}
-              onChange={(e) => updateMetricsField('weight', e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-cyan-400 font-mono outline-none font-bold text-center"
-            />
+
+          <div className="grid grid-cols-3 gap-2">
+            {visibleSites.map(site => (
+              <div key={site.key}>
+                <label className="text-[8px] font-mono text-zinc-500 uppercase block mb-1">{site.label}</label>
+                <input
+                  type="number" inputMode="decimal" step="0.5"
+                  value={form.skinfolds?.[site.key] || ''}
+                  onChange={(e) => updateSkinfold(site.key, e.target.value)}
+                  placeholder="mm"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-zinc-200 font-mono text-xs text-center outline-none focus:border-cyan-600 transition-colors"
+                />
+              </div>
+            ))}
           </div>
         </div>
-      </div>
+      </Section>
 
-      {/* Hesaplanan Vücut Kompozisyonu Kartı */}
-      <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 space-y-3">
-        <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center border-b border-zinc-800 pb-2">
-          <Scale size={12} className="mr-1.5 text-cyan-400" /> Analiz Edilen Vücut Kompozisyonu
-        </h3>
-
-        <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-          <div className="bg-zinc-950 p-2.5 rounded-xl border border-zinc-800/80">
-            <span className="text-zinc-500 block text-[8px] uppercase font-bold">Aktif Yağ Oranı</span>
-            <span className="text-cyan-400 font-bold text-base">%{computedComp.activeBF}</span>
-          </div>
-          <div className="bg-zinc-950 p-2.5 rounded-xl border border-zinc-800/80">
-            <span className="text-zinc-500 block text-[8px] uppercase font-bold">Kas Kütlesi (FFM)</span>
-            <span className="text-emerald-400 font-bold text-base">{computedComp.ffm} kg</span>
-          </div>
-          <div className="bg-zinc-950 p-2.5 rounded-xl border border-zinc-800/80">
-            <span className="text-zinc-500 block text-[8px] uppercase font-bold">FFMI İndeksi</span>
-            <span className="text-zinc-200 font-bold text-base">{computedComp.ffmi}</span>
-          </div>
-          <div className="bg-zinc-950 p-2.5 rounded-xl border border-zinc-800/80">
-            <span className="text-zinc-500 block text-[8px] uppercase font-bold">BMR (Bazal Kalori)</span>
-            <span className="text-amber-400 font-bold text-base">{computedComp.bmr} kcal</span>
-          </div>
+      {/* --- HESAPLANAN KOMPOZİSYON --- */}
+      <Section icon={<Scale size={13} />} title="Hesaplanan Kompozisyon">
+        <div className="grid grid-cols-2 gap-2">
+          {[
+            { label: 'Aktif Yağ Oranı', value: `%${computedComp.activeBF}`, color: 'text-cyan-400' },
+            { label: 'Yağsız Kütle', value: `${computedComp.ffm} kg`, color: 'text-emerald-400' },
+            { label: 'FFMI', value: computedComp.ffmi, color: 'text-zinc-100' },
+            { label: 'BMR', value: `${computedComp.bmr} kcal`, color: 'text-amber-400' },
+          ].map(item => (
+            <div key={item.label} className="bg-zinc-950 p-2.5 rounded-xl border border-zinc-800/80">
+              <span className="text-zinc-500 block text-[8px] uppercase font-bold tracking-wider">{item.label}</span>
+              <span className={`${item.color} font-bold text-base font-mono`}>{item.value}</span>
+            </div>
+          ))}
         </div>
 
         <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 space-y-1.5 text-[9px] font-mono text-zinc-300">
-          <div className="flex justify-between"><span>Genetik Potansiyel (FFMI):</span> <strong className="text-cyan-400">%{computedComp.potentialAchieved} (%{computedComp.maxPotentialFFMI} Max)</strong></div>
-          <div className="flex justify-between"><span>İskelet Çatısı:</span> <strong className="text-zinc-200">{computedComp.frameSize}</strong></div>
-          <div className="flex justify-between"><span>Max Doğal Kilo:</span> <strong className="text-emerald-400">{computedComp.maxNaturalWeight} kg</strong></div>
+          <div className="flex justify-between"><span>Genetik potansiyel</span> <strong className="text-cyan-400">%{computedComp.potentialAchieved} (max FFMI {computedComp.maxPotentialFFMI})</strong></div>
+          <div className="flex justify-between"><span>İskelet çatısı</span> <strong className="text-zinc-200">{computedComp.frameSize}</strong></div>
+          <div className="flex justify-between"><span>Max doğal kilo</span> <strong className="text-emerald-400">{computedComp.maxNaturalWeight} kg</strong></div>
+          <div className="flex justify-between"><span>Bel/boy oranı</span> <strong className={parseNumber(computedComp.whtr) > 0.5 ? 'text-orange-400' : 'text-emerald-400'}>{computedComp.whtr}</strong></div>
         </div>
 
-        <div className="bg-cyan-950/20 border border-cyan-900/30 p-3 rounded-xl space-y-1 text-[9px] font-mono">
-          <span className="text-cyan-400 font-bold uppercase block text-[8px]">Tavsiye & Periyotlama</span>
-          <p className="text-zinc-300 leading-relaxed">{computedComp.trainingAdvice}</p>
+        <div className="bg-cyan-950/20 border border-cyan-900/30 p-3 rounded-xl space-y-1">
+          <span className="text-cyan-400 font-bold uppercase block text-[8px] tracking-wider">Tavsiye</span>
+          <p className="text-zinc-300 leading-relaxed text-[9px] font-mono">{computedComp.trainingAdvice}</p>
         </div>
-      </div>
+      </Section>
 
-      {/* Bölgesel Ölçümler */}
-      <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 space-y-3">
-        <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
-          <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center">
-            <Ruler size={12} className="mr-1.5 text-cyan-400" /> Bölgesel Kas Ölçüleri (cm)
-          </h3>
+      {/* --- ÇEVRE ÖLÇÜLERİ --- */}
+      <Section icon={<Ruler size={13} />}
+        title="Çevre Ölçüleri (cm)"
+        action={
           <button
             onClick={() => setIsMeasurementGuideOpen(!isMeasurementGuideOpen)}
-            className="text-[9px] text-cyan-400 hover:text-cyan-300 flex items-center font-mono"
+            className="text-[9px] text-cyan-400 flex items-center font-mono border border-cyan-900/50 rounded-lg px-2 py-1"
           >
-            <Info size={10} className="mr-1" /> Ölçüm Rehberi
+            <Info size={10} className="mr-1" /> Rehber
           </button>
-        </div>
-
+        }
+      >
         {isMeasurementGuideOpen && (
           <div className="bg-zinc-950 border border-zinc-800 p-3 rounded-xl text-[9px] font-mono text-zinc-400 space-y-1.5">
-            <p><strong>Kol:</strong> Pazu sıkılıyken en geniş nokta.</p>
-            <p><strong>Bel:</strong> Göbek deliğinin hemen 2 cm üstünden rahat durumda.</p>
-            <p><strong>Göğüs:</strong> Meme başı seviyesinden nefes verdikten sonra.</p>
-            <p><strong>Uyluk:</strong> Kasık altından en kalın bölge.</p>
+            <p><strong className="text-zinc-200">Boyun:</strong> Adem elmasının hemen altından.</p>
+            <p><strong className="text-zinc-200">Omuz:</strong> Kollar yanda, en geniş noktadan.</p>
+            <p><strong className="text-zinc-200">Göğüs:</strong> Meme başı hizasında, nefes verdikten sonra.</p>
+            <p><strong className="text-zinc-200">Kol:</strong> Pazu sıkılıyken en geniş nokta.</p>
+            <p><strong className="text-zinc-200">Bel:</strong> Göbek deliği hizasında, karın rahatken.</p>
+            <p><strong className="text-zinc-200">Kalça:</strong> Yandan bakınca en geniş nokta.</p>
+            <p><strong className="text-zinc-200">Uyluk:</strong> Kasık altından en kalın bölge.</p>
+            <p><strong className="text-zinc-200">El bileği:</strong> Çıkıntı kemiğin hemen kola doğru arkasından.</p>
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-2.5 text-xs">
+        <div className="grid grid-cols-2 gap-2.5">
           {BODY_METRICS.filter(m => m.key !== 'weight').map(m => (
-            <div key={m.key} className="bg-zinc-950 p-2 rounded-xl border border-zinc-800 flex justify-between items-center">
-              <span className="text-[9px] font-mono text-zinc-400">{m.label}</span>
+            <div key={m.key} className="bg-zinc-950 px-2.5 py-2 rounded-xl border border-zinc-800 flex justify-between items-center">
+              <span className="text-[10px] font-mono text-zinc-400">{m.label}</span>
               <input
-                type="number"
-                step="0.5"
-                value={currentMetricsForm.measurements?.[m.key] || ''}
+                type="number" inputMode="decimal" step="0.5"
+                value={form.measurements?.[m.key] || ''}
                 onChange={(e) => updateMeasurement(m.key, e.target.value)}
                 placeholder="0"
-                className="w-16 bg-zinc-900 border border-zinc-800 rounded-lg p-1 font-mono text-xs text-center text-cyan-400 outline-none"
+                className="w-14 bg-zinc-900 border border-zinc-800 rounded-lg py-1 font-mono text-xs text-center text-cyan-400 outline-none focus:border-cyan-600 transition-colors"
               />
             </div>
           ))}
         </div>
-      </div>
+      </Section>
 
       <button
         onClick={handleSaveMetrics}
         className="w-full bg-cyan-600 active:bg-cyan-700 text-white font-bold py-3.5 px-4 rounded-2xl flex justify-center items-center uppercase tracking-wide text-xs shadow-lg shadow-cyan-900/20 transition-all"
       >
-        <Save size={16} className="mr-2" /> Ölçüm Kaydını Sakla
+        <Save size={16} className="mr-2" /> {isExistingRecord ? 'Kaydı Güncelle' : 'Ölçümü Kaydet'}
       </button>
     </div>
   );

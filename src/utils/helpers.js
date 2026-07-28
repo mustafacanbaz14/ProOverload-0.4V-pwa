@@ -18,17 +18,44 @@ export const getMondayOfCurrentWeek = () => {
   return monday;
 };
 
+// Katkı tablosundaki en yüksek ağırlıklı kas, hareketin birincil hedefidir.
+const primaryFrom = (contributions) => {
+  let best = null;
+  let bestWeight = -1;
+  for (const [muscle, weight] of Object.entries(contributions || {})) {
+    if (weight > bestWeight) { best = muscle; bestWeight = weight; }
+  }
+  return best || 'Diğer';
+};
+
+/**
+ * Hareket adından kas katkılarını çıkarır.
+ * @returns {{ muscle: string, mechanics: string, contributions: Record<string, number> }}
+ *   contributions: kas -> ağırlık (1 birincil, 0.5 belirgin yardımcı, 0.25 hafif)
+ */
 export const detectMuscleGroup = (name, customList = []) => {
   const customEx = customList.find(ex => (typeof ex === 'object' ? ex.name === name : ex === name));
   if (customEx && typeof customEx === 'object' && customEx.muscle) {
-    return { muscle: customEx.muscle, mechanics: customEx.mechanics || 'Diğer', secondary: customEx.secondary || [] };
+    // Özel hareketler ağırlık tablosu taşıyabilir; taşımıyorsa (eski kayıtlar)
+    // birincil kas 1, varsa ikincil kaslar 0.5 kabul edilir.
+    const contributions = customEx.contributions || {
+      [customEx.muscle]: 1,
+      ...Object.fromEntries((customEx.secondary || []).map(m => [m, 0.5]))
+    };
+    return {
+      muscle: customEx.muscle,
+      mechanics: customEx.mechanics || 'Diğer',
+      contributions
+    };
   }
 
   const lower = (name || '').toLowerCase();
-  for (const [pattern, muscle, mechanics, secondary] of EXERCISE_RULES) {
-    if (pattern.test(lower)) return { muscle, mechanics, secondary: secondary || [] };
+  for (const [pattern, mechanics, contributions] of EXERCISE_RULES) {
+    if (pattern.test(lower)) {
+      return { muscle: primaryFrom(contributions), mechanics, contributions };
+    }
   }
-  return { muscle: 'Diğer', mechanics: 'Diğer', secondary: [] };
+  return { muscle: 'Diğer', mechanics: 'Diğer', contributions: {} };
 };
 
 export const foldForSearch = (text) => String(text || '')
@@ -194,9 +221,13 @@ export const loadPersistedState = () => {
   let currentMetricsForm = mergeMetrics({});
   if (metricsHistory.length > 0) {
     const todayData = metricsHistory.find(m => m.date === todayStr);
+    // Bugüne kayıt yoksa en son ölçüm şablon alınır; böylece ölçüm sayfası boş
+    // açılmaz ve yalnızca değişen değerler güncellenir. Kayıt sırasına
+    // güvenilmediği için tarihe göre sıralanır.
+    const latest = sortByDateDesc(metricsHistory)[0];
     currentMetricsForm = todayData
       ? mergeMetrics(todayData)
-      : mergeMetrics({ ...metricsHistory[0], id: generateId(), date: todayStr });
+      : mergeMetrics({ ...latest, id: generateId(), date: todayStr });
   }
 
   const nutritionRaw = loadWithFallback(keys('nutrition'), []);

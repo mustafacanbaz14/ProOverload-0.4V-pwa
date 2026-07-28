@@ -14,6 +14,8 @@ const HistoryView = memo(({
   handleEditOldWorkoutDate,
   handleEditOldWorkout,
   handleRepeatWorkout,
+  handleEditMetric,
+  handleEditNutrition,
 }) => {
   return (
     <div className="p-4 space-y-4 pb-24 h-full overflow-y-auto hide-scrollbar bg-black">
@@ -126,9 +128,14 @@ const HistoryView = memo(({
                     <Scale size={14} className="text-cyan-400" />
                     <span className="text-xs font-bold text-zinc-200 font-mono">{m.date}</span>
                   </div>
-                  <button onClick={() => setDeleteConfirm({ isOpen: true, type: 'metric', id: m.id })} className="text-zinc-600 hover:text-red-500 p-1">
-                    <Trash2 size={14} />
-                  </button>
+                  <div className="flex items-center shrink-0">
+                    <button onClick={() => handleEditMetric?.(m)} title="Bu ölçümü düzenle" className="text-zinc-500 active:text-cyan-400 p-2">
+                      <Pencil size={14} />
+                    </button>
+                    <button onClick={() => setDeleteConfirm({ isOpen: true, type: 'metric', id: m.id })} title="Sil" className="text-zinc-600 active:text-red-500 p-2">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-[9px] font-mono text-zinc-300 pt-1">
                   <div>Kilo: <strong className="text-cyan-400">{m.weight} kg</strong></div>
@@ -156,9 +163,14 @@ const HistoryView = memo(({
                     <Beef size={14} className="text-cyan-400" />
                     <span className="text-xs font-bold text-zinc-200 font-mono">{n.date}</span>
                   </div>
-                  <button onClick={() => setDeleteConfirm({ isOpen: true, type: 'nutrition', id: n.id })} className="text-zinc-600 hover:text-red-500 p-1">
-                    <Trash2 size={14} />
-                  </button>
+                  <div className="flex items-center shrink-0">
+                    <button onClick={() => handleEditNutrition?.(n)} title="Bu kaydı düzenle" className="text-zinc-500 active:text-cyan-400 p-2">
+                      <Pencil size={14} />
+                    </button>
+                    <button onClick={() => setDeleteConfirm({ isOpen: true, type: 'nutrition', id: n.id })} title="Sil" className="text-zinc-600 active:text-red-500 p-2">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
                 <div className="grid grid-cols-4 gap-2 text-[9px] font-mono text-zinc-300 pt-1">
                   <div>Kalori: <strong className="text-cyan-400">{n.caloriesIn} kcal</strong></div>
