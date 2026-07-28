@@ -1,8 +1,29 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Plus, Save, Activity, TrendingUp, X, ChevronRight, Search, User, Scale, Ruler, Trash2, AlertCircle, Target, Zap, Database, Flame, Beef, Droplets, Wheat, Copy, History, Settings, Star, Pencil, BookmarkPlus, Timer, Download, Upload, LineChart, BrainCircuit, Info, Play, Pause, BarChart } from 'lucide-react';
+import { Plus, Save, Activity, TrendingUp, X, ChevronRight, Search, User, Scale, Ruler, Trash2, AlertCircle, Target, Zap, Database, Flame, Beef, Droplets, Wheat, Copy, History, Settings, Star, Pencil, BookmarkPlus, Timer, Download, Upload, LineChart, BrainCircuit, Info, Play, Pause, BarChart, Smartphone, Sun, Trophy, Ruler as RulerIcon } from 'lucide-react';
+import {
+  isLockScreenSupported, startLockScreenActivity, updateLockScreenActivity, stopLockScreenActivity,
+  isWakeLockSupported, requestWakeLock, releaseWakeLock, playRestAlert, vibrateAlert
+} from './lockScreen';
 
 // --- BİLİMSEL SABİTLER VE YARDIMCI FONKSİYONLAR ---
 const FORM_RATINGS = Array.from({ length: 10 }, (_, i) => ({ value: i + 1, label: `${i + 1}/10` }));
+
+const FAT_METHOD_LABELS = { skinfold: 'Kaliper Bazlı', navy: 'Mezura Bazlı', average: 'Ortalama', manual: 'Manuel' };
+
+const DEFAULT_SETTINGS = {
+  autoCopyLastSet: true, nutritionGoal: 'bulk', proteinPerFfmBulk: 2.2, proteinPerFfmCut: 2.6,
+  lockScreenActivity: true, keepScreenAwake: true,
+  autoRestTimer: true, restSeconds: 120, restAlert: true,
+  repRangeMin: 6, repRangeMax: 10
+};
+
+const DELETE_LABELS = {
+  workout: 'Antrenman kaydı', metric: 'Ölçüm kaydı', nutrition: 'Beslenme kaydı',
+  template: 'Antrenman şablonu', mealTemplate: 'Öğün şablonu', dayTemplate: 'Beslenme şablonu'
+};
+
+// Yedek dosyasında bulunmasını beklediğimiz alanlar
+const BACKUP_KEYS = ['workouts', 'templates', 'customExercises', 'metricsHistory', 'nutritionHistory', 'mealTemplates', 'dayTemplates', 'settings'];
 
 const DEFAULT_EXERCISES = [
   "Barbell Back Squat", "Barbell Front Squat", "Zercher Squat", "Hack Squat", "Bulgarian Split Squat", "Leg Press", "Walking Lunges",
@@ -36,29 +57,49 @@ const getMondayOfCurrentWeek = () => {
   return monday;
 };
 
+// Hareket adından kas grubu ve mekanik türü çıkarımı.
+// Sıra kritiktir: ilk eşleşen kural kazanır, bu yüzden en spesifik kalıplar üsttedir.
+// (Örn. "Hanging Leg Raise" bacak değil merkez; "Close Grip Bench Press" göğüs değil koldur.)
+const EXERCISE_RULES = [
+  // Merkez — "leg raise" bacak sanılmasın diye en üstte
+  [/crunch|plank|russian twist|ab wheel|rollout|hanging leg raise|hanging knee|toes to bar|sit-?up|dead bug|pallof|farmer|\bab /, 'Merkez', 'Core'],
+
+  // Omuz — çekiş görünümlü ("upright row") ve itiş görünümlü izolasyonlar
+  [/face pull|reverse pec|rear delt|upright row/, 'Omuz', 'Pull'],
+  [/lateral raise|front raise/, 'Omuz', 'Push'],
+  [/overhead press|\bohp\b|shoulder press|arnold press|push press|military press/, 'Omuz', 'Push'],
+
+  // Kol — "close grip bench press" göğüsten önce yakalanmalı
+  [/tricep|skull crusher|pushdown|kickback|close grip bench/, 'Kol', 'Push'],
+
+  // Bacak — "leg curl"/"leg extension" genel curl kuralından önce
+  [/squat|leg press|leg curl|leg extension|lunge|deadlift|hip thrust|good morning|nordic|glute|calf raise/, 'Bacak', 'Legs'],
+
+  // Sırt
+  [/shrug/, 'Sırt', 'Pull'],
+  [/pull-?up|chin-?up|pulldown|\brow\b/, 'Sırt', 'Pull'],
+
+  // Göğüs
+  [/bench press|chest press|\bfly\b|pec deck|crossover|dips|push-?up/, 'Göğüs', 'Push'],
+
+  // Kalan izolasyonlar
+  [/curl/, 'Kol', 'Pull'],
+
+  // Yukarıdakilere takılmayan tüm bas hareketleri (incline/decline dumbbell press vb.)
+  [/press/, 'Göğüs', 'Push'],
+];
+
 const detectMuscleGroup = (name, customList = []) => {
   const customEx = customList.find(ex => (typeof ex === 'object' ? ex.name === name : ex === name));
   if (customEx && typeof customEx === 'object' && customEx.muscle) {
     return { muscle: customEx.muscle, mechanics: customEx.mechanics || 'Diğer' };
   }
 
-  const lower = name.toLowerCase();
-  let muscle = 'Diğer';
-  let mechanics = 'Diğer';
-
-  if (/bench|press|push|dips|fly|crossover|extension|kickback/.test(lower)) mechanics = 'Push';
-  if (/pull|row|chin|curl|shrug/.test(lower)) mechanics = 'Pull';
-  if (/squat|leg|deadlift|thrust|calf|lunge|morning/.test(lower)) mechanics = 'Legs';
-  if (/crunch|core|plank|twist|raise/.test(lower) && !lower.includes('lateral') && !lower.includes('calf')) mechanics = 'Core';
-
-  if (/bench|fly|pec|crossover|dips|push-up/.test(lower)) muscle = 'Göğüs';
-  else if (/pull-up|chin-up|row|lat |pulldown|shrug/.test(lower)) muscle = 'Sırt';
-  else if (/squat|leg|deadlift|thrust|calf|lunge|morning/.test(lower)) muscle = 'Bacak';
-  else if (/overhead|shoulder|lateral|face pull|press|upright/.test(lower) && !lower.includes('bench') && !lower.includes('leg')) muscle = 'Omuz';
-  else if (/curl|tricep|crusher|pushdown|extension|kickback/.test(lower) && !lower.includes('leg')) muscle = 'Kol';
-  else if (/crunch|ab |core|raise|plank|twist|farmer/.test(lower) && !lower.includes('calf') && !lower.includes('lateral')) muscle = 'Merkez';
-
-  return { muscle, mechanics };
+  const lower = (name || '').toLowerCase();
+  for (const [pattern, muscle, mechanics] of EXERCISE_RULES) {
+    if (pattern.test(lower)) return { muscle, mechanics };
+  }
+  return { muscle: 'Diğer', mechanics: 'Diğer' };
 };
 
 const parseNumber = (val) => {
@@ -95,59 +136,447 @@ const mergeNutrition = (data) => ({
   meals: Array.isArray(data?.meals) && data.meals.length > 0 ? data.meals : [{ id: generateId(), name: '1. Öğün', calories: '', protein: '', carbs: '', fats: '' }]
 });
 
+// Kayıt anahtarı sürümleri: en yeniden en eskiye doğru denenir (geriye dönük uyumluluk).
+const STORAGE_VERSIONS = ['_v16', '_v15', '_v14', '_v13'];
+
 const loadWithFallback = (keys, defaultVal, parser = (d) => d) => {
   for (let key of keys) {
     try {
       const data = JSON.parse(localStorage.getItem(key));
       if (data !== null && data !== undefined) return parser(data);
-    } catch (e) { }
+    } catch { /* bozuk kayıt: bir sonraki sürüm anahtarını dene */ }
   }
   return defaultVal;
 };
 
+// Isınma setleri hacim, etkili set, tonaj, 1RM ve rekor hesaplarının hiçbirine girmez;
+// yalnızca seans içinde referans olarak durur.
+const isWarmupSet = (set) => set?.setType === 'warmup';
+const isWorkingSet = (set) => !isWarmupSet(set);
+
 const calcTonnage = (exercises) => {
   if (!Array.isArray(exercises)) return 0;
-  return exercises.reduce((acc, ex) => acc + (ex.sets || []).reduce((sAcc, s) => sAcc + (parseNumber(s.weight) * parseNumber(s.reps)), 0), 0);
+  return exercises.reduce((acc, ex) => acc + (ex.sets || [])
+    .filter(isWorkingSet)
+    .reduce((sAcc, s) => sAcc + (parseNumber(s.weight) * parseNumber(s.reps)), 0), 0);
+};
+
+// Etkili set: RIR <= 3 ile tamamlanan, yani hipertrofi uyaranı sağlayan çalışma setleri.
+// Hem bir antrenman nesnesi hem de doğrudan hareket dizisi kabul eder.
+const calcEffectiveSets = (workoutOrExercises) => {
+  const exercises = workoutOrExercises?.exercises || workoutOrExercises;
+  if (!Array.isArray(exercises)) return 0;
+  return exercises.reduce((acc, ex) => acc + (ex.sets || [])
+    .filter(s => isWorkingSet(s) && parseNumber(s.rir) <= 3 && parseNumber(s.reps) > 0).length, 0);
+};
+
+// Epley: 1RM = ağırlık × (1 + efektif tekrar / 30). Yedekte kalan tekrarlar (RIR)
+// da efektif tekrara dahildir. Formül ~15 efektif tekrarın üzerinde güvenilirliğini
+// kaybettiği için bu sınırın dışında tahmin üretilmez.
+const estimate1RM = (weight, reps, rir) => {
+  const w = parseNumber(weight);
+  const r = parseNumber(reps);
+  const totalReps = r + parseNumber(rir);
+  if (w <= 0 || r <= 0 || totalReps > 15) return 0;
+  return Math.round(w * (1 + totalReps / 30));
+};
+
+// Hareket başına en iyi tahmini 1RM. Isınma setleri ve (varsa) hâlâ sürmekte olan
+// seans hariç tutulur; rekor karşılaştırması geçmişe karşı yapılmalıdır.
+const buildPersonalRecords = (workouts, excludeWorkoutId = null) => {
+  const records = new Map();
+  for (const w of workouts) {
+    if (w.id === excludeWorkoutId) continue;
+    for (const ex of (w.exercises || [])) {
+      for (const s of (ex.sets || [])) {
+        if (isWarmupSet(s)) continue;
+        const e1rm = estimate1RM(s.weight, s.reps, s.rir);
+        if (e1rm <= 0) continue;
+        const current = records.get(ex.name);
+        if (!current || e1rm > current.e1rm) {
+          records.set(ex.name, {
+            e1rm,
+            weight: parseNumber(s.weight),
+            reps: parseNumber(s.reps),
+            date: w.date
+          });
+        }
+      }
+    }
+  }
+  return records;
+};
+
+// Çift progresyon: tekrar aralığının üstüne çıkıldıysa ağırlık artar ve alt sınıra
+// dönülür, aksi halde aynı ağırlıkta bir tekrar daha hedeflenir.
+const suggestNextTarget = (previousSets, { repRangeMin, repRangeMax }, muscle) => {
+  const working = (previousSets || []).filter(s => isWorkingSet(s) && parseNumber(s.reps) > 0);
+  if (working.length === 0) return null;
+
+  const top = working.reduce((a, b) => (parseNumber(b.weight) > parseNumber(a.weight) ? b : a));
+  const weight = parseNumber(top.weight);
+  const reps = parseNumber(top.reps);
+  const rir = parseNumber(top.rir);
+  if (reps <= 0) return null;
+
+  // İzolasyon ağırlıklı gruplarda daha küçük artış adımı kullanılır.
+  const increment = (muscle === 'Kol' || muscle === 'Omuz') ? 1.25 : 2.5;
+
+  if (reps >= repRangeMax) {
+    return {
+      weight: Number((weight + increment).toFixed(2)),
+      reps: repRangeMin,
+      note: `${reps} tekrara ulaştın, ağırlığı +${increment} kg artır`
+    };
+  }
+  if (rir === 0 && reps < repRangeMin) {
+    return { weight, reps, note: 'Geçen sefer tükenişteydin, aynı yükte kal' };
+  }
+  return { weight, reps: reps + 1, note: `Aynı ağırlıkta ${reps + 1} tekrar hedefle` };
+};
+
+// Uygulama ana ekrana kurulu (standalone) modda mı çalışıyor?
+const detectStandalone = () =>
+  window.matchMedia('(display-mode: standalone)').matches ||
+  window.navigator.standalone ||
+  document.referrer.includes('android-app://');
+
+// Tüm kalıcı veriyi açılışta tek seferde okur.
+// Efekt yerine kullanılır: ilk render'da veri hazır olur, böylece kaydetme
+// efektlerinin boş başlangıç state'ini mevcut kaydın üzerine yazma ihtimali kalmaz.
+const loadPersistedState = () => {
+  const keys = (name) => STORAGE_VERSIONS.map(v => `po_${name}${v}`);
+  const todayStr = getLocalDateString();
+
+  const metricsRaw = loadWithFallback(keys('metrics'), []);
+  const metricsHistory = Array.isArray(metricsRaw) ? metricsRaw.map(mergeMetrics) : [];
+  let currentMetricsForm = mergeMetrics({});
+  if (metricsHistory.length > 0) {
+    const todayData = metricsHistory.find(m => m.date === todayStr);
+    currentMetricsForm = todayData
+      ? mergeMetrics(todayData)
+      // Bugüne kayıt yoksa en son ölçümü şablon alıp yeni bir güne taşı.
+      : mergeMetrics({ ...metricsHistory[0], id: generateId(), date: todayStr });
+  }
+
+  const nutritionRaw = loadWithFallback(keys('nutrition'), []);
+  const nutritionHistory = Array.isArray(nutritionRaw) ? nutritionRaw.map(mergeNutrition) : [];
+  const todayNutrition = nutritionHistory.find(n => n.date === todayStr);
+
+  const savedSettings = loadWithFallback(keys('settings'), {}) || {};
+
+  return {
+    workouts: loadWithFallback(keys('workouts'), []),
+    templates: loadWithFallback(keys('templates'), []),
+    customExercises: loadWithFallback(keys('custom_exercises'), []),
+    mealTemplates: loadWithFallback(keys('meal_templates'), []),
+    dayTemplates: loadWithFallback(keys('day_templates'), []),
+    activeWorkout: loadWithFallback(keys('active_workout'), null),
+    metricsHistory,
+    currentMetricsForm,
+    nutritionHistory,
+    currentNutritionForm: todayNutrition ? mergeNutrition(todayNutrition) : mergeNutrition({ date: todayStr }),
+    settings: {
+      autoCopyLastSet: savedSettings.autoCopyLastSet ?? DEFAULT_SETTINGS.autoCopyLastSet,
+      nutritionGoal: savedSettings.nutritionGoal || DEFAULT_SETTINGS.nutritionGoal,
+      proteinPerFfmBulk: savedSettings.proteinPerFfmBulk || DEFAULT_SETTINGS.proteinPerFfmBulk,
+      proteinPerFfmCut: savedSettings.proteinPerFfmCut || DEFAULT_SETTINGS.proteinPerFfmCut,
+      lockScreenActivity: savedSettings.lockScreenActivity ?? DEFAULT_SETTINGS.lockScreenActivity,
+      keepScreenAwake: savedSettings.keepScreenAwake ?? DEFAULT_SETTINGS.keepScreenAwake,
+      autoRestTimer: savedSettings.autoRestTimer ?? DEFAULT_SETTINGS.autoRestTimer,
+      restSeconds: savedSettings.restSeconds || DEFAULT_SETTINGS.restSeconds,
+      restAlert: savedSettings.restAlert ?? DEFAULT_SETTINGS.restAlert,
+      repRangeMin: savedSettings.repRangeMin || DEFAULT_SETTINGS.repRangeMin,
+      repRangeMax: savedSettings.repRangeMax || DEFAULT_SETTINGS.repRangeMax
+    },
+    lastBackupDate: localStorage.getItem('po_last_backup')
+  };
+};
+
+// Vücut kompozisyonu hesabı (saf fonksiyon: herhangi bir ölçüm kaydı için çalışır)
+const computeComposition = (metrics) => {
+  const age = parseNumber(metrics.age);
+  const heightCm = parseNumber(metrics.height);
+  const weightKg = parseNumber(metrics.weight);
+  const gender = metrics.gender;
+  const method = metrics.method;
+
+  const { neck, waist, hip, wrist } = metrics.measurements || {};
+  const sf = metrics.skinfolds || {};
+
+  const nNeck = parseNumber(neck); const nWaist = parseNumber(waist); const nHip = parseNumber(hip); const nWrist = parseNumber(wrist);
+
+  let sumSkinfolds = 0; let isValidSkinfold = false;
+
+  if (method === '7') {
+    const vals = [sf.chest, sf.axilla, sf.triceps, sf.subscapular, sf.abdomen, sf.suprailiac, sf.thigh].map(parseNumber);
+    if (vals.every(v => v > 0)) { sumSkinfolds = vals.reduce((a, b) => a + b, 0); isValidSkinfold = true; }
+  } else {
+    if (gender === 'male') {
+      const vals = [sf.chest, sf.abdomen, sf.thigh].map(parseNumber);
+      if (vals.every(v => v > 0)) { sumSkinfolds = vals.reduce((a, b) => a + b, 0); isValidSkinfold = true; }
+    } else {
+      const vals = [sf.triceps, sf.suprailiac, sf.thigh].map(parseNumber);
+      if (vals.every(v => v > 0)) { sumSkinfolds = vals.reduce((a, b) => a + b, 0); isValidSkinfold = true; }
+    }
+  }
+
+  let density = 0;
+  if (isValidSkinfold && age > 0) {
+    if (method === '7') {
+      density = gender === 'male'
+        ? 1.112 - (0.00043499 * sumSkinfolds) + (0.00000055 * Math.pow(sumSkinfolds, 2)) - (0.00028826 * age)
+        : 1.097 - (0.00046971 * sumSkinfolds) + (0.00000056 * Math.pow(sumSkinfolds, 2)) - (0.00012828 * age);
+    } else {
+      density = gender === 'male'
+        ? 1.10938 - (0.0008267 * sumSkinfolds) + (0.0000016 * Math.pow(sumSkinfolds, 2)) - (0.0002574 * age)
+        : 1.0994921 - (0.0009929 * sumSkinfolds) + (0.0000023 * Math.pow(sumSkinfolds, 2)) - (0.0001392 * age);
+    }
+  }
+
+  let siriBF = 0;
+  if (density > 0) { siriBF = Math.max(3.0, Math.min((4.95 / density - 4.50) * 100, 60.0)); }
+
+  let navyBF = 0;
+  if (heightCm > 0 && nWaist > 0 && nNeck > 0) {
+    if (gender === 'male' && nWaist > nNeck) {
+      const denom = 1.0324 - 0.19077 * Math.log10(nWaist - nNeck) + 0.15456 * Math.log10(heightCm);
+      if (denom !== 0) navyBF = Math.max(3.0, Math.min(495 / denom - 450, 60.0));
+    } else if (gender === 'female' && (nWaist + nHip > nNeck)) {
+      const denom = 1.29579 - 0.35004 * Math.log10(nWaist + nHip - nNeck) + 0.22100 * Math.log10(heightCm);
+      if (denom !== 0) navyBF = Math.max(3.0, Math.min(495 / denom - 450, 60.0));
+    }
+  }
+
+  let averageBF = 0;
+  if (siriBF > 0 && navyBF > 0) averageBF = (siriBF + navyBF) / 2;
+
+  let activeBF = parseNumber(metrics.bodyFat) || 15.0;
+  const pref = metrics.fatPreference;
+  if (pref === 'skinfold' && siriBF > 0) activeBF = siriBF;
+  else if (pref === 'navy' && navyBF > 0) activeBF = navyBF;
+  else if (pref === 'average' && averageBF > 0) activeBF = averageBF;
+  else if (pref === 'manual' && parseNumber(metrics.bodyFat) > 0) activeBF = parseNumber(metrics.bodyFat);
+  else activeBF = siriBF > 0 ? siriBF : (navyBF > 0 ? navyBF : (parseNumber(metrics.bodyFat) || 15.0));
+
+  const fatMass = weightKg * (activeBF / 100);
+  const leanMass = weightKg - fatMass;
+  const heightM = heightCm / 100;
+  const ffmi = heightM > 0 ? leanMass / Math.pow(heightM, 2) : 0;
+  const bmr = leanMass > 0 ? Math.round(370 + (21.6 * leanMass)) : 0;
+
+  let whtr = 0; if (heightCm > 0) whtr = nWaist / heightCm;
+  let frameSize = "-";
+  if (heightCm > 0 && nWrist > 0) {
+    const rValue = heightCm / nWrist;
+    if (gender === 'male') frameSize = (rValue > 10.4) ? "İnce" : (rValue < 9.6) ? "Kalın" : "Orta";
+    else frameSize = (rValue > 11.0) ? "İnce" : (rValue < 10.1) ? "Kalın" : "Orta";
+  }
+
+  let maxPotentialFFMI = 0;
+  if (gender === 'male') {
+    if (frameSize === 'İnce') maxPotentialFFMI = 24.0;
+    else if (frameSize === 'Orta') maxPotentialFFMI = 25.5;
+    else if (frameSize === 'Kalın') maxPotentialFFMI = 27.0;
+  } else {
+    if (frameSize === 'İnce') maxPotentialFFMI = 20.0;
+    else if (frameSize === 'Orta') maxPotentialFFMI = 21.5;
+    else if (frameSize === 'Kalın') maxPotentialFFMI = 23.0;
+  }
+
+  const potentialAchieved = maxPotentialFFMI > 0 && ffmi > 0 ? Math.min((ffmi / maxPotentialFFMI) * 100, 100) : 0;
+
+  let maxNaturalWeight = 0;
+  if (heightM > 0 && activeBF < 100 && maxPotentialFFMI > 0) {
+    const maxFFM = maxPotentialFFMI * Math.pow(heightM, 2);
+    maxNaturalWeight = maxFFM / (1 - (activeBF / 100));
+  }
+
+  let trainingAdvice = "";
+  let nutritionAdvice = "";
+
+  if (potentialAchieved === 0) {
+    trainingAdvice = "Yeterli veri yok.";
+    nutritionAdvice = "Yeterli veri yok.";
+  } else if (potentialAchieved < 80) {
+    trainingAdvice = "Doğal sınırın oldukça altındasınız (Acemi/Orta). Ana bileşke egzersizlerde lineer progresyon (sürekli ağırlık/tekrar artışı) yapabilirsiniz. Antrenman hacmi tolere edilebilir seviyededir.";
+    nutritionAdvice = "Kas inşası için kalori fazlası (surplus) elzemdir. Günlük +300-500 kcal ekleyerek büyümeyi hızlandırabilirsiniz, yağlanma riski görece daha düşüktür.";
+  } else if (potentialAchieved < 92) {
+    trainingAdvice = "Genetik sınırlarınıza yaklaşıyorsunuz (İleri Seviye). Gelişim ivmesi düşmüştür. Sürekli ağırlık artırmak yerine hacim/yoğunluk periyotlaması (periodization) ve deload stratejileri uygulanmalıdır.";
+    nutritionAdvice = "Agresif kalori fazlası artık çoğunlukla yağ olarak depolanır. Yavaş ve temiz büyüme (lean bulk) için kalori fazlası +150-250 kcal ile sınırlandırılmalıdır.";
+  } else {
+    trainingAdvice = "Doğal hipertrofi limitlerinizdesiniz (Elit Seviye). Kas eklemek mekanik olarak çok zordur. Zayıf kas gruplarına spesifik izolasyon ve çok yüksek teknik uzmanlık gerekir.";
+    nutritionAdvice = "Fazla kalori alımı direkt yağlanmaya yol açar. Vücut kompozisyonunu koruma (maintenance) veya çok küçük kalori dalgalanmaları (recomp) ile form korunmalıdır.";
+  }
+
+  return {
+    siriBF: siriBF > 0 ? siriBF.toFixed(2) : "-",
+    navyBF: navyBF > 0 ? navyBF.toFixed(2) : "-",
+    averageBF: averageBF > 0 ? averageBF.toFixed(2) : "-",
+    activeBF,
+    ffm: leanMass.toFixed(1), fm: fatMass.toFixed(1), ffmi: ffmi.toFixed(1), bmr,
+    whtr: whtr > 0 ? whtr.toFixed(2) : "-", frameSize, maxNaturalWeight: maxNaturalWeight > 0 ? maxNaturalWeight.toFixed(1) : "-",
+    maxPotentialFFMI: maxPotentialFFMI > 0 ? maxPotentialFFMI.toFixed(1) : "-",
+    potentialAchieved: potentialAchieved.toFixed(1),
+    trainingAdvice, nutritionAdvice
+  };
+};
+
+// Verilen tarihte geçerli olan ölçüm kaydını bulur (o tarihten önceki en yakın kayıt).
+const findMetricsForDate = (history, dateStr, fallback) => {
+  if (!Array.isArray(history) || history.length === 0 || !dateStr) return fallback;
+  const sorted = [...history].filter(m => m?.date).sort((a, b) => a.date.localeCompare(b.date));
+  if (sorted.length === 0) return fallback;
+  const before = sorted.filter(m => m.date <= dateStr);
+  // O tarihten önce kayıt yoksa, elimizdeki en eski kaydı kullan.
+  return before.length > 0 ? before[before.length - 1] : sorted[0];
 };
 
 // Bağımsız Canlı Süre Bileşeni
+// Geçen süre state'te tutulmaz, her render'da Date.now() üzerinden yeniden hesaplanır.
+// Saniyelik interval yalnızca yeniden render tetikler. Böylece uygulama arka plana
+// alınıp geri dönüldüğünde de gösterilen süre daima doğrudur.
 const WorkoutTimer = ({ timer, isEditing, initialDuration }) => {
-  const [elapsed, setElapsed] = useState(0);
+  const [, forceTick] = useState(0);
+  const isRunning = timer?.status === 'running';
 
   useEffect(() => {
-    if (isEditing || !timer) return;
-
-    const calcElapsed = () => {
-      let total = timer.accumulatedSeconds || 0;
-      if (timer.status === 'running' && timer.startTime) {
-        total += Math.floor((Date.now() - timer.startTime) / 1000);
-      }
-      return total;
-    };
-
-    setElapsed(calcElapsed());
-
-    if (timer.status === 'running') {
-      const interval = setInterval(() => {
-        setElapsed(calcElapsed());
-      }, 1000);
-      return () => clearInterval(interval);
-    }
-  }, [timer, isEditing]);
+    if (isEditing || !isRunning) return;
+    const interval = setInterval(() => forceTick(t => t + 1), 1000);
+    return () => clearInterval(interval);
+  }, [isEditing, isRunning]);
 
   if (isEditing) return <span className="font-mono">{initialDuration || 0} dk (Geçmiş)</span>;
+
+  let elapsed = timer?.accumulatedSeconds || 0;
+  if (isRunning && timer?.startTime) {
+    // Kronometre tanımı gereği duvar saatini okur; bu değeri state'te tutmak
+    // uygulama arka plandayken sayacın donmasına yol açardı (setInterval kısıtlanır).
+    // eslint-disable-next-line react-hooks/purity
+    elapsed += Math.floor((Date.now() - timer.startTime) / 1000);
+  }
 
   const h = Math.floor(elapsed / 3600);
   const m = Math.floor((elapsed % 3600) / 60).toString().padStart(2, '0');
   const s = (elapsed % 60).toString().padStart(2, '0');
-  return <span className={`font-mono font-bold ${timer?.status === 'running' ? 'text-emerald-400' : 'text-zinc-500'}`}>{h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`}</span>;
+  return <span className={`font-mono font-bold ${isRunning ? 'text-emerald-400' : 'text-zinc-500'}`}>{h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`}</span>;
 };
 
+// Zaman serisi çizgi grafiği. data: [{ date: 'YYYY-MM-DD', value: number }]
+const TrendChart = ({ data, color = '#22d3ee', unit = '', decimals = 1 }) => {
+  if (!Array.isArray(data) || data.length < 2) {
+    return (
+      <div className="h-52 flex items-center justify-center text-zinc-600 text-[10px] font-mono text-center px-6">
+        Trend çizilebilmesi için en az 2 kayıt gerekli.
+      </div>
+    );
+  }
+
+  const W = 320, H = 170, PAD_L = 38, PAD_R = 10, PAD_T = 14, PAD_B = 24;
+  const values = data.map(d => d.value);
+  const rawMin = Math.min(...values);
+  const rawMax = Math.max(...values);
+  // Tamamen düz seride sıfıra bölmeyi önlemek için yapay bir aralık açılır.
+  const span = rawMax - rawMin || Math.max(Math.abs(rawMax) * 0.1, 1);
+  const min = rawMin - span * 0.15;
+  const max = rawMax + span * 0.15;
+
+  const x = (i) => PAD_L + (i / (data.length - 1)) * (W - PAD_L - PAD_R);
+  const y = (v) => PAD_T + (1 - (v - min) / (max - min)) * (H - PAD_T - PAD_B);
+
+  const linePoints = data.map((d, i) => `${x(i)},${y(d.value)}`).join(' ');
+  const areaPoints = `${PAD_L},${H - PAD_B} ${linePoints} ${x(data.length - 1)},${H - PAD_B}`;
+
+  const first = data[0];
+  const last = data[data.length - 1];
+  const change = last.value - first.value;
+  const fmt = (v) => v.toFixed(decimals);
+  const gradientId = `grad-${color.replace('#', '')}`;
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 170 }}>
+        <defs>
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+            <stop offset="100%" stopColor={color} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
+        {/* Yatay kılavuz çizgileri ve eksen değerleri */}
+        {[0, 0.5, 1].map((t) => {
+          const value = max - t * (max - min);
+          const gy = PAD_T + t * (H - PAD_T - PAD_B);
+          return (
+            <g key={t}>
+              <line x1={PAD_L} y1={gy} x2={W - PAD_R} y2={gy} stroke="#27272a" strokeWidth="1" />
+              <text x={PAD_L - 5} y={gy + 3} textAnchor="end" fill="#52525b" fontSize="8" fontFamily="monospace">
+                {fmt(value)}
+              </text>
+            </g>
+          );
+        })}
+
+        <polygon points={areaPoints} fill={`url(#${gradientId})`} />
+        <polyline points={linePoints} fill="none" stroke={color} strokeWidth="2"
+          strokeLinejoin="round" strokeLinecap="round" />
+
+        {data.map((d, i) => (
+          <circle key={i} cx={x(i)} cy={y(d.value)} r={i === data.length - 1 ? 3.5 : 2}
+            fill={i === data.length - 1 ? color : '#09090b'} stroke={color} strokeWidth="1.5" />
+        ))}
+
+        <text x={PAD_L} y={H - 8} fill="#52525b" fontSize="8" fontFamily="monospace">
+          {new Date(first.date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}
+        </text>
+        <text x={W - PAD_R} y={H - 8} textAnchor="end" fill="#52525b" fontSize="8" fontFamily="monospace">
+          {new Date(last.date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}
+        </text>
+      </svg>
+
+      <div className="grid grid-cols-3 gap-2 mt-3">
+        <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-center">
+          <div className="text-[8px] uppercase tracking-widest text-zinc-500 font-bold">İlk</div>
+          <div className="font-mono text-xs text-zinc-300 mt-0.5">{fmt(first.value)}{unit}</div>
+        </div>
+        <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-center">
+          <div className="text-[8px] uppercase tracking-widest text-zinc-500 font-bold">Son</div>
+          <div className="font-mono text-xs font-bold mt-0.5" style={{ color }}>{fmt(last.value)}{unit}</div>
+        </div>
+        <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-center">
+          <div className="text-[8px] uppercase tracking-widest text-zinc-500 font-bold">Değişim</div>
+          <div className={`font-mono text-xs font-bold mt-0.5 ${change > 0 ? 'text-emerald-400' : change < 0 ? 'text-orange-400' : 'text-zinc-400'}`}>
+            {change > 0 ? '+' : ''}{fmt(change)}{unit}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Ölçüm arşivinden çizilebilecek seriler
+const BODY_METRICS = [
+  { key: 'weight', label: 'Kilo', unit: ' kg', color: '#22d3ee', pick: (m) => parseNumber(m.weight) },
+  { key: 'bodyFat', label: 'Yağ %', unit: '%', color: '#fb923c', pick: (m) => m.composition.activeBF },
+  { key: 'ffm', label: 'Yağsız Kütle', unit: ' kg', color: '#34d399', pick: (m) => parseNumber(m.composition.ffm) },
+  { key: 'ffmi', label: 'FFMI', unit: '', color: '#a78bfa', pick: (m) => parseNumber(m.composition.ffmi) },
+  { key: 'chest', label: 'Göğüs', unit: ' cm', color: '#f472b6', pick: (m) => parseNumber(m.measurements?.chest) },
+  { key: 'arm', label: 'Kol', unit: ' cm', color: '#facc15', pick: (m) => parseNumber(m.measurements?.arm) },
+  { key: 'waist', label: 'Bel', unit: ' cm', color: '#f87171', pick: (m) => parseNumber(m.measurements?.waist) },
+  { key: 'shoulder', label: 'Omuz', unit: ' cm', color: '#60a5fa', pick: (m) => parseNumber(m.measurements?.shoulder) },
+  { key: 'thigh', label: 'Bacak', unit: ' cm', color: '#4ade80', pick: (m) => parseNumber(m.measurements?.thigh) },
+  { key: 'hip', label: 'Kalça', unit: ' cm', color: '#c084fc', pick: (m) => parseNumber(m.measurements?.hip) },
+];
+
 export default function App() {
+  // Kalıcı veri, efekt içinde değil lazy initializer ile okunur. Böylece ilk render'da
+  // veri hazır olur ve "boş başlangıç state'ini diske yazma" yarışı hiç oluşmaz.
+  const [initial] = useState(loadPersistedState);
+
   // --- STATE YÖNETİMİ ---
-  const [workouts, setWorkouts] = useState([]);
-  const [templates, setTemplates] = useState([]);
-  const [activeWorkout, setActiveWorkout] = useState(null);
+  const [workouts, setWorkouts] = useState(initial.workouts);
+  const [templates, setTemplates] = useState(initial.templates);
+  const [activeWorkout, setActiveWorkout] = useState(initial.activeWorkout);
 
   const [preWorkoutModal, setPreWorkoutModal] = useState(null);
   const [isEndWorkoutModalOpen, setIsEndWorkoutModalOpen] = useState(false);
@@ -156,9 +585,9 @@ export default function App() {
   const [view, setView] = useState('home');
   const [historyTab, setHistoryTab] = useState('workouts');
   const [profileTab, setProfileTab] = useState('metrics');
-  const [analysisType, setAnalysisType] = useState('1rm'); // '1rm' or 'volume'
+  const [analysisType, setAnalysisType] = useState('body'); // 'body' | '1rm' | 'volume'
 
-  const [customExercises, setCustomExercises] = useState([]);
+  const [customExercises, setCustomExercises] = useState(initial.customExercises);
   const [isExerciseModalOpen, setIsExerciseModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [exerciseSearchQuery, setExerciseSearchQuery] = useState('');
@@ -168,45 +597,49 @@ export default function App() {
   const [newExMuscle, setNewExMuscle] = useState('Göğüs');
   const [newExMechanics, setNewExMechanics] = useState('Push');
 
-  const [settings, setSettings] = useState({ autoCopyLastSet: true, nutritionGoal: 'bulk', proteinPerFfmBulk: 2.2, proteinPerFfmCut: 2.6 });
+  const [settings, setSettings] = useState(initial.settings);
 
-  const [metricsHistory, setMetricsHistory] = useState([]);
-  const [currentMetricsForm, setCurrentMetricsForm] = useState(() => mergeMetrics({}));
+  const [metricsHistory, setMetricsHistory] = useState(initial.metricsHistory);
+  const [currentMetricsForm, setCurrentMetricsForm] = useState(initial.currentMetricsForm);
 
-  const [nutritionHistory, setNutritionHistory] = useState([]);
-  const [mealTemplates, setMealTemplates] = useState([]);
-  const [dayTemplates, setDayTemplates] = useState([]);
-  const [currentNutritionForm, setCurrentNutritionForm] = useState(() => mergeNutrition({}));
+  const [nutritionHistory, setNutritionHistory] = useState(initial.nutritionHistory);
+  const [mealTemplates, setMealTemplates] = useState(initial.mealTemplates);
+  const [dayTemplates, setDayTemplates] = useState(initial.dayTemplates);
+  const [currentNutritionForm, setCurrentNutritionForm] = useState(initial.currentNutritionForm);
 
   const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, type: null, id: null });
-  const [restTimer, setRestTimer] = useState(0);
+  // Dinlenme sayacı bitiş zamanı olarak tutulur (geri sayan bir sayı olarak değil):
+  // böylece uygulama arka plandayken setInterval kısıtlansa bile geri dönüldüğünde
+  // kalan süre doğru hesaplanır.
+  const [rest, setRest] = useState(null);            // { endsAt, total }
+  const [restSecondsLeft, setRestSecondsLeft] = useState(0);
   const [analysisExercise, setAnalysisExercise] = useState('');
+  const [bodyMetricKey, setBodyMetricKey] = useState('weight');
 
-  const [lastBackupDate, setLastBackupDate] = useState(null);
+  const [lastBackupDate, setLastBackupDate] = useState(initial.lastBackupDate);
   const [isStoragePersisted, setIsStoragePersisted] = useState(false);
   const [isMeasurementGuideOpen, setIsMeasurementGuideOpen] = useState(false);
-  const [isStandalone, setIsStandalone] = useState(false);
+  // Uygulama ana ekrana kurulmuş mu — mount sonrası değişmez, bu yüzden setter'ı yok.
+  const [isStandalone] = useState(detectStandalone);
+
+  const [toast, setToast] = useState(null);           // { message, type }
+  const [importConfirm, setImportConfirm] = useState(null); // { data, counts }
+
+  const [lockScreenOn, setLockScreenOn] = useState(false);
 
   const fileInputRef = useRef(null);
   const activeWorkoutRef = useRef(activeWorkout);
   const currentMetricsFormRef = useRef(currentMetricsForm);
-
-  // Optimizasyon: State referanslarını interval için senkronize et
-  useEffect(() => {
-    activeWorkoutRef.current = activeWorkout;
-    currentMetricsFormRef.current = currentMetricsForm;
-  }, [activeWorkout, currentMetricsForm]);
+  const exerciseHistoryRef = useRef(null);
+  const restRef = useRef(null);
+  // Tekrar alanına odaklanıldığındaki değer; dinlenmenin sadece gerçekten
+  // yeni bir set girildiğinde otomatik başlaması için karşılaştırılır.
+  const repsOnFocusRef = useRef(null);
 
   // --- INIT & PERSISTENCE ---
-  const vKeys = ['_v16', '_v15', '_v14', '_v13'];
-
+  // Veri yükleme yukarıda lazy initializer ile yapıldı. Burada yalnızca tarayıcıdan
+  // kalıcı depolama izni istenir (asenkron olduğu için efekte ait bir iş).
   useEffect(() => {
-    // PWA (Standalone) Kontrolü
-    const checkStandalone = () => {
-      return (window.matchMedia('(display-mode: standalone)').matches) || (window.navigator.standalone) || document.referrer.includes('android-app://');
-    };
-    setIsStandalone(checkStandalone());
-
     const requestPersistentStorage = async () => {
       if (navigator.storage && navigator.storage.persist) {
         try {
@@ -215,50 +648,12 @@ export default function App() {
             isPersisted = await navigator.storage.persist();
           }
           setIsStoragePersisted(isPersisted);
-        } catch (error) {
+        } catch {
           setIsStoragePersisted(false);
         }
       }
     };
     requestPersistentStorage();
-
-    setLastBackupDate(localStorage.getItem('po_last_backup'));
-
-    setWorkouts(loadWithFallback(vKeys.map(k => `po_workouts${k}`), []));
-    setTemplates(loadWithFallback(vKeys.map(k => `po_templates${k}`), []));
-    setCustomExercises(loadWithFallback(vKeys.map(k => `po_custom_exercises${k}`), []));
-
-    const savedSettings = loadWithFallback(vKeys.map(k => `po_settings${k}`), {});
-    setSettings({
-      autoCopyLastSet: savedSettings.autoCopyLastSet ?? true,
-      nutritionGoal: savedSettings.nutritionGoal || 'bulk',
-      proteinPerFfmBulk: savedSettings.proteinPerFfmBulk || 2.2,
-      proteinPerFfmCut: savedSettings.proteinPerFfmCut || 2.6
-    });
-
-    setMealTemplates(loadWithFallback(vKeys.map(k => `po_meal_templates${k}`), []));
-    setDayTemplates(loadWithFallback(vKeys.map(k => `po_day_templates${k}`), []));
-    setActiveWorkout(loadWithFallback(vKeys.map(k => `po_active_workout${k}`), null));
-
-    const loadedMetrics = loadWithFallback(vKeys.map(k => `po_metrics${k}`), []);
-    if (Array.isArray(loadedMetrics) && loadedMetrics.length > 0) {
-      const parsedMetrics = loadedMetrics.map(mergeMetrics);
-      setMetricsHistory(parsedMetrics);
-      const todayStr = getLocalDateString();
-      const todayData = parsedMetrics.find(m => m.date === todayStr);
-      if (todayData) setCurrentMetricsForm(mergeMetrics(todayData));
-      else setCurrentMetricsForm(mergeMetrics({ ...parsedMetrics[0], id: generateId(), date: todayStr }));
-    }
-
-    const loadedNutri = loadWithFallback(vKeys.map(k => `po_nutrition${k}`), []);
-    if (Array.isArray(loadedNutri)) {
-      const parsedNutri = loadedNutri.map(mergeNutrition);
-      setNutritionHistory(parsedNutri);
-      const todayStr = getLocalDateString();
-      const todayData = parsedNutri.find(n => n.date === todayStr);
-      if (todayData) setCurrentNutritionForm(mergeNutrition(todayData));
-      else setCurrentNutritionForm(mergeNutrition({ date: todayStr }));
-    }
   }, []);
 
   useEffect(() => { localStorage.setItem('po_workouts_v16', JSON.stringify(workouts)); }, [workouts]);
@@ -278,11 +673,45 @@ export default function App() {
     return () => clearTimeout(timeoutId);
   }, [activeWorkout]);
 
+  // Kalan süre bitiş zamanından türetilir; 500ms'lik tik yalnızca ekranı tazeler.
   useEffect(() => {
-    let interval;
-    if (restTimer > 0) interval = setInterval(() => setRestTimer(t => t - 1), 1000);
+    if (!rest) return;
+
+    const interval = setInterval(() => {
+      const left = Math.max(0, Math.ceil((rest.endsAt - Date.now()) / 1000));
+      setRestSecondsLeft(left);
+      if (left <= 0) {
+        setRest(null);
+        if (settings.restAlert) {
+          playRestAlert();
+          vibrateAlert();
+        }
+      }
+    }, 500);
+
     return () => clearInterval(interval);
-  }, [restTimer]);
+  }, [rest, settings.restAlert]);
+
+  const startRest = (seconds) => {
+    const total = Math.max(1, Math.round(seconds));
+    setRest(() => ({ endsAt: Date.now() + total * 1000, total }));
+    setRestSecondsLeft(total);
+  };
+
+  const stopRest = () => {
+    setRest(null);
+    setRestSecondsLeft(0);
+  };
+
+  // Kısa bildirimler (kaydetme onayı, hata mesajı vb.)
+  // Her çağrıda yeni bir nesne üretilir; efekt bu referans değişimiyle tetiklenir.
+  const showToast = (message, type = 'success') => setToast({ message, type });
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = setTimeout(() => setToast(null), 2600);
+    return () => clearTimeout(timeout);
+  }, [toast]);
 
   // Optimizasyon: Hareketsizlik Kontrolü (Memory Leak ve Re-render döngüsü giderildi)
   useEffect(() => {
@@ -296,6 +725,11 @@ export default function App() {
           ...ex,
           sets: (ex.sets || []).filter(s => parseNumber(s.weight) > 0 || parseNumber(s.reps) > 0)
         })).filter(ex => ex.sets.length > 0);
+
+        // Seans bittiği için kilit ekranı kartı ve ekran kilidi bırakılır.
+        stopLockScreenActivity();
+        setLockScreenOn(false);
+        releaseWakeLock();
 
         if (cleanedExercises.length === 0) {
           setActiveWorkout(null);
@@ -347,133 +781,21 @@ export default function App() {
   }, []); // Boş bağımlılık dizisi sayesinde sadece bir kez mount edilir.
 
   // --- MEMOIZED ANALİZLER ---
-  const composition = useMemo(() => {
-    const age = parseNumber(currentMetricsForm.age);
-    const heightCm = parseNumber(currentMetricsForm.height);
-    const weightKg = parseNumber(currentMetricsForm.weight);
-    const gender = currentMetricsForm.gender;
-    const method = currentMetricsForm.method;
+  // Ölçümler ekranında düzenlenmekte olan forma ait kompozisyon.
+  const composition = useMemo(() => computeComposition(currentMetricsForm), [currentMetricsForm]);
 
-    const { neck, waist, hip, wrist } = currentMetricsForm.measurements || {};
-    const sf = currentMetricsForm.skinfolds || {};
+  // Beslenme ekranı, o güne ait BMR'yi kullanmalı; ölçüm formunda hangi tarih açıksa
+  // ondan etkilenmemeli. Bu yüzden beslenme tarihine en yakın ölçüm kaydından hesaplanır.
+  const nutritionComposition = useMemo(() => {
+    const relevant = findMetricsForDate(metricsHistory, currentNutritionForm.date, currentMetricsForm);
+    return computeComposition(mergeMetrics(relevant));
+  }, [metricsHistory, currentNutritionForm.date, currentMetricsForm]);
 
-    const nNeck = parseNumber(neck); const nWaist = parseNumber(waist); const nHip = parseNumber(hip); const nWrist = parseNumber(wrist);
-
-    let sumSkinfolds = 0; let isValidSkinfold = false;
-
-    if (method === '7') {
-      const vals = [sf.chest, sf.axilla, sf.triceps, sf.subscapular, sf.abdomen, sf.suprailiac, sf.thigh].map(parseNumber);
-      if (vals.every(v => v > 0)) { sumSkinfolds = vals.reduce((a, b) => a + b, 0); isValidSkinfold = true; }
-    } else {
-      if (gender === 'male') {
-        const vals = [sf.chest, sf.abdomen, sf.thigh].map(parseNumber);
-        if (vals.every(v => v > 0)) { sumSkinfolds = vals.reduce((a, b) => a + b, 0); isValidSkinfold = true; }
-      } else {
-        const vals = [sf.triceps, sf.suprailiac, sf.thigh].map(parseNumber);
-        if (vals.every(v => v > 0)) { sumSkinfolds = vals.reduce((a, b) => a + b, 0); isValidSkinfold = true; }
-      }
-    }
-
-    let density = 0;
-    if (isValidSkinfold && age > 0) {
-      if (method === '7') {
-        density = gender === 'male'
-          ? 1.112 - (0.00043499 * sumSkinfolds) + (0.00000055 * Math.pow(sumSkinfolds, 2)) - (0.00028826 * age)
-          : 1.097 - (0.00046971 * sumSkinfolds) + (0.00000056 * Math.pow(sumSkinfolds, 2)) - (0.00012828 * age);
-      } else {
-        density = gender === 'male'
-          ? 1.10938 - (0.0008267 * sumSkinfolds) + (0.0000016 * Math.pow(sumSkinfolds, 2)) - (0.0002574 * age)
-          : 1.0994921 - (0.0009929 * sumSkinfolds) + (0.0000023 * Math.pow(sumSkinfolds, 2)) - (0.0001392 * age);
-      }
-    }
-
-    let siriBF = 0;
-    if (density > 0) { siriBF = Math.max(3.0, Math.min((4.95 / density - 4.50) * 100, 60.0)); }
-
-    let navyBF = 0;
-    if (heightCm > 0 && nWaist > 0 && nNeck > 0) {
-      if (gender === 'male' && nWaist > nNeck) {
-        const denom = 1.0324 - 0.19077 * Math.log10(nWaist - nNeck) + 0.15456 * Math.log10(heightCm);
-        if (denom !== 0) navyBF = Math.max(3.0, Math.min(495 / denom - 450, 60.0));
-      } else if (gender === 'female' && (nWaist + nHip > nNeck)) {
-        const denom = 1.29579 - 0.35004 * Math.log10(nWaist + nHip - nNeck) + 0.22100 * Math.log10(heightCm);
-        if (denom !== 0) navyBF = Math.max(3.0, Math.min(495 / denom - 450, 60.0));
-      }
-    }
-
-    let averageBF = 0;
-    if (siriBF > 0 && navyBF > 0) averageBF = (siriBF + navyBF) / 2;
-
-    let activeBF = parseNumber(currentMetricsForm.bodyFat) || 15.0;
-    const pref = currentMetricsForm.fatPreference;
-    if (pref === 'skinfold' && siriBF > 0) activeBF = siriBF;
-    else if (pref === 'navy' && navyBF > 0) activeBF = navyBF;
-    else if (pref === 'average' && averageBF > 0) activeBF = averageBF;
-    else if (pref === 'manual' && parseNumber(currentMetricsForm.bodyFat) > 0) activeBF = parseNumber(currentMetricsForm.bodyFat);
-    else activeBF = siriBF > 0 ? siriBF : (navyBF > 0 ? navyBF : (parseNumber(currentMetricsForm.bodyFat) || 15.0));
-
-    const fatMass = weightKg * (activeBF / 100);
-    const leanMass = weightKg - fatMass;
-    const heightM = heightCm / 100;
-    const ffmi = heightM > 0 ? leanMass / Math.pow(heightM, 2) : 0;
-    const bmr = leanMass > 0 ? Math.round(370 + (21.6 * leanMass)) : 0;
-
-    let whtr = 0; if (heightCm > 0) whtr = nWaist / heightCm;
-    let frameSize = "-";
-    if (heightCm > 0 && nWrist > 0) {
-      const rValue = heightCm / nWrist;
-      if (gender === 'male') frameSize = (rValue > 10.4) ? "İnce" : (rValue < 9.6) ? "Kalın" : "Orta";
-      else frameSize = (rValue > 11.0) ? "İnce" : (rValue < 10.1) ? "Kalın" : "Orta";
-    }
-
-    let maxPotentialFFMI = 0;
-    if (gender === 'male') {
-      if (frameSize === 'İnce') maxPotentialFFMI = 24.0;
-      else if (frameSize === 'Orta') maxPotentialFFMI = 25.5;
-      else if (frameSize === 'Kalın') maxPotentialFFMI = 27.0;
-    } else {
-      if (frameSize === 'İnce') maxPotentialFFMI = 20.0;
-      else if (frameSize === 'Orta') maxPotentialFFMI = 21.5;
-      else if (frameSize === 'Kalın') maxPotentialFFMI = 23.0;
-    }
-
-    const potentialAchieved = maxPotentialFFMI > 0 && ffmi > 0 ? Math.min((ffmi / maxPotentialFFMI) * 100, 100) : 0;
-
-    let maxNaturalWeight = 0;
-    if (heightM > 0 && activeBF < 100 && maxPotentialFFMI > 0) {
-      const maxFFM = maxPotentialFFMI * Math.pow(heightM, 2);
-      maxNaturalWeight = maxFFM / (1 - (activeBF / 100));
-    }
-
-    let trainingAdvice = "";
-    let nutritionAdvice = "";
-
-    if (potentialAchieved === 0) {
-      trainingAdvice = "Yeterli veri yok.";
-      nutritionAdvice = "Yeterli veri yok.";
-    } else if (potentialAchieved < 80) {
-      trainingAdvice = "Doğal sınırın oldukça altındasınız (Acemi/Orta). Ana bileşke egzersizlerde lineer progresyon (sürekli ağırlık/tekrar artışı) yapabilirsiniz. Antrenman hacmi tolere edilebilir seviyededir.";
-      nutritionAdvice = "Kas inşası için kalori fazlası (surplus) elzemdir. Günlük +300-500 kcal ekleyerek büyümeyi hızlandırabilirsiniz, yağlanma riski görece daha düşüktür.";
-    } else if (potentialAchieved < 92) {
-      trainingAdvice = "Genetik sınırlarınıza yaklaşıyorsunuz (İleri Seviye). Gelişim ivmesi düşmüştür. Sürekli ağırlık artırmak yerine hacim/yoğunluk periyotlaması (periodization) ve deload stratejileri uygulanmalıdır.";
-      nutritionAdvice = "Agresif kalori fazlası artık çoğunlukla yağ olarak depolanır. Yavaş ve temiz büyüme (lean bulk) için kalori fazlası +150-250 kcal ile sınırlandırılmalıdır.";
-    } else {
-      trainingAdvice = "Doğal hipertrofi limitlerinizdesiniz (Elit Seviye). Kas eklemek mekanik olarak çok zordur. Zayıf kas gruplarına spesifik izolasyon ve çok yüksek teknik uzmanlık gerekir.";
-      nutritionAdvice = "Fazla kalori alımı direkt yağlanmaya yol açar. Vücut kompozisyonunu koruma (maintenance) veya çok küçük kalori dalgalanmaları (recomp) ile form korunmalıdır.";
-    }
-
-    return {
-      siriBF: siriBF > 0 ? siriBF.toFixed(2) : "-",
-      navyBF: navyBF > 0 ? navyBF.toFixed(2) : "-",
-      averageBF: averageBF > 0 ? averageBF.toFixed(2) : "-",
-      activeBF,
-      ffm: leanMass.toFixed(1), fm: fatMass.toFixed(1), ffmi: ffmi.toFixed(1), bmr,
-      whtr: whtr > 0 ? whtr.toFixed(2) : "-", frameSize, maxNaturalWeight: maxNaturalWeight > 0 ? maxNaturalWeight.toFixed(1) : "-",
-      maxPotentialFFMI: maxPotentialFFMI > 0 ? maxPotentialFFMI.toFixed(1) : "-",
-      potentialAchieved: potentialAchieved.toFixed(1),
-      trainingAdvice, nutritionAdvice
-    };
-  }, [currentMetricsForm]);
+  // Arşivdeki her ölçüm kaydının gerçek (hesaplanmış) yağ oranı ve kompozisyonu.
+  const metricsHistoryWithComposition = useMemo(
+    () => metricsHistory.map(m => ({ ...m, composition: computeComposition(mergeMetrics(m)) })),
+    [metricsHistory]
+  );
 
   const performedExercises = useMemo(() => {
     const exerciseSet = new Set();
@@ -485,11 +807,11 @@ export default function App() {
     return Array.from(exerciseSet).sort();
   }, [workouts]);
 
-  useEffect(() => {
-    if (performedExercises.length > 0 && (!analysisExercise || !performedExercises.includes(analysisExercise))) {
-      setAnalysisExercise(performedExercises[0]);
-    }
-  }, [performedExercises, analysisExercise]);
+  // Seçili hareket listeden düşmüşse (ör. o antrenman silindiyse) ilk harekete düş.
+  // Efekt içinde setState yapmak yerine render sırasında türetilir.
+  const activeAnalysisExercise = performedExercises.includes(analysisExercise)
+    ? analysisExercise
+    : (performedExercises[0] || '');
 
   const dashboardStats = useMemo(() => {
     const monday = getLocalDateString(getMondayOfCurrentWeek());
@@ -557,6 +879,128 @@ export default function App() {
     return daysSinceBackup > 7;
   }, [lastBackupDate, workouts, metricsHistory]);
 
+  const activeWorkoutId = activeWorkout ? activeWorkout.id : null;
+
+  // Hareket başına geçmiş rekorlar; süren seans hariç tutulur ki bu seansta
+  // kırılan rekor "yeni" olarak tespit edilebilsin.
+  const personalRecords = useMemo(
+    () => buildPersonalRecords(workouts, activeWorkoutId),
+    [workouts, activeWorkoutId]
+  );
+
+  // Hareket adı -> en son yapılan seansın verisi. Tek seferde kurulur; aksi halde
+  // her render'da (her tuş vuruşunda) tüm antrenman geçmişi baştan taranırdı.
+  const exerciseHistoryIndex = useMemo(() => {
+    const index = new Map();
+    const sorted = [...workouts].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    for (const w of sorted) {
+      if (!Array.isArray(w.exercises) || w.id === activeWorkoutId) continue;
+      for (const ex of w.exercises) {
+        if (index.has(ex.name) || !Array.isArray(ex.sets)) continue;
+        // Isınma setleri referans alınmamalı; "geçen sefer ne yaptım" sorusunun
+        // cevabı çalışma setleridir.
+        const working = ex.sets.filter(isWorkingSet);
+        if (working.length === 0) continue;
+        const best = working.reduce((prev, current) =>
+          ((parseNumber(prev.weight) * parseNumber(prev.reps)) > (parseNumber(current.weight) * parseNumber(current.reps)) ? prev : current));
+        index.set(ex.name, { date: w.date, sets: working, best });
+      }
+    }
+    return index;
+  }, [workouts, activeWorkoutId]);
+
+  // Interval ve olay dinleyicilerinin güncel state'i görebilmesi için referansları senkronla.
+  // Bu efekt, referansları okuyan aşağıdaki efektlerden ÖNCE tanımlanmalıdır; aksi halde
+  // onlar bir render geriden gelen veriyi okur.
+  useEffect(() => {
+    activeWorkoutRef.current = activeWorkout;
+    currentMetricsFormRef.current = currentMetricsForm;
+    exerciseHistoryRef.current = exerciseHistoryIndex;
+    restRef.current = rest;
+  }, [activeWorkout, currentMetricsForm, exerciseHistoryIndex, rest]);
+
+  // --- KİLİT EKRANI CANLI KARTI ---
+  const timerStatus = activeWorkout?.timer?.status || null;
+  const isEditingOldWorkout = Boolean(activeWorkout?.isEditingOld);
+
+  // Kartta gösterilecek "mevcut hareket": son dokunulan, yoksa listedeki son hareket.
+  const currentExerciseName = useMemo(() => {
+    const exercises = activeWorkout?.exercises || [];
+    if (exercises.length === 0) return '';
+    const active = exercises.find(e => e.id === activeWorkout.activeExerciseId);
+    return (active || exercises[exercises.length - 1]).name || '';
+  }, [activeWorkout]);
+
+  const enableLockScreen = async () => {
+    const started = await startLockScreenActivity({
+      onPause: () => setWorkoutTimerRunning(false),
+      onResume: () => setWorkoutTimerRunning(true),
+    });
+    setLockScreenOn(started);
+    if (!started) showToast('Kilit ekranı kartı başlatılamadı.', 'error');
+    return started;
+  };
+
+  const disableLockScreen = () => {
+    stopLockScreenActivity();
+    setLockScreenOn(false);
+  };
+
+  // Kart aktifken bilgileri taze tut. Ekran kapalıyken JavaScript askıya alındığı
+  // için asıl kritik an, uygulama arka plana geçmeden hemen önceki son güncellemedir.
+  useEffect(() => {
+    if (!lockScreenOn || !activeWorkoutId || isEditingOldWorkout) return;
+
+    const pushUpdate = () => {
+      const workout = activeWorkoutRef.current;
+      if (!workout) return;
+
+      const exercises = workout.exercises || [];
+      const active = exercises.find(e => e.id === workout.activeExerciseId) || exercises[exercises.length - 1];
+      const history = active ? exerciseHistoryRef.current?.get(active.name) : null;
+
+      let elapsed = workout.timer?.accumulatedSeconds || 0;
+      if (workout.timer?.status === 'running' && workout.timer.startTime) {
+        elapsed += Math.floor((Date.now() - workout.timer.startTime) / 1000);
+      }
+
+      const currentRest = restRef.current;
+      const secondsLeft = currentRest ? Math.max(0, Math.ceil((currentRest.endsAt - Date.now()) / 1000)) : 0;
+
+      updateLockScreenActivity({
+        elapsedSeconds: elapsed,
+        exerciseName: active?.name || '',
+        previousSets: (history?.sets || []).filter(isWorkingSet),
+        previousDate: history ? new Date(history.date).toLocaleDateString('tr-TR') : '',
+        effectiveSets: calcEffectiveSets(exercises),
+        isPaused: workout.timer?.status !== 'running',
+        restSecondsLeft: secondsLeft,
+        restTotalSeconds: currentRest?.total || 0,
+      });
+    };
+
+    pushUpdate();
+    const interval = setInterval(pushUpdate, 15000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        pushUpdate();
+      } else if (settings.keepScreenAwake) {
+        // iOS arka plana geçince ekran kilidini bırakır; geri dönünce yeniden istenir.
+        requestWakeLock();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+    // `rest` bağımlılığı sayesinde dinlenme başlayıp bittiğinde kart anında tazelenir;
+    // aradaki geri sayımı iOS kendi saatinden ilerletir.
+  }, [lockScreenOn, activeWorkoutId, isEditingOldWorkout, currentExerciseName, timerStatus, rest, settings.keepScreenAwake]);
+
   // --- ANTRENMAN MANTIĞI ---
   const updateInteraction = () => {
     if (activeWorkout && !activeWorkout.isEditingOld) {
@@ -578,46 +1022,68 @@ export default function App() {
       newExercises = preWorkoutModal.sourceData.exercises.map(ex => ({
         id: generateId(), name: ex.name,
         sets: Array.isArray(ex.sets) ? ex.sets.map(s => ({
-          id: generateId(), weight: s.weight || '', reps: s.reps || '', rir: s.rir || 2, tempo: s.tempo || '', formRating: s.formRating || 8
+          id: generateId(), weight: s.weight || '', reps: s.reps || '', rir: s.rir || 2,
+          tempo: s.tempo || '', formRating: s.formRating || 8, setType: s.setType || 'normal'
         })) : []
       }));
     }
 
-    setActiveWorkout({
-      id: generateId(),
-      date: getLocalDateString(),
-      timer: {
-        status: 'running',
-        startTime: Date.now(),
-        accumulatedSeconds: 0
-      },
-      lastInteraction: Date.now(),
-      notes: '',
-      rating: 0,
-      readiness: { sleep, stress, soreness, score },
-      exercises: newExercises
+    // Zaman damgaları güncelleyici içinde okunur: hem render'dan bağımsız kalır
+    // hem de kronometre, state gerçekten uygulandığı anda başlamış olur.
+    setActiveWorkout(() => {
+      const now = Date.now();
+      return {
+        id: generateId(),
+        date: getLocalDateString(),
+        timer: { status: 'running', startTime: now, accumulatedSeconds: 0 },
+        lastInteraction: now,
+        notes: '',
+        rating: 0,
+        readiness: { sleep, stress, soreness, score },
+        exercises: newExercises
+      };
     });
     setPreWorkoutModal(null);
     setView('active');
+
+    // iOS ses çalmayı kullanıcı hareketine bağlar; bu çağrı bir tıklama akışının
+    // içinde olduğu için kilit ekranı kartı burada başlatılabiliyor.
+    if (settings.lockScreenActivity) enableLockScreen();
+    if (settings.keepScreenAwake) requestWakeLock();
   };
 
-  const toggleWorkoutTimer = () => {
-    updateInteraction();
+  // Seans bittiğinde/iptal edildiğinde kilit ekranı kartını ve ekran kilidini bırak.
+  const endLiveSession = () => {
+    stopLockScreenActivity();
+    setLockScreenOn(false);
+    releaseWakeLock();
+  };
+
+  // Kronometre kilit ekranındaki oynat/duraklat düğmelerinden de yönetildiği için
+  // "değiştir" değil, açık şekilde "çalıştır/durdur" olarak modellenir.
+  const setWorkoutTimerRunning = (shouldRun) => {
     setActiveWorkout(prev => {
-      if (prev.timer.status === 'running') {
+      if (!prev || !prev.timer) return prev;
+      const isRunning = prev.timer.status === 'running';
+      if (isRunning === shouldRun) return prev;
+
+      if (isRunning) {
         const elapsedSinceStart = Math.floor((Date.now() - prev.timer.startTime) / 1000);
         return {
           ...prev,
+          lastInteraction: Date.now(),
           timer: { status: 'paused', startTime: null, accumulatedSeconds: prev.timer.accumulatedSeconds + elapsedSinceStart }
         };
-      } else {
-        return {
-          ...prev,
-          timer: { status: 'running', startTime: Date.now(), accumulatedSeconds: prev.timer.accumulatedSeconds }
-        };
       }
+      return {
+        ...prev,
+        lastInteraction: Date.now(),
+        timer: { status: 'running', startTime: Date.now(), accumulatedSeconds: prev.timer.accumulatedSeconds }
+      };
     });
   };
+
+  const toggleWorkoutTimer = () => setWorkoutTimerRunning(activeWorkout?.timer?.status !== 'running');
 
   const editWorkout = (workout) => {
     setActiveWorkout(JSON.parse(JSON.stringify({ ...workout, isEditingOld: true })));
@@ -630,6 +1096,7 @@ export default function App() {
 
     // Eğer hiçbir set girilmediyse idmanı kaydetmeden direkt çöp kutusuna at
     if (!hasSets) {
+      endLiveSession();
       setActiveWorkout(null);
       setView('home');
       return;
@@ -667,10 +1134,13 @@ export default function App() {
     delete finalizedWorkout.lastInteraction;
 
     // Kalori Senkronizasyonu
-    const userWeight = parseNumber(currentMetricsForm.weight) || 75;
+    // Sadece yeni tamamlanan seanslarda yapılır. Geçmiş bir seans düzenlenip tekrar
+    // kaydedildiğinde kalori yeniden eklenmemeli (aksi halde her düzenlemede birikirdi).
+    const relevantMetrics = findMetricsForDate(metricsHistory, finalizedWorkout.date, currentMetricsForm);
+    const userWeight = parseNumber(relevantMetrics?.weight) || 75;
     const burnedCals = Math.round(durationMinutes * userWeight * 0.08); // Ortalama 4.8 METs Ağırlık Antrenmanı
 
-    if (burnedCals > 0) {
+    if (burnedCals > 0 && !activeWorkout.isEditingOld) {
       setCurrentNutritionForm(prev => {
         if (prev.date === getLocalDateString()) {
           return { ...prev, dayType: 'training', activeCaloriesOut: String(parseNumber(prev.activeCaloriesOut) + burnedCals) };
@@ -691,9 +1161,30 @@ export default function App() {
       setWorkouts([finalizedWorkout, ...workouts].sort((a, b) => new Date(b.date) - new Date(a.date)));
     }
 
+    // Bu seansta kırılan rekorlar (ısınma setleri hariç)
+    const brokenRecords = [];
+    for (const ex of cleanedExercises) {
+      const best = ex.sets
+        .filter(isWorkingSet)
+        .reduce((max, s) => Math.max(max, estimate1RM(s.weight, s.reps, s.rir)), 0);
+      const previous = personalRecords.get(ex.name);
+      if (best > 0 && (!previous || best > previous.e1rm)) {
+        brokenRecords.push({ name: ex.name, e1rm: best });
+      }
+    }
+
+    endLiveSession();
     setActiveWorkout(null);
     setIsEndWorkoutModalOpen(false);
     setView('home');
+
+    if (brokenRecords.length === 1) {
+      showToast(`Yeni rekor: ${brokenRecords[0].name} — ${brokenRecords[0].e1rm} kg`);
+    } else if (brokenRecords.length > 1) {
+      showToast(`${brokenRecords.length} hareketde yeni rekor kırdın.`);
+    } else {
+      showToast('Antrenman kaydedildi.');
+    }
   };
 
   const saveAsTemplate = (workout) => {
@@ -705,37 +1196,11 @@ export default function App() {
     setTemplates([...templates, { id: generateId(), name, exercises: templateExercises }]);
   };
 
-  const getPreviousPerformance = (exerciseName) => {
-    for (let w of workouts) {
-      if (!Array.isArray(w.exercises)) continue;
-      if (activeWorkout && w.id === activeWorkout.id) continue;
-      const ex = w.exercises.find(e => e.name === exerciseName);
-      if (ex && Array.isArray(ex.sets) && ex.sets.length > 0) {
-        return ex.sets.reduce((prev, current) => ((parseNumber(prev.weight) * parseNumber(prev.reps)) > (parseNumber(current.weight) * parseNumber(current.reps)) ? prev : current));
-      }
-    }
-    return null;
-  };
+  const getPreviousPerformance = (exerciseName) => exerciseHistoryIndex.get(exerciseName)?.best || null;
 
   const getRecentExerciseData = (exerciseName) => {
-    for (let w of workouts) {
-      if (activeWorkout && w.id === activeWorkout.id) continue;
-      const ex = (w.exercises || []).find(e => e.name === exerciseName);
-      if (ex && Array.isArray(ex.sets) && ex.sets.length > 0) {
-        return { date: w.date, sets: ex.sets };
-      }
-    }
-    return null;
-  };
-
-  const calcEstimated1RM = (weight, reps, rir) => {
-    const w = parseNumber(weight);
-    const r = parseNumber(reps);
-    const reserve = parseNumber(rir);
-    if (w > 0 && r > 0) {
-      return Math.round(w * (1 + (r + reserve) / 30)); // Epley
-    }
-    return 0;
+    const entry = exerciseHistoryIndex.get(exerciseName);
+    return entry ? { date: entry.date, sets: entry.sets } : null;
   };
 
   const allExercisesNames = [...new Set([
@@ -752,7 +1217,13 @@ export default function App() {
       ? { id: generateId(), weight: prevPerf.weight, reps: prevPerf.reps, rir: prevPerf.rir, tempo: prevPerf.tempo || '', formRating: prevPerf.formRating || 8 }
       : { id: generateId(), weight: '', reps: '', rir: 2, tempo: '', formRating: 8 };
 
-    setActiveWorkout(prev => ({ ...prev, exercises: [...(prev?.exercises || []), { id: generateId(), name: exerciseName, sets: [initialSet] }] }));
+    const newExerciseId = generateId();
+    setActiveWorkout(prev => ({
+      ...prev,
+      // Kilit ekranı kartının "mevcut hareket" bilgisi buradan beslenir.
+      activeExerciseId: newExerciseId,
+      exercises: [...(prev?.exercises || []), { id: newExerciseId, name: exerciseName, sets: [initialSet] }]
+    }));
     setIsExerciseModalOpen(false);
     setExerciseSearchQuery('');
   };
@@ -772,10 +1243,14 @@ export default function App() {
   const addSet = (exerciseId) => {
     updateInteraction();
     setActiveWorkout(prev => ({
-      ...prev, exercises: (prev?.exercises || []).map(ex => {
+      ...prev, activeExerciseId: exerciseId, exercises: (prev?.exercises || []).map(ex => {
         if (ex.id === exerciseId) {
-          const lastSet = ex.sets[ex.sets.length - 1] || { weight: '', reps: '', rir: 2, tempo: '', formRating: 8 };
-          const newSet = settings.autoCopyLastSet ? { ...lastSet, id: generateId() } : { id: generateId(), weight: '', reps: '', rir: 2, tempo: '', formRating: 8 };
+          const lastSet = ex.sets[ex.sets.length - 1] || { weight: '', reps: '', rir: 2, tempo: '', formRating: 8, setType: 'normal' };
+          // Kopyalarken set tipi de taşınır: arka arkaya ısınma seti eklemek yaygın.
+          // Isınma satırları turuncu göründüğü için yanlışlıkla kalması fark edilir.
+          const newSet = settings.autoCopyLastSet
+            ? { ...lastSet, id: generateId() }
+            : { id: generateId(), weight: '', reps: '', rir: 2, tempo: '', formRating: 8, setType: 'normal' };
           return { ...ex, sets: [...ex.sets, newSet] };
         }
         return ex;
@@ -786,7 +1261,9 @@ export default function App() {
   const updateSet = (exerciseId, setId, field, value) => {
     updateInteraction();
     setActiveWorkout(prev => ({
-      ...prev, exercises: (prev?.exercises || []).map(ex => ex.id === exerciseId
+      ...prev,
+      activeExerciseId: exerciseId,
+      exercises: (prev?.exercises || []).map(ex => ex.id === exerciseId
         ? { ...ex, sets: (ex.sets || []).map(s => s.id === setId ? { ...s, [field]: value } : s) } : ex)
     }));
   };
@@ -796,31 +1273,30 @@ export default function App() {
     setActiveWorkout(prev => ({ ...prev, exercises: (prev?.exercises || []).map(ex => ex.id === exerciseId ? { ...ex, sets: (ex.sets || []).filter(s => s.id !== setId) } : ex) }));
   };
 
-  const calcEffectiveSets = (workoutOrExercises) => {
-    const exercises = workoutOrExercises?.exercises || workoutOrExercises;
-    if (!Array.isArray(exercises)) return 0;
-    return exercises.reduce((acc, ex) => acc + (ex.sets || []).filter(s => parseNumber(s.rir) <= 3 && parseNumber(s.reps) > 0).length, 0);
-  };
-
   const get1RMData = (exerciseName) => {
     if (!exerciseName) return [];
     const data = [];
     workouts.forEach(w => {
       const ex = (w.exercises || []).find(e => e.name === exerciseName);
-      if (ex && Array.isArray(ex.sets) && ex.sets.length > 0) {
-        let max1RM = 0;
-        ex.sets.forEach(s => {
-          const weight = parseNumber(s.weight); const reps = parseNumber(s.reps);
-          if (weight > 0 && reps > 0 && reps <= 15) {
-            const epley1RM = weight * (1 + reps / 30);
-            if (epley1RM > max1RM) max1RM = epley1RM;
-          }
-        });
-        if (max1RM > 0) data.push({ date: w.date, rm: Math.round(max1RM) });
-      }
+      if (!ex || !Array.isArray(ex.sets)) return;
+      // Isınma setleri güç göstergesi değildir; estimate1RM içindeki tekrar sınırı da
+      // set satırında gösterilen tahminle tutarlılığı sağlar.
+      const max1RM = ex.sets
+        .filter(isWorkingSet)
+        .reduce((best, s) => Math.max(best, estimate1RM(s.weight, s.reps, s.rir)), 0);
+      if (max1RM > 0) data.push({ date: w.date, value: max1RM });
     });
     return data.sort((a, b) => new Date(a.date) - new Date(b.date));
   };
+
+  // Ölçüm arşivinden seçili serinin zaman dizisi
+  const bodyTrendData = useMemo(() => {
+    const metric = BODY_METRICS.find(m => m.key === bodyMetricKey) || BODY_METRICS[0];
+    return metricsHistoryWithComposition
+      .map(m => ({ date: m.date, value: metric.pick(m) }))
+      .filter(p => Number.isFinite(p.value) && p.value > 0)
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+  }, [metricsHistoryWithComposition, bodyMetricKey]);
 
   const exportJSON = () => {
     const data = { workouts, templates, customExercises, metricsHistory, nutritionHistory, mealTemplates, dayTemplates, settings };
@@ -833,26 +1309,63 @@ export default function App() {
     const now = new Date().toISOString();
     localStorage.setItem('po_last_backup', now);
     setLastBackupDate(now);
+    showToast('Yedek indirildi.');
   };
 
+  // Yedek yükleme iki adımlıdır: önce dosya doğrulanır, sonra kullanıcıya
+  // ne yükleneceği gösterilip onay istenir. Mevcut veriyi sessizce ezmemek önemli.
   const importJSON = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    e.target.value = ''; // aynı dosya tekrar seçilebilsin
+
     const reader = new FileReader();
+    reader.onerror = () => showToast('Dosya okunamadı.', 'error');
     reader.onload = (event) => {
+      let data;
       try {
-        const data = JSON.parse(event.target.result);
-        if (Array.isArray(data.workouts)) setWorkouts(data.workouts);
-        if (Array.isArray(data.templates)) setTemplates(data.templates);
-        if (Array.isArray(data.customExercises)) setCustomExercises(data.customExercises);
-        if (Array.isArray(data.metricsHistory)) setMetricsHistory(data.metricsHistory);
-        if (Array.isArray(data.nutritionHistory)) setNutritionHistory(data.nutritionHistory);
-        if (Array.isArray(data.mealTemplates)) setMealTemplates(data.mealTemplates);
-        if (Array.isArray(data.dayTemplates)) setDayTemplates(data.dayTemplates);
-        if (data.settings) setSettings(data.settings);
-      } catch (err) { }
+        data = JSON.parse(event.target.result);
+      } catch {
+        showToast('Geçersiz dosya: JSON çözümlenemedi.', 'error');
+        return;
+      }
+
+      if (!data || typeof data !== 'object' || Array.isArray(data) || !BACKUP_KEYS.some(k => k in data)) {
+        showToast('Bu dosya bir ProOverload yedeği değil.', 'error');
+        return;
+      }
+
+      setImportConfirm({
+        data,
+        counts: {
+          workouts: Array.isArray(data.workouts) ? data.workouts.length : 0,
+          metrics: Array.isArray(data.metricsHistory) ? data.metricsHistory.length : 0,
+          nutrition: Array.isArray(data.nutritionHistory) ? data.nutritionHistory.length : 0,
+        }
+      });
     };
     reader.readAsText(file);
+  };
+
+  const applyImport = () => {
+    const data = importConfirm?.data;
+    if (!data) return;
+
+    if (Array.isArray(data.workouts)) setWorkouts(data.workouts);
+    if (Array.isArray(data.templates)) setTemplates(data.templates);
+    if (Array.isArray(data.customExercises)) setCustomExercises(data.customExercises);
+    if (Array.isArray(data.metricsHistory)) setMetricsHistory(data.metricsHistory.map(mergeMetrics));
+    if (Array.isArray(data.nutritionHistory)) setNutritionHistory(data.nutritionHistory.map(mergeNutrition));
+    if (Array.isArray(data.mealTemplates)) setMealTemplates(data.mealTemplates);
+    if (Array.isArray(data.dayTemplates)) setDayTemplates(data.dayTemplates);
+    // Eksik alanlar varsayılanlarla tamamlanır, aksi halde ayarlar bozuk kalabilir.
+    if (data.settings && typeof data.settings === 'object') {
+      setSettings({ ...DEFAULT_SETTINGS, ...data.settings });
+    }
+
+    setImportConfirm(null);
+    setIsSettingsModalOpen(false);
+    showToast('Yedek başarıyla yüklendi.');
   };
 
   // --- BESLENME YÖNETİMİ ---
@@ -942,13 +1455,14 @@ export default function App() {
   const saveNutrition = () => {
     const safeMeals = Array.isArray(currentNutritionForm.meals) ? currentNutritionForm.meals : [];
     const totalCals = safeMeals.reduce((sum, m) => sum + parseNumber(m.calories), 0);
-    if (!currentNutritionForm.date || totalCals === 0) return;
+    if (!currentNutritionForm.date) { showToast('Önce bir tarih seçin.', 'error'); return; }
+    if (totalCals === 0) { showToast('Kaydetmek için en az bir öğüne kalori girin.', 'error'); return; }
 
     const totalPro = safeMeals.reduce((sum, m) => sum + parseNumber(m.protein), 0);
     const totalCarbs = safeMeals.reduce((sum, m) => sum + parseNumber(m.carbs), 0);
     const totalFats = safeMeals.reduce((sum, m) => sum + parseNumber(m.fats), 0);
 
-    const currentBMR = composition.bmr;
+    const currentBMR = nutritionComposition.bmr;
 
     const existingEntry = nutritionHistory.find(n => n.date === currentNutritionForm.date);
     const entryId = existingEntry ? existingEntry.id : generateId();
@@ -964,6 +1478,7 @@ export default function App() {
     updatedHistory.sort((a, b) => new Date(b.date) - new Date(a.date));
 
     setNutritionHistory(updatedHistory);
+    showToast(existingEntry ? 'Beslenme kaydı güncellendi.' : 'Beslenme kaydedildi.');
   };
 
   // --- BİYOMETRİ YÖNETİMİ ---
@@ -988,6 +1503,7 @@ export default function App() {
 
     updatedHistory.sort((a, b) => new Date(b.date) - new Date(a.date));
     setMetricsHistory(updatedHistory);
+    showToast(existingIndex >= 0 ? 'Ölçüm güncellendi.' : 'Ölçüm kaydedildi.');
   };
 
   const editMetric = (metric) => {
@@ -1122,6 +1638,15 @@ export default function App() {
                   {activeWorkout.timer?.status === 'running' ? <Pause size={14} /> : <Play size={14} />}
                 </button>
               )}
+              {!activeWorkout.isEditingOld && isLockScreenSupported() && (
+                <button
+                  onClick={() => (lockScreenOn ? disableLockScreen() : enableLockScreen())}
+                  title={lockScreenOn ? 'Kilit ekranı kartı açık' : 'Kilit ekranı kartını aç'}
+                  className={`ml-2 rounded-lg p-1.5 transition-colors border flex items-center justify-center ${lockScreenOn ? 'text-cyan-400 bg-cyan-950/40 border-cyan-800' : 'text-zinc-500 bg-zinc-800 border-zinc-700'}`}
+                >
+                  <Smartphone size={14} />
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1149,6 +1674,9 @@ export default function App() {
         {(activeWorkout.exercises || []).map((ex, exIndex) => {
           const effSets = calcEffectiveSets([ex]);
           const recentData = getRecentExerciseData(ex.name);
+          const { muscle } = detectMuscleGroup(ex.name, customExercises);
+          const target = recentData ? suggestNextTarget(recentData.sets, settings, muscle) : null;
+          const record = personalRecords.get(ex.name);
 
           return (
             <div key={ex.id} className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
@@ -1157,12 +1685,32 @@ export default function App() {
                 <button onClick={() => setActiveWorkout(prev => ({ ...prev, exercises: prev.exercises.filter(e => e.id !== ex.id) }))} className="text-zinc-600 p-1"><X size={14} /></button>
               </div>
 
+              {/* Progresif yükleme hedefi: geçen seansın çalışma setlerinden türetilir */}
+              {target && (
+                <div className="bg-emerald-950/25 px-3 py-2 border-b border-emerald-900/40">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] font-bold uppercase tracking-widest text-emerald-500 flex items-center">
+                      <TrendingUp size={11} className="mr-1.5" /> Bugünkü Hedef
+                    </span>
+                    <span className="font-mono text-sm font-bold text-emerald-400">{target.weight} kg × {target.reps}</span>
+                  </div>
+                  <div className="text-[9px] text-emerald-700 font-mono mt-1">{target.note}</div>
+                </div>
+              )}
+
               {recentData && (
                 <div className="bg-cyan-950/20 px-3 py-1.5 border-b border-zinc-800 text-[9px] text-cyan-500/70 font-mono flex gap-3 overflow-x-auto hide-scrollbar items-center">
-                  <span className="text-cyan-600 font-bold shrink-0">Geçmiş:</span>
+                  <span className="text-cyan-600 font-bold shrink-0">Geçen ({new Date(recentData.date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}):</span>
                   {recentData.sets.map((s, i) => (
-                    <span key={i} className="shrink-0">{s.weight}x{s.reps} {s.rir && `(RIR:${s.rir})`}</span>
+                    <span key={i} className="shrink-0">{s.weight}x{s.reps} {s.rir !== '' && s.rir !== undefined && `(RIR:${s.rir})`}</span>
                   ))}
+                </div>
+              )}
+
+              {record && (
+                <div className="bg-yellow-950/15 px-3 py-1.5 border-b border-zinc-800 text-[9px] font-mono flex items-center gap-2">
+                  <Trophy size={10} className="text-yellow-500 shrink-0" />
+                  <span className="text-yellow-600/80">Rekor: <span className="text-yellow-500 font-bold">{record.e1rm} kg</span> (1RM tahmini · {record.weight}×{record.reps})</span>
                 </div>
               )}
 
@@ -1172,13 +1720,40 @@ export default function App() {
                 </div>
 
                 {(ex.sets || []).map((set, setIndex) => {
-                  const isEffective = parseNumber(set.rir) <= 3 && parseNumber(set.reps) > 0;
-                  const e1rm = calcEstimated1RM(set.weight, set.reps, set.rir);
+                  const warmup = isWarmupSet(set);
+                  const isEffective = !warmup && parseNumber(set.rir) <= 3 && parseNumber(set.reps) > 0;
+                  const e1rm = warmup ? 0 : estimate1RM(set.weight, set.reps, set.rir);
+                  const isNewRecord = e1rm > 0 && (!record || e1rm > record.e1rm);
+                  // Isınma setleri numaralandırmaya dahil edilmez.
+                  const workingIndex = (ex.sets || []).slice(0, setIndex + 1).filter(isWorkingSet).length;
+
                   return (
-                    <div key={set.id} className={`grid grid-cols-12 gap-1 items-center bg-zinc-950 p-1 rounded-xl border transition-colors ${isEffective ? 'border-cyan-900/50' : 'border-zinc-800'} relative`}>
-                      <div className="col-span-1 text-center text-[10px] font-mono text-zinc-500">{setIndex + 1}</div>
-                      <div className="col-span-3"><input type="number" inputMode="decimal" value={set.weight} onChange={(e) => updateSet(ex.id, set.id, 'weight', e.target.value)} onFocus={e => e.target.select()} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-cyan-400 font-mono text-sm outline-none text-center focus:bg-zinc-800 h-10 transition-colors" placeholder="0" /></div>
-                      <div className="col-span-2"><input type="number" inputMode="decimal" value={set.reps} onChange={(e) => updateSet(ex.id, set.id, 'reps', e.target.value)} onFocus={e => e.target.select()} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-zinc-100 font-mono text-sm outline-none text-center focus:bg-zinc-800 h-10 transition-colors" placeholder="0" /></div>
+                    <div key={set.id} className={`grid grid-cols-12 gap-1 items-center p-1 rounded-xl border transition-colors relative ${warmup ? 'bg-zinc-950/50 border-orange-900/40' : isEffective ? 'bg-zinc-950 border-cyan-900/50' : 'bg-zinc-950 border-zinc-800'}`}>
+                      <button
+                        onClick={() => updateSet(ex.id, set.id, 'setType', warmup ? 'normal' : 'warmup')}
+                        title={warmup ? 'Isınma seti — dokun: çalışma setine çevir' : 'Çalışma seti — dokun: ısınma yap'}
+                        className={`col-span-1 text-center text-[10px] font-mono font-bold h-10 rounded-lg transition-colors ${warmup ? 'text-orange-400 bg-orange-950/30' : 'text-zinc-500 active:bg-zinc-800'}`}
+                      >
+                        {warmup ? 'W' : workingIndex}
+                      </button>
+                      <div className="col-span-3"><input type="number" inputMode="decimal" value={set.weight} onChange={(e) => updateSet(ex.id, set.id, 'weight', e.target.value)} onFocus={e => e.target.select()} className={`w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 font-mono text-sm outline-none text-center focus:bg-zinc-800 h-10 transition-colors ${warmup ? 'text-orange-300/70' : 'text-cyan-400'}`} placeholder="0" /></div>
+                      <div className="col-span-2">
+                        <input
+                          type="number" inputMode="decimal" value={set.reps}
+                          onChange={(e) => updateSet(ex.id, set.id, 'reps', e.target.value)}
+                          onFocus={(e) => { e.target.select(); repsOnFocusRef.current = e.target.value; }}
+                          onBlur={(e) => {
+                            // Dinlenme yalnızca gerçekten yeni bir tekrar girildiğinde başlar;
+                            // alanlar arasında gezinmek sayacı sıfırdan başlatmamalı.
+                            const changed = repsOnFocusRef.current !== e.target.value;
+                            repsOnFocusRef.current = null;
+                            if (changed && settings.autoRestTimer && !warmup && parseNumber(e.target.value) > 0) {
+                              startRest(settings.restSeconds);
+                            }
+                          }}
+                          className={`w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 font-mono text-sm outline-none text-center focus:bg-zinc-800 h-10 transition-colors ${warmup ? 'text-zinc-500' : 'text-zinc-100'}`}
+                          placeholder="0" />
+                      </div>
                       <div className="col-span-2"><input type="number" inputMode="decimal" step="0.5" value={set.rir} onChange={(e) => updateSet(ex.id, set.id, 'rir', e.target.value)} onFocus={e => e.target.select()} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-zinc-300 font-mono text-xs outline-none text-center focus:bg-zinc-800 h-10 transition-colors" placeholder="0" /></div>
                       <div className="col-span-2"><input type="text" maxLength="4" value={set.tempo || ''} onChange={(e) => updateSet(ex.id, set.id, 'tempo', e.target.value)} onFocus={e => e.target.select()} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-zinc-400 font-mono text-[10px] outline-none text-center focus:bg-zinc-800 h-10 transition-colors" placeholder="TUT" /></div>
                       <div className="col-span-2 flex items-center pr-1">
@@ -1186,8 +1761,20 @@ export default function App() {
                           {FORM_RATINGS.map(r => <option key={r.value} value={r.value}>{r.value}</option>)}
                         </select>
                       </div>
-                      <div className="col-span-12 flex justify-end px-2 -mt-0.5 mb-0.5">
-                        <span className="text-[8px] text-cyan-600/70 font-mono tracking-widest">1RM: {e1rm}kg</span>
+                      <div className="col-span-12 flex justify-between items-center px-1.5 -mt-0.5 mb-0.5">
+                        <button onClick={() => removeSet(ex.id, set.id)} className="text-zinc-700 active:text-red-500 hover:text-red-500 p-1 -m-1 transition-colors" title="Bu seti sil">
+                          <Trash2 size={11} />
+                        </button>
+                        {warmup ? (
+                          <span className="text-[8px] text-orange-600/70 font-mono tracking-widest uppercase">Isınma · hacme sayılmaz</span>
+                        ) : (
+                          <span className="text-[8px] font-mono tracking-widest flex items-center gap-1.5">
+                            {isNewRecord && (
+                              <span className="text-yellow-400 font-bold flex items-center"><Trophy size={9} className="mr-0.5" /> REKOR</span>
+                            )}
+                            <span className="text-cyan-600/70">1RM: {e1rm > 0 ? `${e1rm}kg` : '—'}</span>
+                          </span>
+                        )}
                       </div>
                     </div>
                   );
@@ -1196,9 +1783,9 @@ export default function App() {
                 <div className="flex items-center justify-between pt-1 px-1">
                   <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">Etkili Set: <span className="font-mono text-cyan-400">{effSets}</span></span>
                   <div className="flex space-x-1">
-                    <button onClick={() => setRestTimer(60)} className="bg-zinc-950 active:bg-zinc-800 text-zinc-400 text-[10px] font-bold py-1.5 px-2.5 rounded-lg border border-zinc-800 uppercase transition-colors">60s</button>
-                    <button onClick={() => setRestTimer(90)} className="bg-zinc-950 active:bg-zinc-800 text-zinc-400 text-[10px] font-bold py-1.5 px-2.5 rounded-lg border border-zinc-800 uppercase transition-colors">90s</button>
-                    <button onClick={() => setRestTimer(120)} className="bg-zinc-950 active:bg-zinc-800 text-zinc-400 text-[10px] font-bold py-1.5 px-2.5 rounded-lg border border-zinc-800 uppercase transition-colors">120s</button>
+                    <button onClick={() => startRest(60)} className="bg-zinc-950 active:bg-zinc-800 text-zinc-400 text-[10px] font-bold py-1.5 px-2.5 rounded-lg border border-zinc-800 uppercase transition-colors">60s</button>
+                    <button onClick={() => startRest(90)} className="bg-zinc-950 active:bg-zinc-800 text-zinc-400 text-[10px] font-bold py-1.5 px-2.5 rounded-lg border border-zinc-800 uppercase transition-colors">90s</button>
+                    <button onClick={() => startRest(settings.restSeconds)} className="bg-zinc-950 active:bg-zinc-800 text-cyan-500 text-[10px] font-bold py-1.5 px-2.5 rounded-lg border border-cyan-900/50 uppercase transition-colors">{settings.restSeconds}s</button>
                     <button onClick={() => addSet(ex.id)} className="bg-zinc-800 active:bg-zinc-700 text-zinc-300 text-[10px] font-bold py-1.5 px-3 rounded-lg border border-zinc-700 uppercase tracking-wider flex items-center transition-colors"><Plus size={12} className="mr-1" /> Set</button>
                   </div>
                 </div>
@@ -1212,12 +1799,31 @@ export default function App() {
         </button>
       </div>
 
-      {restTimer > 0 && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-zinc-800 border border-zinc-700 text-cyan-400 px-5 py-3 rounded-full shadow-2xl flex items-center space-x-3 z-50">
-          <Timer size={18} className="animate-pulse" />
-          <span className="font-mono font-bold text-xl tracking-widest">{Math.floor(restTimer / 60)}:{(restTimer % 60).toString().padStart(2, '0')}</span>
-          <div className="w-px h-6 bg-zinc-700 mx-1"></div>
-          <button onClick={() => setRestTimer(0)} className="text-zinc-400 hover:text-red-400 bg-zinc-900 p-2 rounded-full"><X size={14} /></button>
+      {rest && restSecondsLeft > 0 && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-[360px]">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl px-4 py-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[9px] font-bold uppercase tracking-widest text-cyan-500 flex items-center">
+                <Timer size={12} className="mr-1.5 animate-pulse" /> Dinlenme
+              </span>
+              <div className="flex items-center gap-2">
+                <button onClick={() => startRest(restSecondsLeft + 30)} className="text-[9px] font-bold text-zinc-400 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 active:bg-zinc-800 transition-colors">+30s</button>
+                <button onClick={stopRest} className="text-zinc-500 hover:text-red-400 bg-zinc-950 border border-zinc-800 p-1.5 rounded-lg transition-colors"><X size={12} /></button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span className="font-mono font-bold text-3xl text-cyan-400 tabular-nums tracking-tight">
+                {Math.floor(restSecondsLeft / 60)}:{(restSecondsLeft % 60).toString().padStart(2, '0')}
+              </span>
+              <div className="flex-1 bg-zinc-950 rounded-full h-2 border border-zinc-800 overflow-hidden">
+                <div
+                  className="h-full bg-cyan-500 rounded-full transition-all duration-500"
+                  style={{ width: `${Math.max(0, Math.min(100, (restSecondsLeft / rest.total) * 100))}%` }}
+                />
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -1242,7 +1848,7 @@ export default function App() {
                 <div className="flex items-center justify-between bg-cyan-900/10 p-3 rounded-xl border border-cyan-900/30 mb-4">
                   <div>
                     <div className="text-[9px] uppercase text-cyan-500 font-bold mb-1">Geçerli Yağ Oranı</div>
-                    <div className="text-[8px] text-cyan-600/70">{currentMetricsForm.fatPreference === 'skinfold' ? 'Kaliper Bazlı' : currentMetricsForm.fatPreference === 'navy' ? 'Mezura Bazlı' : currentMetricsForm.fatPreference === 'average' ? 'Ortalama' : 'Manuel'}</div>
+                    <div className="text-[8px] text-cyan-600/70">{FAT_METHOD_LABELS[currentMetricsForm.fatPreference] || 'Manuel'}</div>
                   </div>
                   <div className="text-3xl font-mono text-zinc-100 font-bold">%{composition.activeBF.toFixed(1)}</div>
                 </div>
@@ -1368,7 +1974,7 @@ export default function App() {
                           <span className="text-[9px] font-bold uppercase mb-1">Manuel</span>
                           <div className="flex items-center">
                             <span className="text-[10px] font-mono mr-0.5">%</span>
-                            <input type="number" inputMode="decimal" value={currentMetricsForm.bodyFat || ''} onChange={(e) => { handleMetricChange('bodyFat', e.target.value); handleMetricChange('fatPreference', 'manual'); }} onClick={(e) => { handleMetricChange('fatPreference', 'manual'); }} className="w-8 bg-transparent text-center font-mono text-[10px] outline-none text-inherit border-b border-zinc-700/50 focus:border-cyan-500" placeholder="0" />
+                            <input type="number" inputMode="decimal" value={currentMetricsForm.bodyFat || ''} onChange={(e) => { handleMetricChange('bodyFat', e.target.value); handleMetricChange('fatPreference', 'manual'); }} onClick={() => handleMetricChange('fatPreference', 'manual')} className="w-8 bg-transparent text-center font-mono text-[10px] outline-none text-inherit border-b border-zinc-700/50 focus:border-cyan-500" placeholder="0" />
                           </div>
                         </label>
                       </div>
@@ -1442,74 +2048,71 @@ export default function App() {
           <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
             <div className="p-4 border-b border-zinc-800 bg-zinc-950/50 flex flex-col space-y-3">
               <div className="flex bg-zinc-900 rounded-xl p-1 border border-zinc-800">
+                <button onClick={() => setAnalysisType('body')} className={`flex-1 py-1.5 text-[10px] font-bold uppercase rounded-lg transition-colors ${analysisType === 'body' ? 'bg-zinc-800 text-cyan-400 shadow' : 'text-zinc-500'}`}>Vücut</button>
                 <button onClick={() => setAnalysisType('1rm')} className={`flex-1 py-1.5 text-[10px] font-bold uppercase rounded-lg transition-colors ${analysisType === '1rm' ? 'bg-zinc-800 text-cyan-400 shadow' : 'text-zinc-500'}`}>1RM</button>
-                <button onClick={() => setAnalysisType('volume')} className={`flex-1 py-1.5 text-[10px] font-bold uppercase rounded-lg transition-colors ${analysisType === 'volume' ? 'bg-zinc-800 text-cyan-400 shadow' : 'text-zinc-500'}`}>Hacim Yükü</button>
+                <button onClick={() => setAnalysisType('volume')} className={`flex-1 py-1.5 text-[10px] font-bold uppercase rounded-lg transition-colors ${analysisType === 'volume' ? 'bg-zinc-800 text-cyan-400 shadow' : 'text-zinc-500'}`}>Hacim</button>
               </div>
 
-              {analysisType === '1rm' ? (
+              {analysisType === 'body' && (
+                <>
+                  <h2 className="text-xs font-bold text-zinc-100 uppercase tracking-wider flex items-center mt-2">
+                    <RulerIcon size={14} className="mr-2 text-cyan-500" /> Vücut Gelişim Trendi
+                  </h2>
+                  <div className="flex flex-wrap gap-1.5">
+                    {BODY_METRICS.map(m => (
+                      <button
+                        key={m.key}
+                        onClick={() => setBodyMetricKey(m.key)}
+                        className={`text-[9px] font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-lg border transition-colors ${bodyMetricKey === m.key ? 'bg-zinc-800 border-zinc-600 text-zinc-100' : 'bg-zinc-950 border-zinc-800 text-zinc-500'}`}
+                        style={bodyMetricKey === m.key ? { color: m.color, borderColor: m.color } : undefined}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {analysisType === '1rm' && (
                 <>
                   <h2 className="text-xs font-bold text-zinc-100 uppercase tracking-wider flex items-center mt-2"><LineChart size={14} className="mr-2 text-cyan-500" /> Tahmini 1RM Trendi</h2>
                   {performedExercises.length > 0 ? (
-                    <select value={analysisExercise || ''} onChange={(e) => setAnalysisExercise(e.target.value)} className="w-full bg-zinc-900 border border-zinc-700 rounded-xl p-3 text-zinc-300 font-mono text-xs outline-none transition-colors">
+                    <select value={activeAnalysisExercise} onChange={(e) => setAnalysisExercise(e.target.value)} className="w-full bg-zinc-900 border border-zinc-700 rounded-xl p-3 text-zinc-300 font-mono text-xs outline-none transition-colors">
                       {performedExercises.map(ex => <option key={ex} value={ex}>{ex}</option>)}
                     </select>
                   ) : (
                     <div className="text-xs text-zinc-500 font-mono">Antrenman verisi bulunamadı.</div>
                   )}
                 </>
-              ) : (
+              )}
+
+              {analysisType === 'volume' && (
                 <h2 className="text-xs font-bold text-zinc-100 uppercase tracking-wider flex items-center mt-2"><BarChart size={14} className="mr-2 text-cyan-500" /> Haftalık İş Kapasitesi (Kg)</h2>
               )}
             </div>
 
-            <div className="p-4 h-64 bg-zinc-950 relative flex items-end justify-between overflow-x-auto hide-scrollbar">
+            <div className="p-4 bg-zinc-950">
+              {analysisType === 'body' && (() => {
+                const metric = BODY_METRICS.find(m => m.key === bodyMetricKey) || BODY_METRICS[0];
+                if (metricsHistoryWithComposition.length === 0) {
+                  return <div className="h-52 flex items-center justify-center text-zinc-600 text-xs font-mono">Ölçüm kaydı yok.</div>;
+                }
+                return <TrendChart data={bodyTrendData} color={metric.color} unit={metric.unit} decimals={metric.key === 'ffmi' ? 1 : 1} />;
+              })()}
+
               {analysisType === '1rm' && (() => {
-                if (performedExercises.length === 0) return <div className="absolute inset-0 flex items-center justify-center text-zinc-600 text-xs font-mono">Kayıt Yok</div>;
-
-                const data = get1RMData(analysisExercise);
-                if (data.length < 2) return <div className="absolute inset-0 flex items-center justify-center text-zinc-600 text-[10px] font-mono text-center px-4">Gelişim analizi için (Maks 15 tekrarlı) en az 2 kayıt gereklidir.</div>;
-
-                const maxRm = Math.max(...data.map(d => d.rm));
-                const minRm = Math.min(...data.map(d => d.rm));
-                const range = maxRm - minRm || 1;
-
-                return (
-                  <div className="min-w-full h-full flex items-end justify-start space-x-6 pt-6 pb-4 px-2">
-                    {data.map((point, i) => {
-                      const heightPercent = ((point.rm - minRm) / range) * 70 + 15;
-                      return (
-                        <div key={i} className="relative flex flex-col items-center group w-6 shrink-0">
-                          <div className="absolute bottom-full mb-1 text-[9px] font-bold font-mono text-cyan-400 bg-zinc-800 px-1.5 py-0.5 rounded shadow">{point.rm} PR</div>
-                          <div className="w-full bg-cyan-600 rounded-t-md transition-all duration-500 hover:bg-cyan-400" style={{ height: `${heightPercent}%` }}></div>
-                          <div className="absolute top-full mt-2 text-[8px] text-zinc-500 font-mono whitespace-nowrap">{new Date(point.date).toLocaleDateString('tr-TR', { month: 'short', day: 'numeric' })}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
+                if (performedExercises.length === 0) {
+                  return <div className="h-52 flex items-center justify-center text-zinc-600 text-xs font-mono">Kayıt Yok</div>;
+                }
+                return <TrendChart data={get1RMData(activeAnalysisExercise)} color="#22d3ee" unit=" kg" decimals={0} />;
               })()}
 
-              {analysisType === 'volume' && (() => {
-                if (weeklyVolumeData.length === 0) return <div className="absolute inset-0 flex items-center justify-center text-zinc-600 text-xs font-mono">Kayıt Yok</div>;
-
-                const maxVol = Math.max(...weeklyVolumeData.map(d => d.tonnage));
-                if (maxVol === 0) return <div className="absolute inset-0 flex items-center justify-center text-zinc-600 text-[10px] font-mono text-center px-4">Hacim verisi hesaplanamadı.</div>;
-
-                return (
-                  <div className="min-w-full h-full flex items-end justify-start space-x-8 pt-6 pb-4 px-2">
-                    {weeklyVolumeData.map((point, i) => {
-                      const heightPercent = (point.tonnage / maxVol) * 85;
-                      return (
-                        <div key={i} className="relative flex flex-col items-center group w-8 shrink-0">
-                          <div className="absolute bottom-full mb-1 text-[8px] font-bold font-mono text-cyan-400 bg-zinc-800 px-1.5 py-0.5 rounded shadow">{(point.tonnage / 1000).toFixed(1)}k</div>
-                          <div className="w-full bg-cyan-700/80 rounded-t-md transition-all duration-500 hover:bg-cyan-500" style={{ height: `${heightPercent}%` }}></div>
-                          <div className="absolute top-full mt-2 text-[7px] text-zinc-500 font-mono whitespace-nowrap">{point.label}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
+              {analysisType === 'volume' && (
+                <TrendChart
+                  data={weeklyVolumeData.map(w => ({ date: getLocalDateString(w.date), value: w.tonnage }))}
+                  color="#818cf8" unit=" kg" decimals={0}
+                />
+              )}
             </div>
           </div>
         )}
@@ -1525,15 +2128,16 @@ export default function App() {
     const totalF = safeMeals.reduce((sum, m) => sum + parseNumber(m.fats), 0);
 
     const calOut = parseNumber(currentNutritionForm.activeCaloriesOut);
-    const netEnergy = totalCalIn - composition.bmr - calOut;
+    const netEnergy = totalCalIn - nutritionComposition.bmr - calOut;
 
     const isUpdating = nutritionHistory.some(n => n.date === currentNutritionForm.date);
 
     // LBM Bazlı Makro Hedefleyici
     const getMacroTargets = () => {
-      const bmr = composition.bmr || 2000;
-      const weight = parseNumber(currentMetricsForm.weight) || 75;
-      const leanMass = parseNumber(composition.ffm) || (weight * 0.85);
+      const bmr = nutritionComposition.bmr || 2000;
+      const relevantMetrics = findMetricsForDate(metricsHistory, currentNutritionForm.date, currentMetricsForm);
+      const weight = parseNumber(relevantMetrics?.weight) || 75;
+      const leanMass = parseNumber(nutritionComposition.ffm) || (weight * 0.85);
 
       const goal = settings.nutritionGoal || 'bulk';
       const pMultiplierBulk = parseNumber(settings.proteinPerFfmBulk) || 2.2;
@@ -1633,7 +2237,7 @@ export default function App() {
                 <button onClick={saveDayAsTemplate} className="text-zinc-500 hover:text-cyan-400 flex items-center text-[9px] uppercase font-bold transition-colors" title="Günü Şablon Yap"><BookmarkPlus size={12} className="mr-1" /> Günü Kaydet</button>
               </div>
 
-              {safeMeals.map((meal, index) => (
+              {safeMeals.map((meal) => (
                 <div key={meal.id} className="bg-zinc-950 rounded-xl border border-zinc-800 p-3 relative">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-[10px] font-bold text-orange-500 uppercase tracking-wider">{meal.name}</span>
@@ -1683,7 +2287,7 @@ export default function App() {
 
             <div className="bg-zinc-950 rounded-2xl border border-zinc-800 p-4 space-y-2 font-mono text-xs mt-4">
               <div className="flex justify-between text-zinc-400"><span>Toplam Alınan:</span> <span className="text-emerald-400">+{totalCalIn}</span></div>
-              <div className="flex justify-between text-zinc-400"><span>Dinlenik Harcanan:</span> <span className="text-orange-400">-{composition.bmr}</span></div>
+              <div className="flex justify-between text-zinc-400"><span>Dinlenik Harcanan:</span> <span className="text-orange-400">-{nutritionComposition.bmr}</span></div>
               <div className="flex justify-between text-zinc-400 border-b border-zinc-800 pb-2"><span>Aktif Harcanan:</span> <span className="text-orange-400">-{calOut}</span></div>
               <div className="flex justify-between font-bold pt-1 text-sm">
                 <span className="text-zinc-300">Günlük Net Kalori:</span>
@@ -1755,12 +2359,17 @@ export default function App() {
                   {w.notes && <div className="text-[10px] bg-zinc-950 p-2 rounded-lg border border-zinc-800 text-zinc-400 font-mono mb-2"><span className="text-cyan-700 font-bold">NOT:</span> {w.notes}</div>}
 
                   <div className="space-y-2 mt-3 border-t border-zinc-800 pt-3">
-                    {(w.exercises || []).map(ex => (
-                      <div key={ex.id} className="text-[10px] flex justify-between text-zinc-400 font-mono">
-                        <span className="truncate w-2/3 font-bold">{ex.sets.length}x {ex.name}</span>
-                        <span className="w-1/3 text-right">PR: {Math.max(...ex.sets.map(s => parseNumber(s.weight)))}kg</span>
-                      </div>
-                    ))}
+                    {(w.exercises || []).map(ex => {
+                      const sets = Array.isArray(ex.sets) ? ex.sets : [];
+                      // Boş set dizisinde Math.max(-Infinity) döndüğü için önce kontrol edilir.
+                      const topWeight = sets.length > 0 ? Math.max(...sets.map(s => parseNumber(s.weight))) : 0;
+                      return (
+                        <div key={ex.id} className="text-[10px] flex justify-between text-zinc-400 font-mono">
+                          <span className="truncate w-2/3 font-bold">{sets.length}x {ex.name}</span>
+                          <span className="w-1/3 text-right">PR: {topWeight}kg</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -1771,12 +2380,13 @@ export default function App() {
 
       {historyTab === 'metrics' && (
         <div className="space-y-3">
-          {metricsHistory.length === 0 ? <p className="text-zinc-600 font-mono text-xs text-center py-10 bg-zinc-900 border border-zinc-800 rounded-2xl">Kayıt bulunamadı.</p> : null}
-          {metricsHistory.map(m => (
+          {metricsHistoryWithComposition.length === 0 ? <p className="text-zinc-600 font-mono text-xs text-center py-10 bg-zinc-900 border border-zinc-800 rounded-2xl">Kayıt bulunamadı.</p> : null}
+          {metricsHistoryWithComposition.map(m => (
             <div key={m.id} className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 relative flex items-center justify-between">
               <div>
                 <div className="text-xs font-bold text-cyan-400 mb-2">{new Date(m.date).toLocaleDateString('tr-TR')}</div>
-                <div className="text-[10px] text-zinc-400 font-mono mb-1">Ağırlık: <span className="text-zinc-200 font-bold">{m.weight}kg</span> | Yağ: <span className="text-zinc-200 font-bold">{m.bodyFat}%</span></div>
+                <div className="text-[10px] text-zinc-400 font-mono mb-1">Ağırlık: <span className="text-zinc-200 font-bold">{m.weight}kg</span> | Yağ: <span className="text-zinc-200 font-bold">%{m.composition.activeBF.toFixed(1)}</span> <span className="text-zinc-600">({FAT_METHOD_LABELS[m.fatPreference] || 'Manuel'})</span></div>
+                <div className="text-[10px] text-zinc-400 font-mono mb-1">Yağsız Kütle: <span className="text-emerald-400 font-bold">{m.composition.ffm}kg</span> | FFMI: <span className="text-emerald-400 font-bold">{m.composition.ffmi}</span></div>
                 <div className="text-[9px] text-zinc-500 font-mono mt-1">Kol: {m.measurements?.arm || '-'} | Bel: {m.measurements?.waist || '-'} | Kalça: {m.measurements?.hip || '-'}</div>
               </div>
               <div className="flex flex-col space-y-1">
@@ -1958,6 +2568,88 @@ export default function App() {
                 </button>
               </div>
 
+              <div className="border-t border-zinc-800 pt-5 mb-6 space-y-5">
+                <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Antrenman Sırasında</h4>
+
+                {isLockScreenSupported() && (
+                  <div className="flex items-center justify-between">
+                    <div className="pr-4">
+                      <div className="text-xs text-zinc-200 font-bold uppercase tracking-wider flex items-center"><Smartphone size={12} className="mr-1.5 text-cyan-500" /> Kilit Ekranı Kartı</div>
+                      <div className="text-[10px] text-zinc-500 mt-1 leading-tight">Ekran kapandığında geçen süre, mevcut hareket ve geçen antrenmanın setleri kilit ekranında görünür. Sessiz bir ses akışı gerektirir.</div>
+                    </div>
+                    <button onClick={() => setSettings(p => ({ ...p, lockScreenActivity: !p.lockScreenActivity }))} className={`w-12 h-6 rounded-full relative transition-colors shrink-0 ${settings.lockScreenActivity ? 'bg-cyan-600' : 'bg-zinc-700'}`}>
+                      <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${settings.lockScreenActivity ? 'translate-x-7' : 'translate-x-1'}`}></div>
+                    </button>
+                  </div>
+                )}
+
+                {isWakeLockSupported() && (
+                  <div className="flex items-center justify-between">
+                    <div className="pr-4">
+                      <div className="text-xs text-zinc-200 font-bold uppercase tracking-wider flex items-center"><Sun size={12} className="mr-1.5 text-yellow-500" /> Ekranı Açık Tut</div>
+                      <div className="text-[10px] text-zinc-500 mt-1 leading-tight">Seans boyunca ekranın kendiliğinden kapanmasını engeller.</div>
+                    </div>
+                    <button onClick={() => setSettings(p => ({ ...p, keepScreenAwake: !p.keepScreenAwake }))} className={`w-12 h-6 rounded-full relative transition-colors shrink-0 ${settings.keepScreenAwake ? 'bg-cyan-600' : 'bg-zinc-700'}`}>
+                      <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${settings.keepScreenAwake ? 'translate-x-7' : 'translate-x-1'}`}></div>
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between">
+                  <div className="pr-4">
+                    <div className="text-xs text-zinc-200 font-bold uppercase tracking-wider flex items-center"><Timer size={12} className="mr-1.5 text-cyan-500" /> Dinlenmeyi Otomatik Başlat</div>
+                    <div className="text-[10px] text-zinc-500 mt-1 leading-tight">Bir sete tekrar girdiğinde sayaç kendiliğinden başlar.</div>
+                  </div>
+                  <button onClick={() => setSettings(p => ({ ...p, autoRestTimer: !p.autoRestTimer }))} className={`w-12 h-6 rounded-full relative transition-colors shrink-0 ${settings.autoRestTimer ? 'bg-cyan-600' : 'bg-zinc-700'}`}>
+                    <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${settings.autoRestTimer ? 'translate-x-7' : 'translate-x-1'}`}></div>
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="pr-4">
+                    <div className="text-xs text-zinc-200 font-bold uppercase tracking-wider">Bitişte Sesli Uyarı</div>
+                    <div className="text-[10px] text-zinc-500 mt-1 leading-tight">Dinlenme bitince çift bip çalar. iOS titreşimi desteklemediği için ses tek güvenilir uyarıdır.</div>
+                  </div>
+                  <button onClick={() => setSettings(p => ({ ...p, restAlert: !p.restAlert }))} className={`w-12 h-6 rounded-full relative transition-colors shrink-0 ${settings.restAlert ? 'bg-cyan-600' : 'bg-zinc-700'}`}>
+                    <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${settings.restAlert ? 'translate-x-7' : 'translate-x-1'}`}></div>
+                  </button>
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-bold uppercase text-zinc-500 mb-2">Varsayılan Dinlenme Süresi</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[60, 90, 120, 180].map(sec => (
+                      <button key={sec} onClick={() => setSettings(p => ({ ...p, restSeconds: sec }))} className={`py-2 rounded-lg text-[10px] font-bold uppercase transition-colors border ${settings.restSeconds === sec ? 'bg-cyan-900/30 border-cyan-500 text-cyan-400' : 'bg-zinc-950 border-zinc-800 text-zinc-500'}`}>
+                        {sec}s
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-bold uppercase text-zinc-500 mb-2">Hedef Tekrar Aralığı (Progresyon)</label>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <div className="text-[8px] text-zinc-600 uppercase mb-1">Alt</div>
+                      <input type="number" inputMode="numeric" value={settings.repRangeMin}
+                        onChange={(e) => setSettings(p => ({ ...p, repRangeMin: Math.max(1, parseNumber(e.target.value) || 1) }))}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-zinc-100 font-mono text-xs outline-none text-center" />
+                    </div>
+                    <span className="text-zinc-600 mt-4">—</span>
+                    <div className="flex-1">
+                      <div className="text-[8px] text-zinc-600 uppercase mb-1">Üst</div>
+                      <input type="number" inputMode="numeric" value={settings.repRangeMax}
+                        onChange={(e) => setSettings(p => ({ ...p, repRangeMax: Math.max(1, parseNumber(e.target.value) || 1) }))}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-zinc-100 font-mono text-xs outline-none text-center" />
+                    </div>
+                  </div>
+                  <p className="text-[8px] text-zinc-500 font-mono mt-2 leading-relaxed">
+                    Çift progresyon: üst sınıra ulaşınca ağırlık artar ve alt sınıra dönülür.
+                    Aksi halde aynı ağırlıkta bir tekrar daha hedeflenir.
+                  </p>
+                </div>
+              </div>
+
               <div className="border-t border-zinc-800 pt-5 mb-6 space-y-4">
                 <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Beslenme ve Makro Hedefleri</h4>
                 <div>
@@ -2101,11 +2793,49 @@ export default function App() {
             <div className="bg-zinc-900 w-full rounded-2xl shadow-2xl border border-red-900/50 p-6 flex flex-col items-center text-center">
               <AlertCircle size={36} className="text-red-500 mb-4" />
               <h3 className="text-sm font-bold text-zinc-100 mb-2 uppercase tracking-wide">Kalıcı Silme</h3>
-              <p className="text-xs text-zinc-400 mb-6 font-mono">Veri yerel bellekten kalıcı olarak silinecektir.</p>
+              <p className="text-xs text-zinc-300 mb-1 font-mono font-bold">{DELETE_LABELS[deleteConfirm.type] || 'Kayıt'}</p>
+              <p className="text-xs text-zinc-400 mb-6 font-mono">Yerel bellekten kalıcı olarak silinecek, geri alınamaz.</p>
               <div className="flex w-full space-x-3">
                 <button onClick={() => setDeleteConfirm({ isOpen: false, type: null, id: null })} className="flex-1 bg-zinc-800 text-zinc-300 font-bold py-3.5 rounded-xl uppercase text-xs transition-colors">İptal</button>
                 <button onClick={executeDelete} className="flex-1 bg-red-600/90 text-white font-bold py-3.5 rounded-xl uppercase text-xs transition-colors">Sil</button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* IMPORT CONFIRM MODAL */}
+        {importConfirm && (
+          <div className="absolute inset-0 bg-black/90 z-[70] flex justify-center items-center px-4 backdrop-blur-sm">
+            <div className="bg-zinc-900 w-full rounded-2xl shadow-2xl border border-orange-900/50 p-6 flex flex-col">
+              <h3 className="text-sm font-bold text-zinc-100 mb-2 uppercase tracking-wide flex items-center">
+                <Upload size={16} className="mr-2 text-orange-500" /> Yedeği Yükle
+              </h3>
+              <p className="text-[10px] text-orange-300 mb-4 font-mono leading-relaxed bg-orange-900/10 border border-orange-900/30 rounded-lg p-3">
+                Bu işlem cihazdaki <strong>mevcut tüm verilerin üzerine yazar</strong> ve geri alınamaz.
+                Emin değilseniz önce mevcut verinizi indirin.
+              </p>
+
+              <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 mb-6 space-y-1.5 font-mono text-[10px]">
+                <div className="text-[8px] uppercase tracking-widest text-zinc-500 font-bold mb-2">Dosyadaki Kayıtlar</div>
+                <div className="flex justify-between text-zinc-400"><span>Antrenman</span> <span className="text-cyan-400 font-bold">{importConfirm.counts.workouts}</span></div>
+                <div className="flex justify-between text-zinc-400"><span>Ölçüm</span> <span className="text-cyan-400 font-bold">{importConfirm.counts.metrics}</span></div>
+                <div className="flex justify-between text-zinc-400"><span>Beslenme</span> <span className="text-orange-400 font-bold">{importConfirm.counts.nutrition}</span></div>
+              </div>
+
+              <div className="flex space-x-3">
+                <button onClick={() => setImportConfirm(null)} className="flex-1 bg-zinc-800 active:bg-zinc-700 text-zinc-300 font-bold py-3.5 rounded-xl uppercase text-xs transition-colors">İptal</button>
+                <button onClick={applyImport} className="flex-1 bg-orange-600 active:bg-orange-700 text-white font-bold py-3.5 rounded-xl uppercase text-xs transition-colors">Üzerine Yaz</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TOAST */}
+        {toast && (
+          <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-[80] px-4 w-full max-w-[380px] pointer-events-none">
+            <div className={`flex items-center space-x-2 px-4 py-3 rounded-xl border shadow-2xl backdrop-blur-sm ${toast.type === 'error' ? 'bg-red-950/90 border-red-800 text-red-300' : 'bg-emerald-950/90 border-emerald-800 text-emerald-300'}`}>
+              {toast.type === 'error' ? <AlertCircle size={14} className="shrink-0" /> : <Save size={14} className="shrink-0" />}
+              <span className="text-[11px] font-bold">{toast.message}</span>
             </div>
           </div>
         )}
