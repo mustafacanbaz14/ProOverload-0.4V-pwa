@@ -33,17 +33,35 @@ export const DEFAULT_EXERCISES = [
 ].sort();
 
 export const EXERCISE_RULES = [
-  [/crunch|plank|russian twist|ab wheel|rollout|hanging leg raise|hanging knee|toes to bar|sit-?up|dead bug|pallof|farmer|\bab /, 'Merkez', 'Core'],
-  [/face pull|reverse pec|rear delt|upright row/, 'Omuz', 'Pull'],
-  [/lateral raise|front raise/, 'Omuz', 'Push'],
-  [/overhead press|\bohp\b|shoulder press|arnold press|push press|military press/, 'Omuz', 'Push'],
-  [/tricep|skull crusher|pushdown|kickback|close grip bench/, 'Kol', 'Push'],
-  [/squat|leg press|leg curl|leg extension|lunge|deadlift|hip thrust|good morning|nordic|glute|calf raise/, 'Bacak', 'Legs'],
-  [/shrug/, 'Sırt', 'Pull'],
-  [/pull-?up|chin-?up|pulldown|\brow\b/, 'Sırt', 'Pull'],
-  [/bench press|chest press|\bfly\b|pec deck|crossover|dips|push-?up/, 'Göğüs', 'Push'],
-  [/curl/, 'Kol', 'Pull'],
-  [/press/, 'Göğüs', 'Push'],
+  // Karın & Bel
+  [/crunch|plank|russian twist|ab wheel|rollout|hanging leg raise|hanging knee|toes to bar|sit-?up|dead bug|pallof/, 'Karın', 'Core', []],
+  [/farmer|back extension|hyper-?extension|good morning/, 'Bel', 'Core', ['Karın']],
+
+  // Ön Kol & Arka Kol
+  [/bicep|curl|preacher|hammer/, 'Ön Kol', 'Pull', []],
+  [/tricep|skull crusher|pushdown|kickback|close grip bench/, 'Arka Kol', 'Push', []],
+
+  // Omuz
+  [/face pull|reverse pec|rear delt/, 'Omuz', 'Pull', []],
+  [/lateral raise|front raise/, 'Omuz', 'Push', []],
+  [/overhead press|\bohp\b|shoulder press|arnold press|push press|military press/, 'Omuz', 'Push', ['Arka Kol']],
+
+  // Bacak & Kalça
+  [/squat|leg press|hack squat|lunge/, 'Ön Bacak', 'Legs', ['Kalça']],
+  [/leg extension/, 'Ön Bacak', 'Legs', []],
+  [/leg curl|nordic/, 'Arka Bacak', 'Legs', []],
+  [/rdl|romanian deadlift|stiff-?leg|deadlift/, 'Arka Bacak', 'Legs', ['Kalça', 'Bel']],
+  [/hip thrust|glute/, 'Kalça', 'Legs', ['Arka Bacak']],
+  [/calf raise/, 'Ön Bacak', 'Legs', []],
+
+  // Sırt
+  [/shrug/, 'Sırt', 'Pull', []],
+  [/pull-?up|chin-?up|pulldown/, 'Sırt', 'Pull', ['Ön Kol']],
+  [/row|pendlay|t-bar/, 'Sırt', 'Pull', ['Ön Kol', 'Bel']],
+
+  // Göğüs
+  [/bench press|chest press|\bfly\b|pec deck|crossover|dips|push-?up/, 'Göğüs', 'Push', ['Arka Kol', 'Omuz']],
+  [/press/, 'Göğüs', 'Push', ['Omuz']],
 ];
 
 export const STORAGE_VERSIONS = ['_v16', '_v15', '_v14', '_v13'];
@@ -75,7 +93,11 @@ export const MUSCLE_VOLUME_LANDMARKS = {
   'Göğüs': { mev: 8, mav: 16, mrv: 22 },
   'Sırt': { mev: 10, mav: 18, mrv: 25 },
   'Omuz': { mev: 8, mav: 16, mrv: 22 },
-  'Kol': { mev: 6, mav: 14, mrv: 20 },
-  'Bacak': { mev: 10, mav: 18, mrv: 24 },
-  'Merkez': { mev: 4, mav: 10, mrv: 16 },
+  'Ön Kol': { mev: 6, mav: 14, mrv: 20 },
+  'Arka Kol': { mev: 6, mav: 14, mrv: 20 },
+  'Ön Bacak': { mev: 8, mav: 16, mrv: 22 },
+  'Arka Bacak': { mev: 6, mav: 12, mrv: 18 },
+  'Kalça': { mev: 6, mav: 14, mrv: 20 },
+  'Karın': { mev: 4, mav: 10, mrv: 16 },
+  'Bel': { mev: 4, mav: 8, mrv: 14 },
 };

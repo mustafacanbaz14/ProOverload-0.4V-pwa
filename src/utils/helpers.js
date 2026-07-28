@@ -21,14 +21,14 @@ export const getMondayOfCurrentWeek = () => {
 export const detectMuscleGroup = (name, customList = []) => {
   const customEx = customList.find(ex => (typeof ex === 'object' ? ex.name === name : ex === name));
   if (customEx && typeof customEx === 'object' && customEx.muscle) {
-    return { muscle: customEx.muscle, mechanics: customEx.mechanics || 'Diğer' };
+    return { muscle: customEx.muscle, mechanics: customEx.mechanics || 'Diğer', secondary: customEx.secondary || [] };
   }
 
   const lower = (name || '').toLowerCase();
-  for (const [pattern, muscle, mechanics] of EXERCISE_RULES) {
-    if (pattern.test(lower)) return { muscle, mechanics };
+  for (const [pattern, muscle, mechanics, secondary] of EXERCISE_RULES) {
+    if (pattern.test(lower)) return { muscle, mechanics, secondary: secondary || [] };
   }
-  return { muscle: 'Diğer', mechanics: 'Diğer' };
+  return { muscle: 'Diğer', mechanics: 'Diğer', secondary: [] };
 };
 
 export const foldForSearch = (text) => String(text || '')

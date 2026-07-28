@@ -248,12 +248,24 @@ export default function App() {
     const thisWeekSessions = thisWeekWorkouts.length;
     const thisWeekEffectiveSets = thisWeekWorkouts.reduce((sum, w) => sum + calcEffectiveSets(w.exercises), 0);
 
-    const muscleVolume = { 'Göğüs': 0, 'Sırt': 0, 'Omuz': 0, 'Kol': 0, 'Bacak': 0, 'Merkez': 0 };
+    const muscleVolume = {
+      'Göğüs': 0, 'Sırt': 0, 'Omuz': 0,
+      'Ön Kol': 0, 'Arka Kol': 0,
+      'Ön Bacak': 0, 'Arka Bacak': 0, 'Kalça': 0,
+      'Karın': 0, 'Bel': 0
+    };
+
     thisWeekWorkouts.forEach(w => {
       (w.exercises || []).forEach(ex => {
-        const { muscle } = detectMuscleGroup(ex.name, customExercises);
+        const { muscle, secondary } = detectMuscleGroup(ex.name, customExercises);
         const count = (ex.sets || []).filter(isWorkingSet).length;
-        if (muscleVolume[muscle] !== undefined) muscleVolume[muscle] += count;
+
+        if (count > 0) {
+          if (muscleVolume[muscle] !== undefined) muscleVolume[muscle] += count;
+          (secondary || []).forEach(sec => {
+            if (muscleVolume[sec] !== undefined) muscleVolume[sec] += count * 0.5;
+          });
+        }
       });
     });
 
