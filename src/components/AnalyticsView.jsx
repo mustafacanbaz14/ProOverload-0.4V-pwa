@@ -1,6 +1,6 @@
 import React, { memo, useState } from 'react';
 import TrendChart from './TrendChart';
-import { BODY_METRICS, MUSCLE_GROUPS, MUSCLE_VOLUME_LANDMARKS } from '../utils/constants';
+import { BODY_METRICS, MUSCLE_GROUPS, getVolumeLandmarks } from '../utils/constants';
 import { estimate1RM, isWorkingSet, parseNumber, detectMuscleGroup } from '../utils/helpers';
 import { movingAverage } from '../utils/tdee';
 
@@ -15,6 +15,7 @@ const AnalyticsView = memo(({
   workouts,
   allExercisesNames,
   customExercises = [],
+  experienceLevel = 'intermediate',
 }) => {
   const [muscleKey, setMuscleKey] = useState('Göğüs');
   const [showAverage, setShowAverage] = useState(true);
@@ -177,7 +178,7 @@ const AnalyticsView = memo(({
               <div key={k} className="bg-zinc-950 border border-zinc-800 rounded-xl py-2">
                 <span className="text-[9px] font-mono text-zinc-500 uppercase block">{k}</span>
                 <span className="text-sm font-mono font-bold text-zinc-200">
-                  {(MUSCLE_VOLUME_LANDMARKS[muscleKey] || {})[k]}
+                  {getVolumeLandmarks(muscleKey, experienceLevel)[k]}
                 </span>
               </div>
             ))}

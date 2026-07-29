@@ -7,7 +7,7 @@ import {
   requestWakeLock, playRestAlert, vibrateAlert
 } from './lockScreen';
 
-import { DEFAULT_EXERCISES, MUSCLE_GROUPS, MUSCLE_VOLUME_LANDMARKS } from './utils/constants';
+import { DEFAULT_EXERCISES, MUSCLE_GROUPS, getVolumeLandmarks } from './utils/constants';
 import { migrateCustomExercises } from './utils/migrations';
 import { computeAdaptiveTDEE } from './utils/tdee';
 import { templateToExercises, workoutToTemplate, suggestTemplateName } from './utils/templates';
@@ -35,6 +35,8 @@ import MuscleDetailModal from './components/MuscleDetailModal';
 import PlateCalculatorModal from './components/PlateCalculatorModal';
 import TemplatePreviewModal from './components/TemplatePreviewModal';
 import ExerciseEditorModal from './components/ExerciseEditorModal';
+import ExerciseLibraryModal from './components/ExerciseLibraryModal';
+import TemplateBuilderModal from './components/TemplateBuilderModal';
 
 export default function App() {
   const [initial] = useState(loadPersistedState);
@@ -63,6 +65,10 @@ export default function App() {
   const [plateCalc, setPlateCalc] = useState(null); // { weight } | null
   const [previewTemplate, setPreviewTemplate] = useState(null);
   const [editorExercise, setEditorExercise] = useState(null); // hareket adı
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  const [isBuilderOpen, setIsBuilderOpen] = useState(false);
+  // Kütüphaneden "yeni hareket" ile gelindiğinde kapanışta oraya dönülür.
+  const [pickerReturnsToLibrary, setPickerReturnsToLibrary] = useState(false);
 
   const [exerciseSearchQuery, setExerciseSearchQuery] = useState('');
   const [isAddingCustom, setIsAddingCustom] = useState(false);
@@ -187,11 +193,40 @@ export default function App() {
     return Array.from(new Set([...DEFAULT_EXERCISES, ...customNames])).sort();
   }, [customExercises]);
 
+  // Daha önce en az bir kez yapılmış hareketler. Seçim listesinin varsayılan
+  // içeriği bu; kalan ~100 hareket arama çubuğundan bulunur.
+  const performedNames = useMemo(() => {
+    const s = new Set();
+    workouts.forEach(w => (w.exercises || []).forEach(ex => { if (ex?.name) s.add(ex.name); }));
+    return s;
+  }, [workouts]);
+
+  // Yerleşik veritabanında olmayan her ad kullanıcının kendi eklediğidir.
+  // Yerleşik bir hareketin kas eşlemesini düzenlemek de customExercises'a kayıt
+  // yazar, bu yüzden "customExercises içinde mi" sorusu bu ayrımı yapamaz.
+  const isUserAddedExercise = useCallback(
+    (name) => !DEFAULT_EXERCISES.includes(name), []);
+
+  // Seçim listesinde görünmeyecek hareketler.
+  const pickerHiddenNames = useMemo(() => {
+    const hidden = new Set(settings.hiddenExercises || []);
+    const pinned = new Set(settings.pinnedExercises || []);
+    const out = new Set();
+    allExercisesNames.forEach(name => {
+      if (hidden.has(name)) { out.add(name); return; }
+      if (!performedNames.has(name) && !pinned.has(name)) out.add(name);
+    });
+    return out;
+  }, [allExercisesNames, performedNames, settings.hiddenExercises, settings.pinnedExercises]);
+
   const filteredExercises = useMemo(() => {
-    if (!exerciseSearchQuery.trim()) return allExercisesNames;
-    const query = foldForSearch(exerciseSearchQuery);
-    return allExercisesNames.filter(ex => foldForSearch(ex).includes(query));
-  }, [allExercisesNames, exerciseSearchQuery]);
+    const query = foldForSearch(exerciseSearchQuery).trim();
+    if (query) return allExercisesNames.filter(ex => foldForSearch(ex).includes(query));
+    if (settings.pickerShowAll) return allExercisesNames;
+    const shortlist = allExercisesNames.filter(ex => !pickerHiddenNames.has(ex));
+    // Hiç antrenman geçmişi olmayan kullanıcı boş listeyle karşılaşmasın.
+    return shortlist.length ? shortlist : allExercisesNames;
+  }, [allExercisesNames, exerciseSearchQuery, pickerHiddenNames, settings.pickerShowAll]);
 
   // Tarihe göre azalan sıralı listeler: hem arşiv görünümü hem de "en son ne yaptım"
   // sorguları bunlara dayanır, böylece kayıt sırasından bağımsız olarak doğru çalışır.
@@ -248,7 +283,7 @@ export default function App() {
 
     // Deload kararı kasa özel MRV tavanına göre verilir, sabit bir eşiğe göre değil.
     const isDeloadNeeded = Object.entries(muscleVolume).some(
-      ([muscle, volume]) => volume > (MUSCLE_VOLUME_LANDMARKS[muscle]?.mrv ?? 22)
+      ([muscle, volume]) => volume > getVolumeLandmarks(muscle, settings.experienceLevel).mrv
     );
 
     // İtme/çekme dengesi: bu haftaki etkili setlerin mekanik dağılımı.
@@ -301,7 +336,7 @@ export default function App() {
       pushPullBalanced,
       hasPushPullData
     };
-  }, [workouts, customExercises]);
+  }, [workouts, customExercises, settings.experienceLevel]);
 
   // Kas başına haftalık hacmin hangi hareketlerden geldiği.
   // Hacim hesabıyla aynı kuralları izler: yalnızca çalışma setleri, katkı ağırlığıyla.
@@ -688,6 +723,69 @@ export default function App() {
     showToast('Varsayılan eşlemeye dönüldü.');
   }, [showToast]);
 
+  // --- HAREKET KÜTÜPHANESİ ---
+
+  const getExerciseContributions = useCallback(
+    (name) => detectMuscleGroup(name, customExercises).contributions,
+    [customExercises]);
+
+  // Tek düğme iki listeyi birden yönetir: görünürse gizlenenlere, gizliyse
+  // sabitlenenlere yazılır. Böylece hem "yaptım ama listede istemiyorum" hem de
+  // "hiç yapmadım ama listede dursun" durumu tek dokunuşla kurulur.
+  const handleTogglePickerVisibility = useCallback((name) => {
+    setSettings(prev => {
+      const hidden = new Set(prev.hiddenExercises || []);
+      const pinned = new Set(prev.pinnedExercises || []);
+      const wasVisible = !hidden.has(name) && (performedNames.has(name) || pinned.has(name));
+      if (wasVisible) { hidden.add(name); pinned.delete(name); }
+      else { hidden.delete(name); if (!performedNames.has(name)) pinned.add(name); }
+      return { ...prev, hiddenExercises: [...hidden], pinnedExercises: [...pinned] };
+    });
+  }, [performedNames]);
+
+  const handleDeleteExercise = useCallback((name) => {
+    setCustomExercises(prev => prev.filter(ex => (typeof ex === 'object' ? ex.name : ex) !== name));
+    setSettings(prev => ({
+      ...prev,
+      hiddenExercises: (prev.hiddenExercises || []).filter(n => n !== name),
+      pinnedExercises: (prev.pinnedExercises || []).filter(n => n !== name),
+    }));
+    showToast(`"${name}" silindi. Geçmiş antrenman kayıtları korundu.`);
+  }, [showToast]);
+
+  // Program oluşturucu her dolu günü ayrı bir şablon yapar: uygulamanın şablon
+  // modeli tek seanslık, program adı gün adının önüne eklenir.
+  const handleSaveProgram = useCallback((programName, days) => {
+    const created = days
+      .filter(d => d.exercises.length > 0)
+      .map(d => ({
+        id: generateId(),
+        name: `${programName} — ${d.name}`,
+        createdAt: new Date().toISOString(),
+        exercises: d.exercises.map(ex => ({
+          name: ex.name,
+          sets: Array.from({ length: ex.sets }, () => ({
+            id: generateId(), weight: '', reps: '', rir: 2, tempo: '', formRating: 8, setType: 'normal'
+          })),
+        })),
+      }));
+    if (created.length === 0) return;
+    setTemplates(prev => [...created, ...prev]);
+    showToast(`${created.length} günlük "${programName}" programı kaydedildi.`);
+  }, [showToast]);
+
+  const closeExercisePicker = useCallback(() => {
+    setIsExerciseModalOpen(false);
+    setIsAddingCustom(false);
+    setNewCustomExercise('');
+    setNewExContribs({});
+    setExerciseSearchQuery('');
+    if (pickerReturnsToLibrary) {
+      setPickerReturnsToLibrary(false);
+      setIsLibraryOpen(true);
+    }
+  }, [pickerReturnsToLibrary]);
+
   const handleExportData = () => {
     const backup = {
       version: '0.5.0',
@@ -755,6 +853,12 @@ export default function App() {
     const { type, id } = deleteConfirm;
     if (!type || !id) return;
 
+    if (type === 'exercise') {
+      handleDeleteExercise(id);
+      setDeleteConfirm({ isOpen: false, type: null, id: null });
+      return;
+    }
+
     if (type === 'workout') setWorkouts(prev => prev.filter(w => w.id !== id));
     else if (type === 'metric') setMetricsHistory(prev => prev.filter(m => m.id !== id));
     else if (type === 'nutrition') setNutritionHistory(prev => prev.filter(n => n.id !== id));
@@ -769,6 +873,20 @@ export default function App() {
     if (existing) setCurrentNutritionForm(mergeNutrition(existing));
     else setCurrentNutritionForm(mergeNutrition({ date: date }));
   };
+
+  // Beslenme sekmesi her zaman bugünle açılır. Geçmiş bir günü Geçmiş
+  // bölümünden düzenledikten sonra sekmeye dönünce eski günde takılı kalmasın.
+  const handleChangeView = useCallback((next) => {
+    if (next === 'nutrition') {
+      const today = getLocalDateString();
+      setCurrentNutritionForm(prev => {
+        if (prev.date === today) return prev;
+        const existing = nutritionHistory.find(n => n.date === today);
+        return mergeNutrition(existing || { date: today });
+      });
+    }
+    setView(next);
+  }, [nutritionHistory]);
 
   const needsBackup = useMemo(() => {
     if (!lastBackupDate) return true;
@@ -818,6 +936,9 @@ export default function App() {
               onPreviewTemplate={setPreviewTemplate}
               customExercises={customExercises}
               restSeconds={settings.restSeconds}
+              experienceLevel={settings.experienceLevel}
+              onOpenLibrary={() => setIsLibraryOpen(true)}
+              onOpenTemplateBuilder={() => setIsBuilderOpen(true)}
             />
           )}
 
@@ -873,6 +994,7 @@ export default function App() {
               workouts={workouts}
               allExercisesNames={allExercisesNames}
               customExercises={customExercises}
+              experienceLevel={settings.experienceLevel}
             />
           )}
 
@@ -922,7 +1044,7 @@ export default function App() {
 
         {/* BOTTOM NAVIGATION */}
         {!activeWorkout && (
-          <Navbar view={view} setView={setView} />
+          <Navbar view={view} setView={handleChangeView} />
         )}
 
         {/* SETTINGS MODAL */}
@@ -983,6 +1105,7 @@ export default function App() {
           template={previewTemplate}
           customExercises={customExercises}
           restSeconds={settings.restSeconds}
+          experienceLevel={settings.experienceLevel}
           onStart={(t) => handleStartRequest(t)}
         />
 
@@ -999,6 +1122,38 @@ export default function App() {
           onReset={() => handleResetExerciseMapping(editorExercise)}
         />
 
+        {/* HAREKET KÜTÜPHANESİ */}
+        <ExerciseLibraryModal
+          isOpen={isLibraryOpen}
+          onClose={() => setIsLibraryOpen(false)}
+          allExerciseNames={allExercisesNames}
+          getContributions={getExerciseContributions}
+          isUserAdded={isUserAddedExercise}
+          performedNames={performedNames}
+          hiddenNames={pickerHiddenNames}
+          onEditExercise={setEditorExercise}
+          onDeleteExercise={(name) => setDeleteConfirm({ isOpen: true, type: 'exercise', id: name })}
+          onToggleHidden={handleTogglePickerVisibility}
+          onAddNew={() => { setPickerReturnsToLibrary(true); setIsLibraryOpen(false); setIsExerciseModalOpen(true); setIsAddingCustom(true); }}
+        />
+
+        {/* PROGRAM OLUŞTURUCU */}
+        <TemplateBuilderModal
+          isOpen={isBuilderOpen}
+          onClose={() => setIsBuilderOpen(false)}
+          onSave={handleSaveProgram}
+          customExercises={customExercises}
+          restSeconds={settings.restSeconds}
+          experienceLevel={settings.experienceLevel}
+          libraryProps={{
+            allExerciseNames: allExercisesNames,
+            getContributions: getExerciseContributions,
+            isUserAdded: isUserAddedExercise,
+            performedNames,
+            hiddenNames: pickerHiddenNames,
+          }}
+        />
+
         {/* PLATE CALCULATOR */}
         <PlateCalculatorModal
           isOpen={Boolean(plateCalc)}
@@ -1013,6 +1168,7 @@ export default function App() {
           muscle={detailMuscle}
           total={detailMuscle ? (dashboardStats.muscleVolume[detailMuscle] || 0) : 0}
           breakdown={detailMuscle ? (muscleBreakdown[detailMuscle] || []) : []}
+          experienceLevel={settings.experienceLevel}
         />
 
         {/* REPORT CARD MODAL */}
@@ -1112,7 +1268,7 @@ export default function App() {
           <div className="fixed inset-0 bg-zinc-950 z-[100] flex flex-col h-[100dvh] max-w-[420px] mx-auto shadow-2xl">
             <div className="p-4 border-b border-zinc-800 bg-zinc-900 flex justify-between items-center pt-safe">
               <h3 className="text-xs font-bold text-zinc-100 uppercase tracking-wider flex items-center"><Database size={14} className="mr-2 text-cyan-500" /> Hareket Seçimi</h3>
-              <button onClick={() => { setIsExerciseModalOpen(false); setIsAddingCustom(false); setNewCustomExercise(''); }} className="text-zinc-500 p-2"><X size={18} /></button>
+              <button onClick={closeExercisePicker} className="text-zinc-500 p-2"><X size={18} /></button>
             </div>
             <div className="p-4 border-b border-zinc-800 bg-zinc-950">
               {!isAddingCustom ? (
@@ -1184,7 +1340,12 @@ export default function App() {
                         setNewCustomExercise('');
                         setNewExContribs({});
                         setIsAddingCustom(false);
-                        handleSelectExercise(newEx);
+                        if (pickerReturnsToLibrary || !activeWorkout) {
+                          showToast(`"${newEx}" kütüphaneye eklendi.`);
+                          closeExercisePicker();
+                        } else {
+                          handleSelectExercise(newEx);
+                        }
                       }}
                       className="flex-1 bg-cyan-600 active:bg-cyan-700 disabled:bg-zinc-800 disabled:text-zinc-600 text-white rounded-lg text-[11px] uppercase font-bold py-2.5 transition-colors"
                     >
@@ -1195,10 +1356,25 @@ export default function App() {
               )}
             </div>
             {!isAddingCustom && (
-              <div className="p-4 border-b border-zinc-800 bg-zinc-950">
+              <div className="p-4 border-b border-zinc-800 bg-zinc-950 space-y-2.5">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
-                  <input type="text" value={exerciseSearchQuery} onChange={(e) => setExerciseSearchQuery(e.target.value)} placeholder="Veritabanında ara..." className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-3 text-zinc-100 outline-none font-mono text-xs h-11 focus:border-cyan-500 transition-colors" />
+                  <input type="text" value={exerciseSearchQuery} onChange={(e) => setExerciseSearchQuery(e.target.value)} placeholder="Tüm veritabanında ara..." className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-3 text-zinc-100 outline-none font-mono text-xs h-11 focus:border-cyan-500 transition-colors" />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[9px] font-mono text-zinc-600 leading-snug min-w-0">
+                    {exerciseSearchQuery.trim()
+                      ? `${filteredExercises.length} sonuç · tüm veritabanı`
+                      : settings.pickerShowAll
+                        ? `Tüm ${filteredExercises.length} hareket listeleniyor`
+                        : `Kendi listen (${filteredExercises.length}) · diğerleri için ara`}
+                  </span>
+                  <button
+                    onClick={() => setSettings(prev => ({ ...prev, pickerShowAll: !prev.pickerShowAll }))}
+                    className={`shrink-0 px-2.5 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wide border transition-colors ${settings.pickerShowAll ? 'border-cyan-600 text-cyan-400 bg-cyan-950/20' : 'border-zinc-800 text-zinc-500'}`}
+                  >
+                    {settings.pickerShowAll ? 'Kendi listem' : 'Hepsini göster'}
+                  </button>
                 </div>
               </div>
             )}

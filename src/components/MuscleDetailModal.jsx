@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { X, Target, Calendar } from 'lucide-react';
-import { MUSCLE_VOLUME_LANDMARKS } from '../utils/constants';
+import { getVolumeLandmarks } from '../utils/constants';
 
 const WEIGHT_LABEL = {
   1: 'Birincil',
@@ -18,10 +18,10 @@ const WEIGHT_COLOR = {
  * Bir kas grubunun bu haftaki hacminin hangi hareketlerden geldiğini gösterir.
  * `breakdown`: [{ exerciseName, weight, sets, contributed, dates: [] }]
  */
-const MuscleDetailModal = memo(({ isOpen, onClose, muscle, total = 0, breakdown = [] }) => {
+const MuscleDetailModal = memo(({ isOpen, onClose, muscle, total = 0, breakdown = [], experienceLevel = 'intermediate' }) => {
   if (!isOpen || !muscle) return null;
 
-  const landmark = MUSCLE_VOLUME_LANDMARKS[muscle] || { mev: 8, mav: 16, mrv: 22 };
+  const landmark = getVolumeLandmarks(muscle, experienceLevel);
 
   let status = 'Koruma altı';
   let statusColor = 'text-amber-400';

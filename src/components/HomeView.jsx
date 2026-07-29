@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
-import { AlertCircle, Activity, Target, Zap, BookmarkPlus, Trash2, Trophy, Clock, Layers, ChevronRight } from 'lucide-react';
-import { MUSCLE_VOLUME_LANDMARKS, MUSCLE_SECTIONS } from '../utils/constants';
+import { AlertCircle, Activity, Target, Zap, BookmarkPlus, Trash2, Trophy, Clock, Layers, ChevronRight, Dumbbell, CalendarPlus } from 'lucide-react';
+import { MUSCLE_SECTIONS, getVolumeLandmarks } from '../utils/constants';
 import { previewTemplateVolume, estimateDuration } from '../utils/templates';
 import MuscleHeatmap from './MuscleHeatmap';
 
@@ -16,6 +16,9 @@ const HomeView = memo(({
   onPreviewTemplate,
   customExercises = [],
   restSeconds = 120,
+  experienceLevel = 'intermediate',
+  onOpenLibrary,
+  onOpenTemplateBuilder,
 }) => {
   return (
     <div className="p-4 space-y-5 pb-24 h-full overflow-y-auto hide-scrollbar bg-black">
@@ -64,7 +67,7 @@ const HomeView = memo(({
       </button>
 
       {/* İnteraktif Kas Isı Haritası */}
-      <MuscleHeatmap muscleVolume={dashboardStats.muscleVolume} onSelectMuscle={onSelectMuscle} />
+      <MuscleHeatmap muscleVolume={dashboardStats.muscleVolume} onSelectMuscle={onSelectMuscle} experienceLevel={experienceLevel} />
 
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-zinc-900 p-4 rounded-2xl border border-zinc-800">
@@ -107,7 +110,7 @@ const HomeView = memo(({
 
               {section.muscles.map(muscle => {
                 const vol = dashboardStats.muscleVolume[muscle] || 0;
-                const landmark = MUSCLE_VOLUME_LANDMARKS[muscle] || { mev: 8, mav: 16, mrv: 22 };
+                const landmark = getVolumeLandmarks(muscle, experienceLevel);
                 const percentage = Math.min(100, Math.round((vol / landmark.mav) * 100));
 
                 let statusLabel = 'Düşük';
@@ -158,6 +161,23 @@ const HomeView = memo(({
       <button onClick={() => handleStartRequest()} className="w-full bg-cyan-600 active:bg-cyan-700 text-white font-bold py-4 px-4 rounded-2xl flex justify-center items-center uppercase tracking-wide text-sm shadow-lg shadow-cyan-900/20 transition-all">
         <Zap size={18} className="mr-2" /> Antrenman Başlat
       </button>
+
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          onClick={() => onOpenLibrary?.()}
+          className="bg-zinc-900 active:bg-zinc-800 border border-zinc-800 text-zinc-300 font-bold py-3.5 px-3 rounded-2xl flex flex-col items-center justify-center gap-1.5 uppercase tracking-wide text-[10px] transition-colors"
+        >
+          <Dumbbell size={16} className="text-cyan-400" />
+          Hareket Kütüphanesi
+        </button>
+        <button
+          onClick={() => onOpenTemplateBuilder?.()}
+          className="bg-zinc-900 active:bg-zinc-800 border border-zinc-800 text-zinc-300 font-bold py-3.5 px-3 rounded-2xl flex flex-col items-center justify-center gap-1.5 uppercase tracking-wide text-[10px] transition-colors"
+        >
+          <CalendarPlus size={16} className="text-emerald-400" />
+          Program Oluştur
+        </button>
+      </div>
 
       {templates.length > 0 && (
         <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">

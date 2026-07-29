@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { X, Zap, Clock, Layers, Link2 } from 'lucide-react';
-import { MUSCLE_VOLUME_LANDMARKS } from '../utils/constants';
+import { getVolumeLandmarks } from '../utils/constants';
 import { previewTemplateVolume, estimateDuration } from '../utils/templates';
 import { isWorkingSet } from '../utils/helpers';
 
@@ -11,6 +11,7 @@ const TemplatePreviewModal = memo(({
   customExercises = [],
   restSeconds = 120,
   onStart,
+  experienceLevel = 'intermediate',
 }) => {
   if (!isOpen || !template) return null;
 
@@ -64,7 +65,7 @@ const TemplatePreviewModal = memo(({
             ) : (
               <div className="space-y-2">
                 {ranked.map(([muscle, vol]) => {
-                  const landmark = MUSCLE_VOLUME_LANDMARKS[muscle];
+                  const landmark = getVolumeLandmarks(muscle, experienceLevel);
                   // Tek seansın haftalık MAV hedefine oranı: "bu seans haftalık
                   // hedefin ne kadarını karşılıyor" sorusuna cevap verir.
                   const weeklyShare = landmark ? Math.round((vol / landmark.mav) * 100) : 0;

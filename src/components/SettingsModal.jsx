@@ -1,6 +1,7 @@
 import React, { memo } from 'react';
 import { X, Settings, Download, Upload, Smartphone, HeartPulse, Database, Dumbbell, Beef } from 'lucide-react';
 import { exportAppleHealthXML, exportGoogleFitJSON } from '../utils/healthSync';
+import { EXPERIENCE_LEVELS } from '../utils/constants';
 
 const Toggle = ({ label, hint, checked, onChange }) => (
   <label className="flex items-center justify-between gap-3 p-3 bg-zinc-950 rounded-xl border border-zinc-800 cursor-pointer">
@@ -156,6 +157,33 @@ const SettingsModal = memo(({
                   className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg py-2 text-center font-mono text-cyan-400 text-xs outline-none"
                 />
               </div>
+            </div>
+
+            <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800">
+              <span className="text-zinc-200 text-[11px] font-bold block">Antrenman Deneyimi</span>
+              <span className="text-zinc-500 text-[10px] font-mono block mt-0.5 mb-2 leading-snug">
+                Haftalık hacim hedeflerini (MEV / MAV / MRV) ölçekler.
+              </span>
+              <div className="grid grid-cols-3 gap-2">
+                {EXPERIENCE_LEVELS.map(l => (
+                  <button
+                    key={l.key}
+                    onClick={() => set({ experienceLevel: l.key })}
+                    className={`py-2 rounded-lg text-[10px] font-bold uppercase border transition-colors ${settings.experienceLevel === l.key ? 'bg-cyan-900/30 border-cyan-600 text-cyan-400' : 'bg-zinc-900 border-zinc-800 text-zinc-500'}`}
+                  >
+                    {l.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[9px] font-mono text-zinc-600 mt-2 leading-relaxed">
+                {(EXPERIENCE_LEVELS.find(l => l.key === settings.experienceLevel) || EXPERIENCE_LEVELS[1]).hint}
+              </p>
+              <p className="text-[9px] font-mono text-zinc-600 mt-1.5 leading-relaxed border-t border-zinc-900 pt-1.5">
+                Emin değilsen <strong className="text-zinc-400">Orta</strong> seç: referans değerler bu
+                seviyeye göre belirlendi ve çoğu kişi için en güvenli başlangıç.
+                Seviye ne olursa olsun hedef, MEV ile MAV arasında kalıp haftadan haftaya
+                hacmi yavaşça artırmak.
+              </p>
             </div>
           </Group>
 

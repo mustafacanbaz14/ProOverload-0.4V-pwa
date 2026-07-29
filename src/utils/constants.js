@@ -6,7 +6,15 @@ export const DEFAULT_SETTINGS = {
   autoCopyLastSet: true, nutritionGoal: 'bulk', proteinPerFfmBulk: 2.2, proteinPerFfmCut: 2.6,
   lockScreenActivity: true, keepScreenAwake: true,
   autoRestTimer: true, restSeconds: 120, restAlert: true,
-  repRangeMin: 6, repRangeMax: 10
+  repRangeMin: 6, repRangeMax: 10,
+  experienceLevel: 'intermediate',
+  // Hareket seçiminde varsayılan olarak yalnızca daha önce yapılmış hareketler
+  // listelenir; gerisi arama ile bulunur.
+  pickerShowAll: false,
+  // Kullanıcının kendi görünürlük listesi: hiddenExercises yapılmış olsa bile
+  // listeden çıkarır, pinnedExercises hiç yapılmamış olsa bile listeye sokar.
+  hiddenExercises: [],
+  pinnedExercises: []
 };
 
 export const DELETE_LABELS = {
@@ -247,21 +255,75 @@ export const SET_TYPE_KEYS = ['normal', 'warmup', 'drop', 'failure', 'rest_pause
 // Ön deltoid ve kalça her basış/çömeliş hareketinden bol dolaylı hacim aldığı
 // için MEV'leri düşük; yan ve arka deltoid yüksek hacme iyi yanıt verdiği için
 // MRV'leri yüksek.
+// Haftalık set hacmi referansları — ORTA SEVİYE temel alınmıştır.
+//
+//   MEV  (Minimum Effective Volume)  büyümenin başladığı en az hacim
+//   MAV  (Maximum Adaptive Volume)   gelişimin en verimli olduğu aralığın üstü
+//   MRV  (Maximum Recoverable Volume) toparlanmanın bozulduğu tavan
+//
+// Değerler hipertrofi literatüründe yaygın kullanılan aralıklara dayanır.
+// Dikkat çeken üç nokta:
+//  - Ön deltoid ve kalça her basış/çömeliş hareketinden bol dolaylı hacim alır;
+//    MEV'leri bu yüzden çok düşüktür, doğrudan çalışmaya çoğu kişide gerek kalmaz.
+//  - Yan ve arka deltoid küçük, hızlı toparlanan kaslardır; MRV'leri yüksektir.
+//  - Bel (erektörler) her bileşke hareketten yorulur ve yavaş toparlanır;
+//    doğrudan hacmi düşük tutmak gerekir.
 export const MUSCLE_VOLUME_LANDMARKS = {
   'Göğüs': { mev: 8, mav: 16, mrv: 22 },
-  'Kanat': { mev: 8, mav: 16, mrv: 22 },
-  'Orta Sırt': { mev: 6, mav: 14, mrv: 20 },
-  'Trapez': { mev: 4, mav: 12, mrv: 20 },
-  'Ön Omuz': { mev: 2, mav: 8, mrv: 14 },
-  'Yan Omuz': { mev: 6, mav: 16, mrv: 26 },
-  'Arka Omuz': { mev: 6, mav: 16, mrv: 24 },
-  'Biseps': { mev: 6, mav: 14, mrv: 20 },
-  'Triseps': { mev: 6, mav: 14, mrv: 20 },
-  'Önkol': { mev: 2, mav: 10, mrv: 16 },
-  'Quadriceps': { mev: 8, mav: 16, mrv: 20 },
-  'Hamstring': { mev: 4, mav: 12, mrv: 16 },
-  'Kalça': { mev: 4, mav: 12, mrv: 16 },
-  'Baldır': { mev: 6, mav: 14, mrv: 20 },
-  'Karın': { mev: 4, mav: 12, mrv: 20 },
-  'Bel': { mev: 2, mav: 8, mrv: 12 },
+  'Kanat': { mev: 10, mav: 18, mrv: 25 },
+  'Orta Sırt': { mev: 8, mav: 16, mrv: 22 },
+  'Trapez': { mev: 4, mav: 14, mrv: 26 },
+  'Ön Omuz': { mev: 2, mav: 10, mrv: 14 },
+  'Yan Omuz': { mev: 8, mav: 18, mrv: 26 },
+  'Arka Omuz': { mev: 6, mav: 16, mrv: 26 },
+  'Biseps': { mev: 8, mav: 16, mrv: 24 },
+  'Triseps': { mev: 6, mav: 12, mrv: 18 },
+  'Önkol': { mev: 2, mav: 10, mrv: 18 },
+  'Quadriceps': { mev: 8, mav: 14, mrv: 20 },
+  'Hamstring': { mev: 4, mav: 12, mrv: 18 },
+  'Kalça': { mev: 2, mav: 10, mrv: 16 },
+  'Baldır': { mev: 8, mav: 14, mrv: 20 },
+  'Karın': { mev: 4, mav: 16, mrv: 24 },
+  'Bel': { mev: 4, mav: 8, mrv: 10 },
+};
+
+// Deneyim seviyesine göre hacim ölçeklemesi.
+//
+// Acemi bir lifter az hacimle büyür ama iş kapasitesi düşüktür; ileri seviyede
+// uyaran eşiği yükselirken toparlanma kapasitesi de artar. Çarpanlar temel
+// (orta seviye) tabloya uygulanır.
+export const EXPERIENCE_LEVELS = [
+  {
+    key: 'beginner',
+    label: 'Yeni Başlayan',
+    hint: '0-1 yıl · Az hacimle hızlı gelişim, iş kapasitesi düşük',
+    mev: 0.7, mav: 0.7, mrv: 0.7,
+  },
+  {
+    key: 'intermediate',
+    label: 'Orta',
+    hint: '1-3 yıl · Referans değerler bu seviyeye göre belirlendi',
+    mev: 1, mav: 1, mrv: 1,
+  },
+  {
+    key: 'advanced',
+    label: 'İleri',
+    hint: '3+ yıl · Uyaran eşiği ve toparlanma kapasitesi yüksek',
+    mev: 1.2, mav: 1.2, mrv: 1.25,
+  },
+];
+
+/**
+ * Seçili deneyim seviyesine göre ölçeklenmiş hacim referansları.
+ * Tam sayıya yuvarlanır; MEV<MAV<MRV sırası her koşulda korunur.
+ */
+export const getVolumeLandmarks = (muscle, level = 'intermediate') => {
+  const base = MUSCLE_VOLUME_LANDMARKS[muscle];
+  if (!base) return { mev: 6, mav: 16, mrv: 22 };
+
+  const scale = EXPERIENCE_LEVELS.find(l => l.key === level) || EXPERIENCE_LEVELS[1];
+  const mev = Math.max(1, Math.round(base.mev * scale.mev));
+  const mav = Math.max(mev + 1, Math.round(base.mav * scale.mav));
+  const mrv = Math.max(mav + 1, Math.round(base.mrv * scale.mrv));
+  return { mev, mav, mrv };
 };

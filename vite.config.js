@@ -10,6 +10,17 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png'],
+      workbox: {
+        // Barkod tarayıcı (zxing) ~450 KB ve zaten çevrimiçi ürün sorgusuyla
+        // birlikte çalışıyor; ilk kuruluma yük olmasın diye önbelleğe alınmıyor,
+        // ihtiyaç anında indirilip çalışma zamanı önbelleğine yazılıyor.
+        globIgnores: ['**/BarcodeScannerModal-*.js'],
+        runtimeCaching: [{
+          urlPattern: /\/assets\/BarcodeScannerModal-.*\.js$/,
+          handler: 'CacheFirst',
+          options: { cacheName: 'barcode-scanner' }
+        }]
+      },
       manifest: {
         name: 'ProOverload Tracker',
         short_name: 'ProOverload',

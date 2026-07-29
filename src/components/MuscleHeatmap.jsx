@@ -1,22 +1,19 @@
 import React, { memo, useState } from 'react';
 import { Flame } from 'lucide-react';
-import { MUSCLE_VOLUME_LANDMARKS } from '../utils/constants';
+import { getVolumeLandmarks } from '../utils/constants';
 
-// Eşikler kasa özeldir: karın için 12 set verimliyken bel için tavanın üstü.
-function getLandmarks(muscle) {
-  return MUSCLE_VOLUME_LANDMARKS[muscle] || { mev: 6, mav: 16, mrv: 22 };
-}
-
-function getMuscleColor(count, muscle) {
-  const { mev, mrv } = getLandmarks(muscle);
+// Eşikler hem kasa hem deneyim seviyesine özeldir; seviye parametre olarak
+// geçirilir (modül düzeyinde tutulsaydı render saf olmazdı).
+function getMuscleColor(count, muscle, level) {
+  const { mev, mrv } = getVolumeLandmarks(muscle, level);
   if (!count) return '#27272a';       // çalışılmadı
   if (count < mev) return '#38bdf8';  // koruma altı
   if (count <= mrv) return '#34d399'; // verimli aralık
   return '#f97316';                    // tavanın üstü
 }
 
-function getMuscleStatus(count, muscle) {
-  const { mev, mav, mrv } = getLandmarks(muscle);
+function getMuscleStatus(count, muscle, level) {
+  const { mev, mav, mrv } = getVolumeLandmarks(muscle, level);
   if (!count) return 'Çalışılmadı';
   if (count < mev) return `Koruma altı · MEV ${mev}`;
   if (count <= mav) return `Verimli aralık · MAV ${mav}`;
@@ -24,7 +21,7 @@ function getMuscleStatus(count, muscle) {
   return `Tavanın üstünde · MRV ${mrv}`;
 }
 
-const MuscleHeatmap = memo(({ muscleVolume = {}, onSelectMuscle }) => {
+const MuscleHeatmap = memo(({ muscleVolume = {}, onSelectMuscle, experienceLevel = 'intermediate' }) => {
   const [selected, setSelected] = useState('Göğüs');
 
   const vol = (m) => muscleVolume[m] || 0;
@@ -32,7 +29,7 @@ const MuscleHeatmap = memo(({ muscleVolume = {}, onSelectMuscle }) => {
 
   // Her bölge tek yerden tanımlanır; renk ve seçim davranışı ortaklaşır.
   const region = (muscle) => ({
-    fill: getMuscleColor(vol(muscle), muscle),
+    fill: getMuscleColor(vol(muscle), muscle, experienceLevel),
     onClick: () => setSelected(muscle),
     className: 'cursor-pointer transition-all duration-300',
     stroke: selected === muscle ? '#e4e4e7' : 'transparent',
@@ -152,10 +149,10 @@ const MuscleHeatmap = memo(({ muscleVolume = {}, onSelectMuscle }) => {
             )}
           </div>
           <div className="text-right">
-            <span className="text-lg font-mono font-bold" style={{ color: getMuscleColor(activeCount, selected) }}>
+            <span className="text-lg font-mono font-bold" style={{ color: getMuscleColor(activeCount, selected, experienceLevel) }}>
               {activeCount}
             </span>
-            <span className="text-[10px] font-mono text-zinc-500 block">{getMuscleStatus(activeCount, selected)}</span>
+            <span className="text-[10px] font-mono text-zinc-500 block">{getMuscleStatus(activeCount, selected, experienceLevel)}</span>
           </div>
         </button>
 

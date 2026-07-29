@@ -37,7 +37,14 @@
       "Bash(python \"C:/Users/musta/AppData/Local/Temp/claude/C--Users-musta-Desktop-Bili-im-ProOverload-Tracker-app-project-ProOverload-0-5V-claude/5ea5c13f-494b-47ed-ab9f-7be1fc1e2b7c/scratchpad/patch_v06.py\")",
       "Bash(python \"C:/Users/musta/AppData/Local/Temp/claude/C--Users-musta-Desktop-Bili-im-ProOverload-Tracker-app-project-ProOverload-0-5V-claude/5ea5c13f-494b-47ed-ab9f-7be1fc1e2b7c/scratchpad/patch_ui_v06.py\")",
       "Bash(python \"C:/Users/musta/AppData/Local/Temp/claude/C--Users-musta-Desktop-Bili-im-ProOverload-Tracker-app-project-ProOverload-0-5V-claude/5ea5c13f-494b-47ed-ab9f-7be1fc1e2b7c/scratchpad/patch_lockscreen.py\")",
-      "Bash(git -c user.name=Mustafa -c user.email=mustafacanbaz448@gmail.com commit -q -m 'Şablon önizlemesi, kas eşlemesi düzenleme, süperset ve kilit ekranı yenilemesi *)"
+      "Bash(git -c user.name=Mustafa -c user.email=mustafacanbaz448@gmail.com commit -q -m 'Şablon önizlemesi, kas eşlemesi düzenleme, süperset ve kilit ekranı yenilemesi *)",
+      "Bash(python \"C:/Users/musta/AppData/Local/Temp/claude/C--Users-musta-Desktop-Bili-im-ProOverload-Tracker-app-project-ProOverload-0-5V-claude/5ea5c13f-494b-47ed-ab9f-7be1fc1e2b7c/scratchpad/patch_levels.py\")",
+      "Bash(npm install *)",
+      "Bash(node -e \"const p=require\\('./package.json'\\);console.log\\(JSON.stringify\\(p.dependencies,null,1\\)\\)\")",
+      "Bash(npm audit *)",
+      "Bash(sed -n '/export const DEFAULT_SETTINGS/,/^};/p' src/utils/constants.js)",
+      "Bash(sed -n '/const handleSelectExercise/,/^  }, \\\\[/p' src/App.jsx)",
+      "Bash(git commit *)"
     ]
   }
 }

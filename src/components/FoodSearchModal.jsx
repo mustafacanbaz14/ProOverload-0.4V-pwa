@@ -1,7 +1,8 @@
-import React, { useState, useMemo, memo } from 'react';
-import { X, Search, Barcode, Plus, Loader2, Utensils, Database, Star, Trash2, Save, Globe } from 'lucide-react';
+import React, { useState, useMemo, memo, lazy, Suspense } from 'react';
+import { X, Search, Barcode, Plus, Loader2, Utensils, Database, Star, Trash2, Save, Globe, Camera } from 'lucide-react';
 import { parseNumber, foldForSearch } from '../utils/helpers';
 import { FOOD_DATABASE, FOOD_CATEGORIES } from '../utils/foodDatabase';
+const BarcodeScannerModal = lazy(() => import('./BarcodeScannerModal'));
 
 const EMPTY_CUSTOM = { name: '', calories100g: '', protein100g: '', carbs100g: '', fats100g: '' };
 
@@ -23,6 +24,7 @@ const FoodSearchModal = memo(({
   const [errorMsg, setErrorMsg] = useState('');
 
   const [customForm, setCustomForm] = useState(EMPTY_CUSTOM);
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   // Yerel liste: kullanıcının kendi besinleri her zaman en üstte.
   const localResults = useMemo(() => {
@@ -37,9 +39,9 @@ const FoodSearchModal = memo(({
 
   if (!isOpen) return null;
 
-  const runOnlineSearch = async (e) => {
+  const runOnlineSearch = async (e, forcedCode) => {
     if (e) e.preventDefault();
-    const q = query.trim();
+    const q = (forcedCode || query).trim();
     if (!q) return;
 
     setLoading(true);
@@ -61,7 +63,7 @@ const FoodSearchModal = memo(({
     };
 
     try {
-      if (onlineMode === 'barcode') {
+      if (onlineMode === 'barcode' || forcedCode) {
         const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(q)}.json`);
         const data = await res.json();
         if (data.status === 1 && data.product) setOnlineResults([mapProduct(data.product)]);
@@ -81,6 +83,13 @@ const FoodSearchModal = memo(({
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleScanned = (code) => {
+    setScannerOpen(false);
+    setOnlineMode('barcode');
+    setQuery(code);
+    runOnlineSearch(null, code);
   };
 
   const addToMeal = (food) => {
@@ -190,6 +199,16 @@ const FoodSearchModal = memo(({
                   placeholder={tab === 'online' && onlineMode === 'barcode' ? 'Barkod numarası' : 'Besin adı ara...'}
                   className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-xs text-zinc-100 font-mono outline-none focus:border-orange-500 transition-colors"
                 />
+                {tab === 'online' && onlineMode === 'barcode' && (
+                  <button
+                    type="button"
+                    onClick={() => setScannerOpen(true)}
+                    title="Kamerayla barkod tara"
+                    className="bg-zinc-800 active:bg-zinc-700 border border-zinc-700 text-orange-400 px-3.5 rounded-xl flex items-center justify-center"
+                  >
+                    <Camera size={15} />
+                  </button>
+                )}
                 {tab === 'online' && (
                   <button type="submit" disabled={loading} className="bg-orange-600 active:bg-orange-700 text-white px-4 rounded-xl flex items-center justify-center">
                     {loading ? <Loader2 size={15} className="animate-spin" /> : <Search size={15} />}
@@ -351,6 +370,20 @@ const FoodSearchModal = memo(({
           )}
         </div>
       </div>
+
+      {scannerOpen && (
+        <Suspense fallback={
+          <div className="fixed inset-0 bg-black z-[110] flex items-center justify-center">
+            <Loader2 size={26} className="animate-spin text-orange-400" />
+          </div>
+        }>
+          <BarcodeScannerModal
+            isOpen
+            onClose={() => setScannerOpen(false)}
+            onDetect={handleScanned}
+          />
+        </Suspense>
+      )}
     </div>
   );
 });
