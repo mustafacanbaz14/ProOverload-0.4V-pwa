@@ -10,16 +10,27 @@ export const generateQRCodeMatrix = (text) => {
   return encoded;
 };
 
+/**
+ * Cihaz aktarımı için metin kodu üretir.
+ *
+ * Önceki sürüm kayıtları son 30 ile sınırlıyor, özel hareket ve besinleri hiç
+ * almıyordu; bu yolla yeni telefona geçen biri verisinin çoğunu sessizce
+ * kaybediyordu. Artık yedeğin tamamı taşınır ve alanlar tam adlarıyla yazılır.
+ */
 export const createQRDataString = (backupData) => {
   try {
-    const compact = {
-      w: (backupData.workouts || []).slice(0, 30),
-      m: (backupData.metricsHistory || []).slice(0, 30),
-      n: (backupData.nutritionHistory || []).slice(0, 30),
-      t: backupData.templates || [],
-      s: backupData.settings || {}
-    };
-    return JSON.stringify(compact);
+    return JSON.stringify({
+      version: '0.6.0',
+      schema: 2,
+      exportedAt: new Date().toISOString(),
+      workouts: backupData.workouts || [],
+      templates: backupData.templates || [],
+      customExercises: backupData.customExercises || [],
+      customFoods: backupData.customFoods || [],
+      metricsHistory: backupData.metricsHistory || [],
+      nutritionHistory: backupData.nutritionHistory || [],
+      settings: backupData.settings || {},
+    });
   } catch {
     return '';
   }

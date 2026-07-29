@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { Beef, Plus, Save, Trash2, Calendar, Search, TrendingUp } from 'lucide-react';
+import { Beef, Plus, Save, Trash2, Calendar, Search, TrendingUp, Activity } from 'lucide-react';
 import { parseNumber } from '../utils/helpers';
 
 const NutritionView = memo(({
@@ -13,6 +13,7 @@ const NutritionView = memo(({
   settings,
   nutritionHistory,
   setIsFoodSearchOpen,
+  adaptiveTDEE,
 }) => {
   const safeMeals = Array.isArray(currentNutritionForm.meals) ? currentNutritionForm.meals : [];
 
@@ -55,6 +56,58 @@ const NutritionView = memo(({
 
   return (
     <div className="p-4 space-y-4 pb-24 h-full overflow-y-auto hide-scrollbar bg-black">
+      {/* Gerçek harcama: kilo trendi + alım geçmişinden hesaplanır */}
+      {adaptiveTDEE && (
+        <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
+          <div className="flex justify-between items-center px-4 py-3 border-b border-zinc-800 bg-zinc-950/60">
+            <h3 className="text-[11px] font-bold text-zinc-200 uppercase tracking-wider flex items-center">
+              <Activity size={13} className="mr-2 text-emerald-400" /> Gerçek Günlük Harcama
+            </h3>
+            {!adaptiveTDEE.insufficient && (
+              <span className="text-[9px] font-mono text-zinc-500 uppercase">Güven: {adaptiveTDEE.confidence}</span>
+            )}
+          </div>
+
+          <div className="p-4">
+            {adaptiveTDEE.insufficient ? (
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-mono text-zinc-400">{adaptiveTDEE.reason}</p>
+                <p className="text-[10px] font-mono text-zinc-600 leading-relaxed">
+                  Yeterli veri birikince gerçek metabolizma hızın buradan hesaplanacak.
+                  O zamana kadar aşağıdaki hedefler formül BMR üzerinden veriliyor.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-end justify-between mb-3">
+                  <div>
+                    <span className="text-3xl font-mono font-bold text-emerald-400">{adaptiveTDEE.tdee}</span>
+                    <span className="text-[11px] font-mono text-zinc-500 ml-1">kcal/gün</span>
+                  </div>
+                  <span className="text-[10px] font-mono text-zinc-500 text-right">{adaptiveTDEE.note}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  {[
+                    { l: 'Ort. Alım', v: adaptiveTDEE.avgIntake + ' kcal' },
+                    { l: 'Haftalık', v: (adaptiveTDEE.weightChangePerWeek > 0 ? '+' : '') + adaptiveTDEE.weightChangePerWeek + ' kg' },
+                    { l: 'Veri', v: adaptiveTDEE.days + ' gün' },
+                  ].map(x => (
+                    <div key={x.l} className="bg-zinc-950 border border-zinc-800 rounded-xl py-2">
+                      <span className="text-[9px] font-mono text-zinc-500 block">{x.l}</span>
+                      <span className="text-[11px] font-mono font-bold text-zinc-200">{x.v}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[9px] font-mono text-zinc-600 mt-3 leading-relaxed">
+                  Kilo değişimi × 7700 kcal, ortalama alımdan düşülerek hesaplanır.
+                  Formül BMR'den farklıysa gerçek olan budur.
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Tarih ve Hedef Seçimi */}
       <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 space-y-3">
         <div className="flex justify-between items-center border-b border-zinc-800 pb-2">

@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { Activity, Pause, Play, Plus, X, Trash2, Trophy, TrendingUp, AlertCircle, Save, Timer } from 'lucide-react';
+import { Activity, Pause, Play, Plus, X, Trash2, Trophy, TrendingUp, AlertCircle, Save, Timer, Layers } from 'lucide-react';
 import WorkoutTimer from './WorkoutTimer';
 import { FORM_RATINGS, SET_TYPES } from '../utils/constants';
 import {
@@ -25,6 +25,7 @@ const ActiveWorkoutView = memo(({
   stopRest,
   rest,
   restSecondsLeft,
+  onOpenPlateCalc,
 }) => {
   if (!activeWorkout) return null;
 
@@ -111,9 +112,11 @@ const ActiveWorkoutView = memo(({
 
         {(activeWorkout.exercises || []).map((ex, exIndex) => {
           const recentData = getRecentExerciseData(ex.name);
-          const { muscle } = detectMuscleGroup(ex.name, customExercises);
+          const { muscle, contributions } = detectMuscleGroup(ex.name, customExercises);
           const target = recentData ? suggestNextTarget(recentData.sets, settings, muscle) : null;
           const record = personalRecords.get(ex.name);
+          // Katkılar büyükten küçüğe: birincil kas en solda.
+          const muscleParts = Object.entries(contributions || {}).sort((a, b) => b[1] - a[1]);
 
           return (
             <div key={ex.id} className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
@@ -121,6 +124,24 @@ const ActiveWorkoutView = memo(({
                 <h3 className="text-xs font-bold text-zinc-100 uppercase tracking-wide truncate pr-2"><span className="text-cyan-500 mr-1">{exIndex + 1}.</span>{ex.name}</h3>
                 <button onClick={() => setActiveWorkout(prev => ({ ...prev, exercises: prev.exercises.filter(e => e.id !== ex.id) }))} className="text-zinc-600 p-1"><X size={14} /></button>
               </div>
+
+              {/* Bu hareketin bir setinin hangi kasa ne kadar yazıldığı */}
+              {muscleParts.length > 0 && (
+                <div className="px-3 py-2 border-b border-zinc-800 bg-zinc-950/40 flex flex-wrap gap-1">
+                  {muscleParts.map(([m, w]) => (
+                    <span
+                      key={m}
+                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
+                        w === 1 ? 'text-emerald-400 border-emerald-900/50 bg-emerald-950/30'
+                          : w === 0.5 ? 'text-cyan-400 border-cyan-900/50 bg-cyan-950/30'
+                            : 'text-zinc-500 border-zinc-800 bg-zinc-900'
+                      }`}
+                    >
+                      {m}{w === 0.5 ? ' ½' : w === 0.25 ? ' ¼' : ''}
+                    </span>
+                  ))}
+                </div>
+              )}
 
               {target && (
                 <div className="bg-emerald-950/25 px-3 py-2 border-b border-emerald-900/40">
@@ -262,6 +283,17 @@ const ActiveWorkoutView = memo(({
                     className="flex-1 py-2 bg-zinc-950 hover:bg-zinc-900 active:bg-zinc-800 text-cyan-400 border border-dashed border-zinc-800 rounded-xl font-bold text-xs flex items-center justify-center uppercase tracking-wider transition-colors"
                   >
                     <Plus size={14} className="mr-1" /> Set Ekle
+                  </button>
+                  <button
+                    onClick={() => {
+                      // Son çalışma setinin ağırlığıyla aç; yoksa bugünkü hedefle.
+                      const lastWorking = [...(ex.sets || [])].reverse().find(s => isWorkingSet(s) && parseNumber(s.weight) > 0);
+                      onOpenPlateCalc?.(parseNumber(lastWorking?.weight) || target?.weight || 0);
+                    }}
+                    title="Plaka hesaplayıcı ve ısınma"
+                    className="px-3 py-2 bg-zinc-950 active:bg-zinc-800 text-cyan-500 border border-cyan-900/50 rounded-xl transition-colors shrink-0"
+                  >
+                    <Layers size={14} />
                   </button>
                   <button
                     onClick={() => startRest(settings.restSeconds || 120)}

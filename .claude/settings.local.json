@@ -25,7 +25,11 @@
       "Bash(git -c user.name=Mustafa -c user.email=mustafacanbaz448@gmail.com commit -q -m 'Tasarım: okunabilirlik ve ayarlar penceresi *)",
       "Bash(node scripts/verify-muscles.mjs)",
       "Bash(python \"C:/Users/musta/AppData/Local/Temp/claude/C--Users-musta-Desktop-Bili-im-ProOverload-Tracker-app-project-ProOverload-0-5V-claude/5ea5c13f-494b-47ed-ab9f-7be1fc1e2b7c/scratchpad/patch_custom.py\")",
-      "Bash(git -c user.name=Mustafa -c user.email=mustafacanbaz448@gmail.com commit -q -m 'Kas taksonomisini 16 gruba çıkar, göç ve doğrulama ekle *)"
+      "Bash(git -c user.name=Mustafa -c user.email=mustafacanbaz448@gmail.com commit -q -m 'Kas taksonomisini 16 gruba çıkar, göç ve doğrulama ekle *)",
+      "Bash(python \"C:/Users/musta/AppData/Local/Temp/claude/C--Users-musta-Desktop-Bili-im-ProOverload-Tracker-app-project-ProOverload-0-5V-claude/5ea5c13f-494b-47ed-ab9f-7be1fc1e2b7c/scratchpad/patch_phase4.py\")",
+      "Bash(python \"C:/Users/musta/AppData/Local/Temp/claude/C--Users-musta-Desktop-Bili-im-ProOverload-Tracker-app-project-ProOverload-0-5V-claude/5ea5c13f-494b-47ed-ab9f-7be1fc1e2b7c/scratchpad/patch_analytics.py\")",
+      "Bash(python \"C:/Users/musta/AppData/Local/Temp/claude/C--Users-musta-Desktop-Bili-im-ProOverload-Tracker-app-project-ProOverload-0-5V-claude/5ea5c13f-494b-47ed-ab9f-7be1fc1e2b7c/scratchpad/patch_tdee_ui.py\")",
+      "Bash(git -c user.name=Mustafa -c user.email=mustafacanbaz448@gmail.com commit -q -m 'Katkı gösterimi, ölçüm rehberi, TDEE, plaka hesaplayıcı ve kas trendi *)"
     ]
   }
 }

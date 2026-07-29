@@ -98,7 +98,7 @@ const SettingsModal = memo(({
               onClick={() => { onClose(); setIsQRModalOpen(true); }}
               className="w-full bg-cyan-950/40 border border-cyan-900/50 text-cyan-400 active:bg-cyan-900/60 font-bold py-2.5 rounded-xl flex items-center justify-center gap-2 uppercase tracking-wider text-[11px] transition-colors"
             >
-              <Smartphone size={14} /> QR ile Cihaz Aktarımı
+              <Smartphone size={14} /> Metin ile Cihaz Aktarımı
             </button>
           </div>
 

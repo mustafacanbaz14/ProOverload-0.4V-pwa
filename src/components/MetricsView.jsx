@@ -2,6 +2,7 @@ import React, { memo } from 'react';
 import { User, Scale, Ruler, Info, Save, ArrowRightLeft, Calendar, Droplet, History } from 'lucide-react';
 import { BODY_METRICS, FAT_METHOD_LABELS } from '../utils/constants';
 import { parseNumber } from '../utils/helpers';
+import MeasurementGuide from './MeasurementGuide';
 
 // Kaliper ölçüm noktaları. 3 bölge yöntemi cinsiyete göre farklı noktalar kullanır,
 // 7 bölge yönteminde hepsi girilir.
@@ -249,18 +250,7 @@ const MetricsView = memo(({
           </button>
         }
       >
-        {isMeasurementGuideOpen && (
-          <div className="bg-zinc-950 border border-zinc-800 p-3 rounded-xl text-[10px] font-mono text-zinc-400 space-y-1.5">
-            <p><strong className="text-zinc-200">Boyun:</strong> Adem elmasının hemen altından.</p>
-            <p><strong className="text-zinc-200">Omuz:</strong> Kollar yanda, en geniş noktadan.</p>
-            <p><strong className="text-zinc-200">Göğüs:</strong> Meme başı hizasında, nefes verdikten sonra.</p>
-            <p><strong className="text-zinc-200">Kol:</strong> Pazu sıkılıyken en geniş nokta.</p>
-            <p><strong className="text-zinc-200">Bel:</strong> Göbek deliği hizasında, karın rahatken.</p>
-            <p><strong className="text-zinc-200">Kalça:</strong> Yandan bakınca en geniş nokta.</p>
-            <p><strong className="text-zinc-200">Uyluk:</strong> Kasık altından en kalın bölge.</p>
-            <p><strong className="text-zinc-200">El bileği:</strong> Çıkıntı kemiğin hemen kola doğru arkasından.</p>
-          </div>
-        )}
+        {isMeasurementGuideOpen && <MeasurementGuide />}
 
         <div className="grid grid-cols-2 gap-2.5">
           {BODY_METRICS.filter(m => m.key !== 'weight').map(m => (

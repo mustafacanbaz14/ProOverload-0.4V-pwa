@@ -9,6 +9,7 @@ import {
 
 import { DEFAULT_EXERCISES, MUSCLE_GROUPS, MUSCLE_VOLUME_LANDMARKS } from './utils/constants';
 import { migrateCustomExercises } from './utils/migrations';
+import { computeAdaptiveTDEE } from './utils/tdee';
 
 import {
   generateId, getLocalDateString, getMondayOfCurrentWeek, detectMuscleGroup,
@@ -30,6 +31,7 @@ import FoodSearchModal from './components/FoodSearchModal';
 import MetricsComparisonModal from './components/MetricsComparisonModal';
 import ReportCardModal from './components/ReportCardModal';
 import MuscleDetailModal from './components/MuscleDetailModal';
+import PlateCalculatorModal from './components/PlateCalculatorModal';
 
 export default function App() {
   const [initial] = useState(loadPersistedState);
@@ -55,6 +57,7 @@ export default function App() {
   const [isComparisonOpen, setIsComparisonOpen] = useState(false);
   const [isReportCardOpen, setIsReportCardOpen] = useState(false);
   const [detailMuscle, setDetailMuscle] = useState(null);
+  const [plateCalc, setPlateCalc] = useState(null); // { weight } | null
 
   const [exerciseSearchQuery, setExerciseSearchQuery] = useState('');
   const [isAddingCustom, setIsAddingCustom] = useState(false);
@@ -194,6 +197,13 @@ export default function App() {
   const personalRecords = useMemo(() => {
     return buildPersonalRecords(workouts, activeWorkout?.id);
   }, [workouts, activeWorkout?.id]);
+
+  // Gerçek (adaptif) TDEE: ölçülen kilo değişimi + kaydedilen alım.
+  // Formül BMR yalnızca bir tahmindir; bu hesap gerçek harcamayı doğrudan ölçer.
+  const adaptiveTDEE = useMemo(
+    () => computeAdaptiveTDEE(metricsHistory, nutritionHistory),
+    [metricsHistory, nutritionHistory]
+  );
 
   const computedComp = useMemo(() => {
     return computeComposition(currentMetricsForm);
@@ -766,6 +776,7 @@ export default function App() {
               settings={settings}
               nutritionHistory={nutritionHistory}
               setIsFoodSearchOpen={setIsFoodSearchOpen}
+              adaptiveTDEE={adaptiveTDEE}
             />
           )}
 
@@ -780,6 +791,7 @@ export default function App() {
               metricsHistory={metricsHistory}
               workouts={workouts}
               allExercisesNames={allExercisesNames}
+              customExercises={customExercises}
             />
           )}
 
@@ -816,6 +828,7 @@ export default function App() {
               repsOnFocusRef={repsOnFocusRef}
               startRest={startRest}
               stopRest={stopRest}
+              onOpenPlateCalc={(w) => setPlateCalc({ weight: w })}
               rest={rest}
               restSecondsLeft={restSecondsLeft}
             />
@@ -845,7 +858,7 @@ export default function App() {
         <QRCodeModal
           isOpen={isQRModalOpen}
           onClose={() => setIsQRModalOpen(false)}
-          fullData={{ workouts, templates, customExercises, metricsHistory, nutritionHistory, settings }}
+          fullData={{ workouts, templates, customExercises, customFoods, metricsHistory, nutritionHistory, settings }}
           onImportData={handleImportData}
         />
 
@@ -876,6 +889,13 @@ export default function App() {
           isOpen={isComparisonOpen}
           onClose={() => setIsComparisonOpen(false)}
           metricsHistory={metricsHistory}
+        />
+
+        {/* PLATE CALCULATOR */}
+        <PlateCalculatorModal
+          isOpen={Boolean(plateCalc)}
+          onClose={() => setPlateCalc(null)}
+          initialWeight={plateCalc?.weight || 0}
         />
 
         {/* MUSCLE DETAIL MODAL */}
