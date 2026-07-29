@@ -8,12 +8,13 @@ import {
 } from './lockScreen';
 
 import { DEFAULT_EXERCISES, MUSCLE_GROUPS, MUSCLE_VOLUME_LANDMARKS } from './utils/constants';
+import { migrateCustomExercises } from './utils/migrations';
 
 import {
   generateId, getLocalDateString, getMondayOfCurrentWeek, detectMuscleGroup,
   foldForSearch, parseNumber, mergeMetrics, mergeNutrition,
   isWorkingSet, calcEffectiveSets, buildPersonalRecords, loadPersistedState,
-  computeComposition, sortByDateDesc
+  computeComposition, sortByDateDesc, storageKey
 } from './utils/helpers';
 
 import Navbar from './components/Navbar';
@@ -28,6 +29,7 @@ import QRCodeModal from './components/QRCodeModal';
 import FoodSearchModal from './components/FoodSearchModal';
 import MetricsComparisonModal from './components/MetricsComparisonModal';
 import ReportCardModal from './components/ReportCardModal';
+import MuscleDetailModal from './components/MuscleDetailModal';
 
 export default function App() {
   const [initial] = useState(loadPersistedState);
@@ -52,11 +54,12 @@ export default function App() {
   const [isFoodSearchOpen, setIsFoodSearchOpen] = useState(false);
   const [isComparisonOpen, setIsComparisonOpen] = useState(false);
   const [isReportCardOpen, setIsReportCardOpen] = useState(false);
+  const [detailMuscle, setDetailMuscle] = useState(null);
 
   const [exerciseSearchQuery, setExerciseSearchQuery] = useState('');
   const [isAddingCustom, setIsAddingCustom] = useState(false);
   const [newCustomExercise, setNewCustomExercise] = useState('');
-  const [newExMuscle, setNewExMuscle] = useState('Göğüs');
+  const [newExContribs, setNewExContribs] = useState({});
   const [newExMechanics, setNewExMechanics] = useState('Push');
 
   const [settings, setSettings] = useState(initial.settings);
@@ -96,49 +99,49 @@ export default function App() {
   // Kayıtları kalıcı belleğe kaydetme
   useEffect(() => {
     try {
-      localStorage.setItem('po_workouts_v16', JSON.stringify(workouts));
+      localStorage.setItem(storageKey('workouts'), JSON.stringify(workouts));
     } catch { /* yoksay */ }
   }, [workouts]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('po_templates_v16', JSON.stringify(templates));
+      localStorage.setItem(storageKey('templates'), JSON.stringify(templates));
     } catch { /* yoksay */ }
   }, [templates]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('po_custom_exercises_v16', JSON.stringify(customExercises));
+      localStorage.setItem(storageKey('custom_exercises'), JSON.stringify(customExercises));
     } catch { /* yoksay */ }
   }, [customExercises]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('po_custom_foods_v16', JSON.stringify(customFoods));
+      localStorage.setItem(storageKey('custom_foods'), JSON.stringify(customFoods));
     } catch { /* yoksay */ }
   }, [customFoods]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('po_active_workout_v16', JSON.stringify(activeWorkout));
+      localStorage.setItem(storageKey('active_workout'), JSON.stringify(activeWorkout));
     } catch { /* yoksay */ }
   }, [activeWorkout]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('po_metrics_v16', JSON.stringify(metricsHistory));
+      localStorage.setItem(storageKey('metrics'), JSON.stringify(metricsHistory));
     } catch { /* yoksay */ }
   }, [metricsHistory]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('po_nutrition_v16', JSON.stringify(nutritionHistory));
+      localStorage.setItem(storageKey('nutrition'), JSON.stringify(nutritionHistory));
     } catch { /* yoksay */ }
   }, [nutritionHistory]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('po_settings_v16', JSON.stringify(settings));
+      localStorage.setItem(storageKey('settings'), JSON.stringify(settings));
     } catch { /* yoksay */ }
   }, [settings]);
 
@@ -213,7 +216,12 @@ export default function App() {
         if (count === 0) return;
 
         Object.entries(contributions || {}).forEach(([muscle, weight]) => {
-          if (muscleVolume[muscle] !== undefined) muscleVolume[muscle] += count * weight;
+          if (muscleVolume[muscle] !== undefined) {
+            muscleVolume[muscle] += count * weight;
+          } else if (import.meta.env.DEV) {
+            // Bu koruma bir sürüm boyunca geçersiz kas adlarını gizledi.
+            console.warn('[hacim] tanınmayan kas grubu:', muscle, '·', ex.name);
+          }
         });
       });
     });
@@ -278,6 +286,39 @@ export default function App() {
       pushPullBalanced,
       hasPushPullData
     };
+  }, [workouts, customExercises]);
+
+  // Kas başına haftalık hacmin hangi hareketlerden geldiği.
+  // Hacim hesabıyla aynı kuralları izler: yalnızca çalışma setleri, katkı ağırlığıyla.
+  const muscleBreakdown = useMemo(() => {
+    const monday = getMondayOfCurrentWeek();
+    const byMuscle = {};
+
+    workouts
+      .filter(w => new Date(w.date) >= monday)
+      .forEach(w => {
+        (w.exercises || []).forEach(ex => {
+          const { contributions } = detectMuscleGroup(ex.name, customExercises);
+          const sets = (ex.sets || []).filter(isWorkingSet).length;
+          if (sets === 0) return;
+
+          Object.entries(contributions || {}).forEach(([muscle, weight]) => {
+            const bucket = (byMuscle[muscle] ||= {});
+            const entry = (bucket[ex.name] ||= { exerciseName: ex.name, weight, sets: 0, contributed: 0, dates: [] });
+            entry.sets += sets;
+            entry.contributed = Math.round(entry.sets * weight * 4) / 4;
+            if (!entry.dates.includes(w.date)) entry.dates.push(w.date);
+          });
+        });
+      });
+
+    // Her kasın listesi katkısı büyükten küçüğe sıralanır.
+    return Object.fromEntries(
+      Object.entries(byMuscle).map(([muscle, items]) => [
+        muscle,
+        Object.values(items).sort((a, b) => b.contributed - a.contributed)
+      ])
+    );
   }, [workouts, customExercises]);
 
   const handleSelectExercise = useCallback((exerciseName) => {
@@ -598,8 +639,24 @@ export default function App() {
   const handleImportData = (data) => {
     if (Array.isArray(data.workouts || data.w)) setWorkouts(data.workouts || data.w);
     if (Array.isArray(data.templates || data.t)) setTemplates(data.templates || data.t);
-    if (Array.isArray(data.customExercises)) setCustomExercises(data.customExercises);
-    if (Array.isArray(data.customFoods)) setCustomFoods(data.customFoods);
+    // Sürüm damgasına değil şekle bakılır: göç idempotent olduğu için yeni
+    // yedekler dokunulmadan geçer, eski yedekler taşınır.
+    // Yerelde oluşturulmuş kayıtlar silinmesin diye isimle birleştirilir.
+    if (Array.isArray(data.customExercises)) {
+      const incoming = migrateCustomExercises(data.customExercises);
+      setCustomExercises(prev => {
+        const byName = new Map(prev.map(ex => [typeof ex === 'object' ? ex.name : ex, ex]));
+        incoming.forEach(ex => byName.set(typeof ex === 'object' ? ex.name : ex, ex));
+        return [...byName.values()];
+      });
+    }
+    if (Array.isArray(data.customFoods)) {
+      setCustomFoods(prev => {
+        const byName = new Map(prev.map(f => [f.name, f]));
+        data.customFoods.forEach(f => byName.set(f.name, f));
+        return [...byName.values()];
+      });
+    }
     if (Array.isArray(data.metricsHistory || data.m)) setMetricsHistory((data.metricsHistory || data.m).map(mergeMetrics));
     if (Array.isArray(data.nutritionHistory || data.n)) setNutritionHistory((data.nutritionHistory || data.n).map(mergeNutrition));
     if (data.settings || data.s) setSettings(prev => ({ ...prev, ...(data.settings || data.s) }));
@@ -669,6 +726,7 @@ export default function App() {
               handleStartRequest={handleStartRequest}
               setDeleteConfirm={setDeleteConfirm}
               setIsReportCardOpen={setIsReportCardOpen}
+              onSelectMuscle={setDetailMuscle}
             />
           )}
 
@@ -820,6 +878,15 @@ export default function App() {
           metricsHistory={metricsHistory}
         />
 
+        {/* MUSCLE DETAIL MODAL */}
+        <MuscleDetailModal
+          isOpen={Boolean(detailMuscle)}
+          onClose={() => setDetailMuscle(null)}
+          muscle={detailMuscle}
+          total={detailMuscle ? (dashboardStats.muscleVolume[detailMuscle] || 0) : 0}
+          breakdown={detailMuscle ? (muscleBreakdown[detailMuscle] || []) : []}
+        />
+
         {/* REPORT CARD MODAL */}
         <ReportCardModal
           isOpen={isReportCardOpen}
@@ -927,43 +994,74 @@ export default function App() {
               ) : (
                 <div className="space-y-3 bg-zinc-900 p-3 rounded-xl border border-zinc-800">
                   <input type="text" value={newCustomExercise} onChange={(e) => setNewCustomExercise(e.target.value)} placeholder="Hareket Adı (Örn: Cable Lateral Raise)" className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-zinc-100 font-mono text-xs outline-none focus:border-cyan-500 transition-colors" />
-                  <div className="flex space-x-2">
-                    <div className="flex-1">
-                      <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Kas Grubu</label>
-                      <select value={newExMuscle} onChange={e => setNewExMuscle(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-zinc-300 text-[11px] outline-none">
-                        <option value="Göğüs">Göğüs</option>
-                        <option value="Sırt">Sırt</option>
-                        <option value="Bacak">Bacak</option>
-                        <option value="Omuz">Omuz</option>
-                        <option value="Kol">Kol</option>
-                        <option value="Merkez">Merkez</option>
-                        <option value="Diğer">Diğer</option>
-                      </select>
+                  <div>
+                    <div className="flex justify-between items-baseline mb-1.5">
+                      <label className="block text-[10px] font-bold text-zinc-500 uppercase">Kas Katkıları</label>
+                      <span className="text-[9px] font-mono text-zinc-600">dokun: 1 → ½ → ¼ → yok</span>
                     </div>
-                    <div className="flex-1">
-                      <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Mekanik</label>
-                      <select value={newExMechanics} onChange={e => setNewExMechanics(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-zinc-300 text-[11px] outline-none">
-                        <option value="Push">İtme (Push)</option>
-                        <option value="Pull">Çekme (Pull)</option>
-                        <option value="Legs">Bacak (Legs)</option>
-                        <option value="Core">Merkez (Core)</option>
-                        <option value="Diğer">Diğer</option>
-                      </select>
+                    <div className="grid grid-cols-3 gap-1">
+                      {MUSCLE_GROUPS.map(m => {
+                        const w = newExContribs[m] || 0;
+                        const cycle = { 0: 1, 1: 0.5, 0.5: 0.25, 0.25: 0 };
+                        return (
+                          <button
+                            key={m}
+                            onClick={() => setNewExContribs(prev => {
+                              const next = { ...prev };
+                              const val = cycle[w];
+                              if (val === 0) delete next[m]; else next[m] = val;
+                              return next;
+                            })}
+                            className={`py-1.5 px-1 rounded-lg border text-[9px] font-bold transition-colors ${
+                              w === 1 ? 'text-emerald-400 border-emerald-600 bg-emerald-950/40'
+                                : w === 0.5 ? 'text-cyan-400 border-cyan-700 bg-cyan-950/30'
+                                  : w === 0.25 ? 'text-zinc-300 border-zinc-600 bg-zinc-800'
+                                    : 'text-zinc-600 border-zinc-800 bg-zinc-950'
+                            }`}
+                          >
+                            {m}{w === 1 ? ' •' : w === 0.5 ? ' ½' : w === 0.25 ? ' ¼' : ''}
+                          </button>
+                        );
+                      })}
                     </div>
+                    <p className="text-[9px] font-mono text-zinc-600 mt-1.5 leading-snug">
+                      Tek kasa bir kez dokunmak yeterli. En az bir kas birincil (•) olmalı.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Mekanik</label>
+                    <select value={newExMechanics} onChange={e => setNewExMechanics(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-zinc-300 text-[11px] outline-none">
+                      <option value="Push">İtme (Push)</option>
+                      <option value="Pull">Çekme (Pull)</option>
+                      <option value="Legs">Bacak (Legs)</option>
+                      <option value="Core">Merkez (Core)</option>
+                    </select>
                   </div>
                   <div className="flex space-x-2 pt-2">
-                    <button onClick={() => { setIsAddingCustom(false); setNewCustomExercise(''); }} className="flex-1 text-zinc-500 bg-zinc-950 active:bg-zinc-800 rounded-lg text-[11px] uppercase font-bold py-2.5 transition-colors">İptal</button>
-                    <button onClick={() => {
-                      const newEx = (newCustomExercise || '').trim();
-                      if (!newEx) return;
-                      const exists = allExercisesNames.some(ex => ex.toLowerCase() === newEx.toLowerCase());
-                      if (!exists) {
-                        setCustomExercises(prev => [...prev, { name: newEx, muscle: newExMuscle, mechanics: newExMechanics }]);
-                      }
-                      setNewCustomExercise('');
-                      setIsAddingCustom(false);
-                      handleSelectExercise(newEx);
-                    }} className="flex-1 bg-cyan-600 active:bg-cyan-700 text-white rounded-lg text-[11px] uppercase font-bold py-2.5 transition-colors">Kaydet</button>
+                    <button onClick={() => { setIsAddingCustom(false); setNewCustomExercise(''); setNewExContribs({}); }} className="flex-1 text-zinc-500 bg-zinc-950 active:bg-zinc-800 rounded-lg text-[11px] uppercase font-bold py-2.5 transition-colors">İptal</button>
+                    <button
+                      disabled={!newCustomExercise.trim() || !Object.values(newExContribs).includes(1)}
+                      onClick={() => {
+                        const newEx = newCustomExercise.trim();
+                        const exists = allExercisesNames.some(ex => ex.toLowerCase() === newEx.toLowerCase());
+                        if (!exists) {
+                          setCustomExercises(prev => [...prev, {
+                            name: newEx,
+                            contributions: newExContribs,
+                            muscle: Object.entries(newExContribs).sort((a, b) => b[1] - a[1])[0][0],
+                            mechanics: newExMechanics,
+                            schema: 2
+                          }]);
+                        }
+                        setNewCustomExercise('');
+                        setNewExContribs({});
+                        setIsAddingCustom(false);
+                        handleSelectExercise(newEx);
+                      }}
+                      className="flex-1 bg-cyan-600 active:bg-cyan-700 disabled:bg-zinc-800 disabled:text-zinc-600 text-white rounded-lg text-[11px] uppercase font-bold py-2.5 transition-colors"
+                    >
+                      Kaydet
+                    </button>
                   </div>
                 </div>
               )}
@@ -978,14 +1076,31 @@ export default function App() {
             )}
             <div className="flex-1 overflow-y-auto bg-zinc-950 pb-safe hide-scrollbar">
               {filteredExercises.map(ex => {
-                const { muscle, mechanics } = detectMuscleGroup(ex, customExercises);
+                const { contributions } = detectMuscleGroup(ex, customExercises);
+                // Katkılar büyükten küçüğe: birincil kas en solda görünsün.
+                const parts = Object.entries(contributions || {}).sort((a, b) => b[1] - a[1]);
                 return (
-                  <button key={ex} onClick={() => handleSelectExercise(ex)} className="w-full flex justify-between items-center px-5 py-4 border-b border-zinc-900 text-zinc-300 active:bg-zinc-900 transition-colors text-left">
-                    <div>
+                  <button key={ex} onClick={() => handleSelectExercise(ex)} className="w-full flex justify-between items-start gap-3 px-5 py-3.5 border-b border-zinc-900 text-zinc-300 active:bg-zinc-900 transition-colors text-left">
+                    <div className="min-w-0 flex-1">
                       <div className="text-xs font-bold font-mono">{ex}</div>
-                      <div className="text-[10px] text-zinc-500 uppercase tracking-widest mt-1">{muscle} &bull; {mechanics}</div>
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {parts.length === 0 ? (
+                          <span className="text-[10px] text-zinc-600 font-mono">Kas eşlemesi yok</span>
+                        ) : parts.map(([muscle, weight]) => (
+                          <span
+                            key={muscle}
+                            className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
+                              weight === 1 ? 'text-emerald-400 border-emerald-900/50 bg-emerald-950/30'
+                                : weight === 0.5 ? 'text-cyan-400 border-cyan-900/50 bg-cyan-950/30'
+                                  : 'text-zinc-500 border-zinc-800 bg-zinc-900'
+                            }`}
+                          >
+                            {muscle}{weight === 0.5 ? ' ½' : weight === 0.25 ? ' ¼' : ''}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                    {getRecentExerciseData(ex) && <Activity size={14} className="text-cyan-600" />}
+                    {getRecentExerciseData(ex) && <Activity size={14} className="text-cyan-600 shrink-0 mt-1" />}
                   </button>
                 );
               })}

@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { AlertCircle, Activity, Target, Zap, BookmarkPlus, Trash2, Trophy } from 'lucide-react';
-import { MUSCLE_VOLUME_LANDMARKS } from '../utils/constants';
+import { MUSCLE_VOLUME_LANDMARKS, MUSCLE_SECTIONS } from '../utils/constants';
 import MuscleHeatmap from './MuscleHeatmap';
 
 const HomeView = memo(({
@@ -11,6 +11,7 @@ const HomeView = memo(({
   handleStartRequest,
   setDeleteConfirm,
   setIsReportCardOpen,
+  onSelectMuscle,
 }) => {
   return (
     <div className="p-4 space-y-5 pb-24 h-full overflow-y-auto hide-scrollbar bg-black">
@@ -59,7 +60,7 @@ const HomeView = memo(({
       </button>
 
       {/* İnteraktif Kas Isı Haritası */}
-      <MuscleHeatmap muscleVolume={dashboardStats.muscleVolume} />
+      <MuscleHeatmap muscleVolume={dashboardStats.muscleVolume} onSelectMuscle={onSelectMuscle} />
 
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-zinc-900 p-4 rounded-2xl border border-zinc-800">
@@ -86,53 +87,67 @@ const HomeView = memo(({
         </div>
       </div>
 
-      <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 space-y-3">
-        <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
-          <h3 className="text-[11px] font-bold text-zinc-400 uppercase tracking-widest flex items-center">
-            <Target size={12} className="mr-1.5 text-cyan-400" /> Haftalık Kas Hacmi & Rehber (MEV / MAV / MRV)
+      <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
+        <div className="flex justify-between items-center px-4 py-3 border-b border-zinc-800 bg-zinc-950/60">
+          <h3 className="text-[11px] font-bold text-zinc-200 uppercase tracking-wider flex items-center">
+            <Target size={13} className="mr-2 text-cyan-400" /> Haftalık Kas Hacmi
           </h3>
+          <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">MEV / MAV / MRV</span>
         </div>
-        <div className="space-y-3 pt-1">
-          {Object.entries(dashboardStats.muscleVolume).map(([muscle, vol]) => {
-            const landmark = MUSCLE_VOLUME_LANDMARKS[muscle] || { mev: 8, mav: 16, mrv: 22 };
-            const mavTarget = landmark.mav;
-            const percentage = Math.min(100, Math.round((vol / mavTarget) * 100));
 
-            let statusLabel = 'Düşük (İdame)';
-            let statusColor = 'text-amber-400 bg-amber-950/40 border-amber-900/40';
-            let barColor = 'bg-amber-500';
+        {/* 16 kas grubu tek listede uzun kalıyor; bölgelere ayrılıyor. */}
+        <div className="p-4 space-y-4">
+          {MUSCLE_SECTIONS.map(section => (
+            <div key={section.title} className="space-y-2.5">
+              <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{section.title}</h4>
 
-            if (vol >= landmark.mev && vol <= landmark.mav) {
-              statusLabel = 'Optimal (MAV)';
-              statusColor = 'text-emerald-400 bg-emerald-950/40 border-emerald-900/40';
-              barColor = 'bg-emerald-500';
-            } else if (vol > landmark.mav && vol <= landmark.mrv) {
-              statusLabel = 'Yüksek Hacim';
-              statusColor = 'text-cyan-400 bg-cyan-950/40 border-cyan-900/40';
-              barColor = 'bg-cyan-500';
-            } else if (vol > landmark.mrv) {
-              statusLabel = 'Aşırı Yükleme (MRV)';
-              statusColor = 'text-red-400 bg-red-950/40 border-red-900/40';
-              barColor = 'bg-red-500';
-            }
+              {section.muscles.map(muscle => {
+                const vol = dashboardStats.muscleVolume[muscle] || 0;
+                const landmark = MUSCLE_VOLUME_LANDMARKS[muscle] || { mev: 8, mav: 16, mrv: 22 };
+                const percentage = Math.min(100, Math.round((vol / landmark.mav) * 100));
 
-            return (
-              <div key={muscle} className="space-y-1">
-                <div className="flex justify-between text-[10px] text-zinc-300 font-mono uppercase font-bold items-center">
-                  <span className="flex items-center gap-1.5">
-                    {muscle}
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded border ${statusColor}`}>{statusLabel}</span>
-                  </span>
-                  <span className="text-zinc-400 font-mono">
-                    <strong className="text-zinc-100">{vol}</strong> / {mavTarget} Set <span className="text-zinc-500 text-[10px]">(MEV:{landmark.mev})</span>
-                  </span>
-                </div>
-                <div className="w-full bg-zinc-950 rounded-full h-1.5 border border-zinc-800">
-                  <div className={`h-1.5 rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${percentage}%` }}></div>
-                </div>
-              </div>
-            );
-          })}
+                let statusLabel = 'Düşük';
+                let statusColor = 'text-amber-400 bg-amber-950/40 border-amber-900/40';
+                let barColor = 'bg-amber-500';
+
+                if (vol >= landmark.mev && vol <= landmark.mav) {
+                  statusLabel = 'Verimli';
+                  statusColor = 'text-emerald-400 bg-emerald-950/40 border-emerald-900/40';
+                  barColor = 'bg-emerald-500';
+                } else if (vol > landmark.mav && vol <= landmark.mrv) {
+                  statusLabel = 'Yüksek';
+                  statusColor = 'text-cyan-400 bg-cyan-950/40 border-cyan-900/40';
+                  barColor = 'bg-cyan-500';
+                } else if (vol > landmark.mrv) {
+                  statusLabel = 'Tavan üstü';
+                  statusColor = 'text-red-400 bg-red-950/40 border-red-900/40';
+                  barColor = 'bg-red-500';
+                }
+
+                return (
+                  <button
+                    key={muscle}
+                    onClick={() => onSelectMuscle?.(muscle)}
+                    className="w-full space-y-1 text-left active:opacity-70 transition-opacity"
+                  >
+                    <div className="flex justify-between items-center gap-2">
+                      <span className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-[11px] text-zinc-200 font-bold truncate">{muscle}</span>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded border shrink-0 ${statusColor}`}>{statusLabel}</span>
+                      </span>
+                      <span className="text-[10px] text-zinc-400 font-mono shrink-0">
+                        <strong className="text-zinc-100">{vol}</strong>/{landmark.mav}
+                        <span className="text-zinc-600"> (MEV {landmark.mev})</span>
+                      </span>
+                    </div>
+                    <div className="w-full bg-zinc-950 rounded-full h-1.5 border border-zinc-800">
+                      <div className={`h-1.5 rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${percentage}%` }} />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </div>
       </div>
 

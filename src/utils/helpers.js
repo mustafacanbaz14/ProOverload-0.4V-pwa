@@ -1,6 +1,11 @@
 import {
-  EXERCISE_RULES, STORAGE_VERSIONS, DEFAULT_SETTINGS, SET_TYPE_KEYS
+  EXERCISE_RULES, STORAGE_VERSION, STORAGE_VERSIONS, DEFAULT_SETTINGS,
+  SET_TYPE_KEYS, SMALL_MUSCLE_GROUPS
 } from './constants';
+import { migrateCustomExercises, normalizeMuscleName } from './migrations';
+
+/** Yazma daima en yeni sürüm anahtarına yapılır. */
+export const storageKey = (name) => `po_${name}${STORAGE_VERSION}`;
 
 export const generateId = () => crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
 
@@ -35,15 +40,22 @@ const primaryFrom = (contributions) => {
  */
 export const detectMuscleGroup = (name, customList = []) => {
   const customEx = customList.find(ex => (typeof ex === 'object' ? ex.name === name : ex === name));
-  if (customEx && typeof customEx === 'object' && customEx.muscle) {
-    // Özel hareketler ağırlık tablosu taşıyabilir; taşımıyorsa (eski kayıtlar)
-    // birincil kas 1, varsa ikincil kaslar 0.5 kabul edilir.
-    const contributions = customEx.contributions || {
-      [customEx.muscle]: 1,
+  // Koruma hem contributions hem muscle'ı kabul eder: yalnızca contributions
+  // taşıyan bir kayıt buradan düşerse kullanıcının açık eşlemesi yok sayılıp
+  // regex tablosuna geri dönülürdü.
+  if (customEx && typeof customEx === 'object' && (customEx.contributions || customEx.muscle)) {
+    const raw = customEx.contributions || {
+      ...(customEx.muscle ? { [customEx.muscle]: 1 } : {}),
       ...Object.fromEntries((customEx.secondary || []).map(m => [m, 0.5]))
     };
+    // Göçten kaçmış bir kayıt bile geçersiz anahtar üretemesin.
+    const contributions = {};
+    for (const [rawMuscle, weight] of Object.entries(raw)) {
+      const muscle = normalizeMuscleName(rawMuscle);
+      if (muscle) contributions[muscle] = Math.max(contributions[muscle] || 0, weight);
+    }
     return {
-      muscle: customEx.muscle,
+      muscle: primaryFrom(contributions),
       mechanics: customEx.mechanics || 'Diğer',
       contributions
     };
@@ -190,7 +202,8 @@ export const suggestNextTarget = (previousSets, { repRangeMin, repRangeMax }, mu
   const rir = parseNumber(top.rir);
   if (reps <= 0) return null;
 
-  const increment = (muscle === 'Kol' || muscle === 'Omuz') ? 1.25 : 2.5;
+  // Küçük kas gruplarında 2.5 kg'lık sıçrama çok büyük kalır.
+  const increment = SMALL_MUSCLE_GROUPS.includes(muscle) ? 1.25 : 2.5;
 
   if (reps >= repRangeMax) {
     return {
@@ -239,7 +252,7 @@ export const loadPersistedState = () => {
   return {
     workouts: loadWithFallback(keys('workouts'), []),
     templates: loadWithFallback(keys('templates'), []),
-    customExercises: loadWithFallback(keys('custom_exercises'), []),
+    customExercises: migrateCustomExercises(loadWithFallback(keys('custom_exercises'), [])),
     customFoods: loadWithFallback(keys('custom_foods'), []),
     mealTemplates: loadWithFallback(keys('meal_templates'), []),
     dayTemplates: loadWithFallback(keys('day_templates'), []),
