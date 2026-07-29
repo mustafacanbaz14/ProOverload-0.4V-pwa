@@ -1,4 +1,4 @@
-import { MUSCLE_GROUPS, getVolumeLandmarks } from './constants';
+import { MUSCLE_GROUPS, getVolumeLandmarks, volumeStatusOf, VOLUME_STATUS } from './constants';
 import { previewTemplateVolume, estimateDuration } from './templates';
 import { estimateLiftingCalories } from './cardio';
 
@@ -58,13 +58,7 @@ export const computeWeekPlan = (plan = {}, templates = [], {
   const statuses = MUSCLE_GROUPS.map(muscle => {
     const volume = muscleVolume[muscle] || 0;
     const { mev, mav, mrv } = getVolumeLandmarks(muscle, experienceLevel);
-    let status = 'none';
-    if (volume === 0) status = 'none';
-    else if (volume < mev) status = 'under';
-    else if (volume <= mav) status = 'optimal';
-    else if (volume <= mrv) status = 'high';
-    else status = 'over';
-    return { muscle, volume, mev, mav, mrv, status };
+    return { muscle, volume, mev, mav, mrv, status: volumeStatusOf(volume, muscle, experienceLevel) };
   });
 
   const trainingDays = days.filter(d => d.template).length;
@@ -99,18 +93,10 @@ export const templateMuscleStatuses = (template, {
     .sort((a, b) => b.volume - a.volume);
 };
 
-export const STATUS_LABEL = {
-  none: 'Hiç çalışılmıyor',
-  under: 'MEV altında',
-  optimal: 'Verimli aralık',
-  high: 'Yüksek',
-  over: 'Tavanın üstünde',
-};
+// Etiketler ve renkler VOLUME_STATUS'tan gelir; haftalık planda "hiç
+// çalışılmıyor" ifadesi daha net olduğu için yalnızca o metin özelleştirilir.
+export const STATUS_LABEL = Object.fromEntries(
+  Object.entries(VOLUME_STATUS).map(([key, v]) => [key, key === 'none' ? 'Hiç çalışılmıyor' : v.label]));
 
-export const STATUS_COLOR = {
-  none: 'text-zinc-500 border-zinc-800 bg-zinc-950',
-  under: 'text-cyan-400 border-cyan-900/50 bg-cyan-950/25',
-  optimal: 'text-emerald-400 border-emerald-900/50 bg-emerald-950/25',
-  high: 'text-amber-400 border-amber-900/50 bg-amber-950/25',
-  over: 'text-orange-400 border-orange-900/50 bg-orange-950/25',
-};
+export const STATUS_COLOR = Object.fromEntries(
+  Object.entries(VOLUME_STATUS).map(([key, v]) => [key, v.chip]));

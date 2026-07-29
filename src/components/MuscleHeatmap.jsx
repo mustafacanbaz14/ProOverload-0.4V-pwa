@@ -1,24 +1,19 @@
 import React, { memo, useState } from 'react';
 import { Flame } from 'lucide-react';
-import { getVolumeLandmarks } from '../utils/constants';
+import { getVolumeLandmarks, volumeStatusOf, VOLUME_STATUS } from '../utils/constants';
 
 // Eşikler hem kasa hem deneyim seviyesine özeldir; seviye parametre olarak
 // geçirilir (modül düzeyinde tutulsaydı render saf olmazdı).
 function getMuscleColor(count, muscle, level) {
-  const { mev, mrv } = getVolumeLandmarks(muscle, level);
-  if (!count) return '#27272a';       // çalışılmadı
-  if (count < mev) return '#38bdf8';  // koruma altı
-  if (count <= mrv) return '#34d399'; // verimli aralık
-  return '#f97316';                    // tavanın üstü
+  return VOLUME_STATUS[volumeStatusOf(count, muscle, level)].hex;
 }
 
+// Etikete eşiği de ekler: kullanıcı rengin neye göre belirlendiğini görmeli.
 function getMuscleStatus(count, muscle, level) {
   const { mev, mav, mrv } = getVolumeLandmarks(muscle, level);
-  if (!count) return 'Çalışılmadı';
-  if (count < mev) return `Koruma altı · MEV ${mev}`;
-  if (count <= mav) return `Verimli aralık · MAV ${mav}`;
-  if (count <= mrv) return `Yüksek · MRV ${mrv}`;
-  return `Tavanın üstünde · MRV ${mrv}`;
+  const key = volumeStatusOf(count, muscle, level);
+  const suffix = { none: '', under: ` · MEV ${mev}`, optimal: ` · MAV ${mav}`, high: ` · MRV ${mrv}`, over: ` · MRV ${mrv}` };
+  return VOLUME_STATUS[key].label + suffix[key];
 }
 
 const MuscleHeatmap = memo(({
@@ -163,11 +158,14 @@ const MuscleHeatmap = memo(({
           </div>
         </button>
 
-        <div className="grid grid-cols-4 gap-1.5 text-[9px] font-mono text-center">
-          <div className="py-1.5 rounded-lg border border-zinc-800 text-zinc-500">Pasif</div>
-          <div className="py-1.5 rounded-lg border border-cyan-900/50 text-cyan-400">Koruma altı</div>
-          <div className="py-1.5 rounded-lg border border-emerald-900/50 text-emerald-400">Verimli</div>
-          <div className="py-1.5 rounded-lg border border-orange-900/50 text-orange-400">Tavan üstü</div>
+        {/* Gösterge doğrudan VOLUME_STATUS'tan üretilir — haritadaki renklerle
+            ayrı düşemez. */}
+        <div className="grid grid-cols-5 gap-1 text-[9px] font-mono text-center">
+          {Object.entries(VOLUME_STATUS).map(([key, v]) => (
+            <div key={key} className={`py-1.5 rounded-lg border ${v.chip}`}>
+              {key === 'none' ? 'Pasif' : v.label}
+            </div>
+          ))}
         </div>
       </div>
     </div>

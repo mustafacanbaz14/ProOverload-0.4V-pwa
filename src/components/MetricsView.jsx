@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import { User, Scale, Ruler, Info, Save, ArrowRightLeft, Calendar, Droplet, History } from 'lucide-react';
 import { BODY_METRICS, FAT_METHOD_LABELS } from '../utils/constants';
-import { parseNumber } from '../utils/helpers';
+import { parseNumber, clampNumber, INPUT_LIMITS } from '../utils/helpers';
 import MeasurementGuide from './MeasurementGuide';
 
 // Kaliper ölçüm noktaları. 3 bölge yöntemi cinsiyete göre farklı noktalar kullanır,
@@ -52,6 +52,11 @@ const MetricsView = memo(({
 
   const updateField = (field, value) =>
     setCurrentMetricsForm(prev => ({ ...prev, [field]: value }));
+
+  // Sınırlama odaktan çıkışta uygulanır: yazarken her tuşta alt sınıra
+  // zıplamak "17" yazmaya çalışan kullanıcıyı engellerdi.
+  const clampFieldOnBlur = (field, limit) => (e) =>
+    updateField(field, clampNumber(e.target.value, limit.min, limit.max));
 
   const updateMeasurement = (field, value) =>
     setCurrentMetricsForm(prev => ({
@@ -134,13 +139,13 @@ const MetricsView = memo(({
             </select>
           </Field>
           <Field label="Yaş">
-            <input type="number" inputMode="numeric" value={form.age} onChange={(e) => updateField('age', e.target.value)} className={`${inputClass} text-center`} />
+            <input type="number" inputMode="numeric" min={INPUT_LIMITS.age.min} max={INPUT_LIMITS.age.max} value={form.age} onChange={(e) => updateField('age', e.target.value)} onBlur={clampFieldOnBlur('age', INPUT_LIMITS.age)} className={`${inputClass} text-center`} />
           </Field>
           <Field label="Boy (cm)">
-            <input type="number" inputMode="decimal" value={form.height} onChange={(e) => updateField('height', e.target.value)} className={`${inputClass} text-center`} />
+            <input type="number" inputMode="decimal" min={INPUT_LIMITS.height.min} max={INPUT_LIMITS.height.max} value={form.height} onChange={(e) => updateField('height', e.target.value)} onBlur={clampFieldOnBlur('height', INPUT_LIMITS.height)} className={`${inputClass} text-center`} />
           </Field>
           <Field label="Kilo (kg)">
-            <input type="number" inputMode="decimal" step="0.1" value={form.weight} onChange={(e) => updateField('weight', e.target.value)} className={`${inputClass} text-center text-cyan-400 font-bold`} />
+            <input type="number" inputMode="decimal" step="0.1" min={INPUT_LIMITS.bodyWeight.min} max={INPUT_LIMITS.bodyWeight.max} value={form.weight} onChange={(e) => updateField('weight', e.target.value)} onBlur={clampFieldOnBlur('weight', INPUT_LIMITS.bodyWeight)} className={`${inputClass} text-center text-cyan-400 font-bold`} />
           </Field>
         </div>
       </Section>
@@ -170,9 +175,10 @@ const MetricsView = memo(({
         {form.fatPreference === 'manual' && (
           <Field label="Manuel Yağ Oranı (%)">
             <input
-              type="number" inputMode="decimal" step="0.1"
+              type="number" inputMode="decimal" step="0.1" min="1" max="70"
               value={form.bodyFat || ''}
               onChange={(e) => updateField('bodyFat', e.target.value)}
+              onBlur={(e) => updateField('bodyFat', clampNumber(e.target.value, 1, 70))}
               placeholder="örn. 14.5"
               className={`${inputClass} text-center`}
             />
@@ -198,8 +204,10 @@ const MetricsView = memo(({
                 <label className="text-[10px] font-mono text-zinc-500 uppercase block mb-1">{site.label}</label>
                 <input
                   type="number" inputMode="decimal" step="0.5"
+                  min={INPUT_LIMITS.skinfold.min} max={INPUT_LIMITS.skinfold.max}
                   value={form.skinfolds?.[site.key] || ''}
                   onChange={(e) => updateSkinfold(site.key, e.target.value)}
+                  onBlur={(e) => updateSkinfold(site.key, clampNumber(e.target.value, INPUT_LIMITS.skinfold.min, INPUT_LIMITS.skinfold.max))}
                   placeholder="mm"
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-zinc-200 font-mono text-xs text-center outline-none focus:border-cyan-600 transition-colors"
                 />
@@ -258,8 +266,10 @@ const MetricsView = memo(({
               <span className="text-[11px] font-mono text-zinc-400">{m.label}</span>
               <input
                 type="number" inputMode="decimal" step="0.5"
+                min={INPUT_LIMITS.measurement.min} max={INPUT_LIMITS.measurement.max}
                 value={form.measurements?.[m.key] || ''}
                 onChange={(e) => updateMeasurement(m.key, e.target.value)}
+                onBlur={(e) => updateMeasurement(m.key, clampNumber(e.target.value, INPUT_LIMITS.measurement.min, INPUT_LIMITS.measurement.max))}
                 placeholder="0"
                 className="w-14 bg-zinc-900 border border-zinc-800 rounded-lg py-1 font-mono text-xs text-center text-cyan-400 outline-none focus:border-cyan-600 transition-colors"
               />

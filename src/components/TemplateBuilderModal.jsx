@@ -2,6 +2,7 @@ import React, { useState, memo } from 'react';
 import { X, Plus, Trash2, Save, Clock, Layers, Calendar, ChevronUp, ChevronDown } from 'lucide-react';
 import { getVolumeLandmarks } from '../utils/constants';
 import { previewTemplateVolume, estimateDuration } from '../utils/templates';
+import { generateId } from '../utils/helpers';
 import ExerciseLibraryModal from './ExerciseLibraryModal';
 
 const DAY_NAMES = ['1. Gün', '2. Gün', '3. Gün', '4. Gün', '5. Gün', '6. Gün', '7. Gün'];
@@ -33,6 +34,9 @@ const TemplateBuilderModal = memo(({
     ? [{
       name: editing.name,
       exercises: (editing.exercises || []).map(ex => ({
+        // Aynı hareket bir güne iki kez eklenebiliyor; listeyi index yerine
+        // kalıcı bir kimlikle keylemek silme sonrası karışmayı önler.
+        uid: generateId(),
         name: ex.name,
         sets: Math.max(1, (ex.sets || []).length),
       })),
@@ -60,8 +64,8 @@ const TemplateBuilderModal = memo(({
   const maxVol = ranked.length ? ranked[0][1] : 1;
 
   const updateDay = (patch) => setDays(prev => prev.map((d, i) => i === activeDay ? { ...d, ...patch } : d));
-  const setExerciseSets = (idx, n) => updateDay({
-    exercises: day.exercises.map((ex, i) => i === idx ? { ...ex, sets: Math.max(1, Math.min(12, n)) } : ex)
+  const setExerciseSets = (uid, n) => updateDay({
+    exercises: day.exercises.map(ex => ex.uid === uid ? { ...ex, sets: Math.max(1, Math.min(12, n)) } : ex)
   });
 
   const canSave = programName.trim() && days.some(d => d.exercises.length > 0);
@@ -140,13 +144,13 @@ const TemplateBuilderModal = memo(({
             <div className="text-center py-8 text-zinc-600 text-[11px] font-mono">
               Bu güne henüz hareket eklenmedi.
             </div>
-          ) : day.exercises.map((ex, i) => (
-            <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-xl p-3">
+          ) : day.exercises.map(ex => (
+            <div key={ex.uid} className="bg-zinc-900 border border-zinc-800 rounded-xl p-3">
               <div className="flex justify-between items-center gap-2 mb-2">
                 <span className="text-[11px] font-bold text-zinc-200 truncate min-w-0">{ex.name}</span>
                 <div className="flex items-center shrink-0">
                   <button
-                    onClick={() => updateDay({ exercises: day.exercises.filter((_, j) => j !== i) })}
+                    onClick={() => updateDay({ exercises: day.exercises.filter(e => e.uid !== ex.uid) })}
                     className="text-zinc-600 active:text-red-500 p-1.5"
                   >
                     <Trash2 size={13} />
@@ -156,11 +160,11 @@ const TemplateBuilderModal = memo(({
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-mono text-zinc-500">Set sayısı</span>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setExerciseSets(i, ex.sets - 1)} className="w-7 h-7 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-400 flex items-center justify-center active:bg-zinc-800">
+                  <button onClick={() => setExerciseSets(ex.uid, ex.sets - 1)} className="w-7 h-7 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-400 flex items-center justify-center active:bg-zinc-800">
                     <ChevronDown size={13} />
                   </button>
                   <span className="w-6 text-center font-mono text-sm font-bold text-cyan-400">{ex.sets}</span>
-                  <button onClick={() => setExerciseSets(i, ex.sets + 1)} className="w-7 h-7 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-400 flex items-center justify-center active:bg-zinc-800">
+                  <button onClick={() => setExerciseSets(ex.uid, ex.sets + 1)} className="w-7 h-7 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-400 flex items-center justify-center active:bg-zinc-800">
                     <ChevronUp size={13} />
                   </button>
                 </div>
@@ -229,7 +233,7 @@ const TemplateBuilderModal = memo(({
         selectMode
         onSelect={(name) => {
           setDays(prev => prev.map((d, i) => i === activeDay
-            ? { ...d, exercises: [...d.exercises, { name, sets: 3 }] }
+            ? { ...d, exercises: [...d.exercises, { uid: generateId(), name, sets: 3 }] }
             : d));
           setPickerOpen(false);
         }}

@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { Beef, Plus, Save, Trash2, Calendar, Search, TrendingUp, Activity } from 'lucide-react';
-import { parseNumber } from '../utils/helpers';
+import { parseNumber, clampNumber, INPUT_LIMITS } from '../utils/helpers';
 
 const NutritionView = memo(({
   currentNutritionForm,
@@ -217,8 +217,10 @@ const NutritionView = memo(({
                 <label className="text-[10px] font-mono text-zinc-500 uppercase block mb-1">Protein (g)</label>
                 <input
                   type="number"
+                  min={INPUT_LIMITS.macro.min} max={INPUT_LIMITS.macro.max}
                   value={meal.protein}
                   onChange={(e) => updateMeal(meal.id, 'protein', e.target.value)}
+                  onBlur={(e) => updateMeal(meal.id, 'protein', clampNumber(e.target.value, INPUT_LIMITS.macro.min, INPUT_LIMITS.macro.max))}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2 font-mono text-emerald-400 outline-none text-center"
                   placeholder="0"
                 />
@@ -227,8 +229,10 @@ const NutritionView = memo(({
                 <label className="text-[10px] font-mono text-zinc-500 uppercase block mb-1">Karb (g)</label>
                 <input
                   type="number"
+                  min={INPUT_LIMITS.macro.min} max={INPUT_LIMITS.macro.max}
                   value={meal.carbs}
                   onChange={(e) => updateMeal(meal.id, 'carbs', e.target.value)}
+                  onBlur={(e) => updateMeal(meal.id, 'carbs', clampNumber(e.target.value, INPUT_LIMITS.macro.min, INPUT_LIMITS.macro.max))}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2 font-mono text-amber-400 outline-none text-center"
                   placeholder="0"
                 />
@@ -237,8 +241,10 @@ const NutritionView = memo(({
                 <label className="text-[10px] font-mono text-zinc-500 uppercase block mb-1">Yağ (g)</label>
                 <input
                   type="number"
+                  min={INPUT_LIMITS.macro.min} max={INPUT_LIMITS.macro.max}
                   value={meal.fats}
                   onChange={(e) => updateMeal(meal.id, 'fats', e.target.value)}
+                  onBlur={(e) => updateMeal(meal.id, 'fats', clampNumber(e.target.value, INPUT_LIMITS.macro.min, INPUT_LIMITS.macro.max))}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2 font-mono text-purple-400 outline-none text-center"
                   placeholder="0"
                 />

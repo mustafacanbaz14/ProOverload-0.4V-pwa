@@ -1,6 +1,7 @@
 import React, { useState, memo } from 'react';
 import { X, HeartPulse, Flame, Clock, Plus, Trash2 } from 'lucide-react';
 import { CARDIO_ACTIVITIES, CARDIO_GROUPS, findActivity, estimateCardioCalories } from '../utils/cardio';
+import { clampNumber, INPUT_LIMITS } from '../utils/helpers';
 
 const QUICK_MINUTES = [15, 20, 30, 45, 60];
 
@@ -66,8 +67,10 @@ const CardioModal = memo(({ isOpen, onClose, onSave, weightKg, existing = [], on
               <input
                 type="number"
                 inputMode="numeric"
+                min={INPUT_LIMITS.minutes.min}
+                max={INPUT_LIMITS.minutes.max}
                 value={minutes}
-                onChange={(e) => setMinutes(Math.max(0, Math.min(600, Number(e.target.value) || 0)))}
+                onChange={(e) => setMinutes(clampNumber(e.target.value, INPUT_LIMITS.minutes.min, INPUT_LIMITS.minutes.max) || 0)}
                 className="w-20 bg-zinc-950 border border-zinc-800 rounded-lg py-2 text-center font-mono text-cyan-400 text-sm outline-none focus:border-cyan-500"
               />
               <span className="text-[11px] font-mono text-zinc-500">dk</span>

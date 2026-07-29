@@ -135,11 +135,14 @@ const HistoryView = memo(({
                     </div>
                   )}
 
+                  {/* Set özeti alt satıra sarar: shrink-0 ile tek satırda
+                      tutulunca çok setli hareketlerde metin ekranın dışına
+                      taşıp görünmeden kesiliyordu. */}
                   <div className="space-y-1.5 pt-1">
                     {(w.exercises || []).map((ex, i) => (
-                      <div key={i} className="text-[11px] font-mono text-zinc-300 bg-zinc-950/50 p-2 rounded-xl border border-zinc-800/50 flex justify-between items-center">
-                        <span className="font-bold text-zinc-200 truncate pr-2">{ex.name}</span>
-                        <span className="text-zinc-400 text-[10px] shrink-0">
+                      <div key={i} className="text-[11px] font-mono text-zinc-300 bg-zinc-950/50 p-2 rounded-xl border border-zinc-800/50 flex justify-between items-start gap-2">
+                        <span className="font-bold text-zinc-200 truncate shrink-0 max-w-[45%]">{ex.name}</span>
+                        <span className="text-zinc-400 text-[10px] text-right break-words min-w-0">
                           {(ex.sets || []).filter(isWorkingSet).map(s => `${s.weight}x${s.reps}`).join(' · ')}
                         </span>
                       </div>

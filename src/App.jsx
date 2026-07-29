@@ -11,13 +11,15 @@ import { DEFAULT_EXERCISES, MUSCLE_GROUPS, getVolumeLandmarks } from './utils/co
 import { migrateCustomExercises } from './utils/migrations';
 import { computeAdaptiveTDEE } from './utils/tdee';
 import { totalCardioCalories } from './utils/cardio';
+import { safeSetItem, safeSetRawItem, createErrorThrottle } from './utils/persist';
 import { templateToExercises, workoutToTemplate, suggestTemplateName } from './utils/templates';
 
 import {
   generateId, getLocalDateString, getMondayOfCurrentWeek, detectMuscleGroup,
   foldForSearch, parseNumber, mergeMetrics, mergeNutrition,
   isWorkingSet, calcEffectiveSets, buildPersonalRecords, loadPersistedState,
-  computeComposition, sortByDateDesc, storageKey, suggestNextTarget, mergeSettings
+  computeComposition, sortByDateDesc, storageKey, suggestNextTarget, mergeSettings,
+  mergeWorkout, mergeTemplate
 } from './utils/helpers';
 
 import Navbar from './components/Navbar';
@@ -111,59 +113,33 @@ export default function App() {
   useEffect(() => { activeWorkoutRef.current = activeWorkout; }, [activeWorkout]);
   useEffect(() => { restRef.current = rest; }, [rest]);
 
-  const showToast = useCallback((message) => {
-    setToast({ message, type: 'info' });
-    setTimeout(() => setToast(null), 3000);
+  // Hata tostu daha uzun durur: veri kaybı uyarısını kaçırmak kritik.
+  const showToast = useCallback((message, type = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), type === 'error' ? 6000 : 3000);
   }, []);
 
-  // Kayıtları kalıcı belleğe kaydetme
-  useEffect(() => {
-    try {
-      localStorage.setItem(storageKey('workouts'), JSON.stringify(workouts));
-    } catch { /* yoksay */ }
-  }, [workouts]);
+  // Kayıt hatalarını tek toasta indirger: sekiz effect aynı kota hatasına
+  // takıldığında kullanıcı sekiz uyarı görmemeli.
+  const notifyPersistError = useMemo(
+    () => createErrorThrottle((message) => showToast(message, 'error')),
+    [showToast]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(storageKey('templates'), JSON.stringify(templates));
-    } catch { /* yoksay */ }
-  }, [templates]);
+  const persist = useCallback(
+    (name, value) => safeSetItem(storageKey(name), value, notifyPersistError),
+    [notifyPersistError]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(storageKey('custom_exercises'), JSON.stringify(customExercises));
-    } catch { /* yoksay */ }
-  }, [customExercises]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(storageKey('custom_foods'), JSON.stringify(customFoods));
-    } catch { /* yoksay */ }
-  }, [customFoods]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(storageKey('active_workout'), JSON.stringify(activeWorkout));
-    } catch { /* yoksay */ }
-  }, [activeWorkout]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(storageKey('metrics'), JSON.stringify(metricsHistory));
-    } catch { /* yoksay */ }
-  }, [metricsHistory]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(storageKey('nutrition'), JSON.stringify(nutritionHistory));
-    } catch { /* yoksay */ }
-  }, [nutritionHistory]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(storageKey('settings'), JSON.stringify(settings));
-    } catch { /* yoksay */ }
-  }, [settings]);
+  // Kayıtları kalıcı belleğe kaydetme. Yazma başarısız olursa (kota dolu veya
+  // depolama kapalı) kullanıcı uyarılır — sessizce yutulursa veri kaybını fark
+  // etmeden antrenman girmeye devam eder.
+  useEffect(() => { persist('workouts', workouts); }, [workouts, persist]);
+  useEffect(() => { persist('templates', templates); }, [templates, persist]);
+  useEffect(() => { persist('custom_exercises', customExercises); }, [customExercises, persist]);
+  useEffect(() => { persist('custom_foods', customFoods); }, [customFoods, persist]);
+  useEffect(() => { persist('active_workout', activeWorkout); }, [activeWorkout, persist]);
+  useEffect(() => { persist('metrics', metricsHistory); }, [metricsHistory, persist]);
+  useEffect(() => { persist('nutrition', nutritionHistory); }, [nutritionHistory, persist]);
+  useEffect(() => { persist('settings', settings); }, [settings, persist]);
 
   // Dinlenme sayacı
   useEffect(() => {
@@ -831,7 +807,9 @@ export default function App() {
     URL.revokeObjectURL(url);
     const today = getLocalDateString();
     setLastBackupDate(today);
-    localStorage.setItem('po_last_backup', today);
+    // Yedek tarihi yazılamazsa yalnızca "yedekleme uyarısı" erken görünür;
+    // dosya zaten indi, bu yüzden hata kullanıcıya ayrıca bildirilmiyor.
+    safeSetRawItem('po_last_backup', today);
     showToast('Yedek indirildi.');
   };
 
@@ -853,8 +831,11 @@ export default function App() {
   };
 
   const handleImportData = (data) => {
-    if (Array.isArray(data.workouts || data.w)) setWorkouts(data.workouts || data.w);
-    if (Array.isArray(data.templates || data.t)) setTemplates(data.templates || data.t);
+    // Antrenman ve şablonlar da ölçüm/beslenme gibi normalize edilir: bozuk
+    // şekilli bir yedek (örn. `workouts: [{}]`) doğrudan state'e girerse
+    // aşağıdaki hacim/tonaj hesapları eksik alanlarla çalışmak zorunda kalır.
+    if (Array.isArray(data.workouts || data.w)) setWorkouts((data.workouts || data.w).map(mergeWorkout));
+    if (Array.isArray(data.templates || data.t)) setTemplates((data.templates || data.t).map(mergeTemplate));
     // Sürüm damgasına değil şekle bakılır: göç idempotent olduğu için yeni
     // yedekler dokunulmadan geçer, eski yedekler taşınır.
     // Yerelde oluşturulmuş kayıtlar silinmesin diye isimle birleştirilir.
@@ -1008,9 +989,15 @@ export default function App() {
 
         {/* TOAST BİLDİRİMİ */}
         {toast && (
-          <div className="absolute top-4 left-4 right-4 z-50 bg-zinc-900 border border-zinc-700 text-zinc-100 px-4 py-3 rounded-2xl shadow-xl flex items-center space-x-2 text-xs font-mono animate-in fade-in slide-in-from-top-4">
-            <Activity size={14} className="text-cyan-400 shrink-0" />
-            <span>{toast.message}</span>
+          <div className={`absolute top-4 left-4 right-4 z-50 px-4 py-3 rounded-2xl shadow-xl flex items-start space-x-2 text-xs font-mono animate-in fade-in slide-in-from-top-4 ${
+            toast.type === 'error'
+              ? 'bg-red-950/95 border border-red-800 text-red-100'
+              : 'bg-zinc-900 border border-zinc-700 text-zinc-100'
+          }`}>
+            {toast.type === 'error'
+              ? <AlertCircle size={14} className="text-red-400 shrink-0 mt-0.5" />
+              : <Activity size={14} className="text-cyan-400 shrink-0 mt-0.5" />}
+            <span className="leading-relaxed">{toast.message}</span>
           </div>
         )}
 

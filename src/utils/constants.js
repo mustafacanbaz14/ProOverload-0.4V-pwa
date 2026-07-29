@@ -379,3 +379,34 @@ export const getVolumeLandmarks = (muscle, level = 'intermediate') => {
   const mrv = Math.max(mav + 1, Math.round(base.mrv * scale.mrv));
   return { mev, mav, mrv };
 };
+
+/**
+ * Haftalık hacmin hangi durumda olduğunu söyler.
+ *
+ * Tek kaynak: ana sayfa listesi, ısı haritası, kas detayı ve haftalık program
+ * daha önce aynı dört durumu farklı renklerle gösteriyordu (biri MEV altını
+ * cyan, diğeri amber; biri "Yüksek"i cyan, diğeri amber yapıyordu).
+ */
+export const volumeStatusOf = (volume, muscle, level = 'intermediate') => {
+  const { mev, mav, mrv } = getVolumeLandmarks(muscle, level);
+  if (!volume) return 'none';
+  if (volume < mev) return 'under';
+  if (volume <= mav) return 'optimal';
+  if (volume <= mrv) return 'high';
+  return 'over';
+};
+
+/**
+ * Durum renkleri. Merdiven tek yönlü okunur:
+ * gri(pasif) → amber(eksik) → yeşil(verimli) → turuncu(tavana yakın) → kırmızı(aşım).
+ *
+ * Cyan bilinçli olarak yok: uygulamanın her yerinde "birincil aksiyon" rengi,
+ * durum göstergesinde kullanılınca uyarılar "iyi" gibi okunuyordu.
+ */
+export const VOLUME_STATUS = {
+  none: { label: 'Çalışılmadı', chip: 'text-zinc-500 border-zinc-800 bg-zinc-950', bar: 'bg-zinc-700', text: 'text-zinc-500', hex: '#27272a' },
+  under: { label: 'Koruma altı', chip: 'text-amber-400 border-amber-900/40 bg-amber-950/40', bar: 'bg-amber-500', text: 'text-amber-400', hex: '#fbbf24' },
+  optimal: { label: 'Verimli', chip: 'text-emerald-400 border-emerald-900/40 bg-emerald-950/40', bar: 'bg-emerald-500', text: 'text-emerald-400', hex: '#34d399' },
+  high: { label: 'Yüksek', chip: 'text-orange-400 border-orange-900/40 bg-orange-950/40', bar: 'bg-orange-500', text: 'text-orange-400', hex: '#f97316' },
+  over: { label: 'Tavan üstü', chip: 'text-red-400 border-red-900/40 bg-red-950/40', bar: 'bg-red-500', text: 'text-red-400', hex: '#ef4444' },
+};

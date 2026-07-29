@@ -5,7 +5,7 @@ import { FORM_RATINGS, SET_TYPES } from '../utils/constants';
 import {
   getNextSetType, calcFatigueDropoff,
   isWarmupSet, isWorkingSet, parseNumber, estimate1RM,
-  suggestNextTarget, detectMuscleGroup
+  suggestNextTarget, detectMuscleGroup, clampNumber, INPUT_LIMITS
 } from '../utils/helpers';
 
 const ActiveWorkoutView = memo(({
@@ -256,15 +256,17 @@ const ActiveWorkoutView = memo(({
                       >
                         {setBadgeText}
                       </button>
-                      <div className="col-span-3"><input type="number" inputMode="decimal" value={set.weight} onChange={(e) => updateSet(ex.id, set.id, 'weight', e.target.value)} onFocus={e => e.target.select()} className={`w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 font-mono text-sm outline-none text-center focus:bg-zinc-800 h-10 transition-colors ${warmup ? 'text-orange-300/70' : 'text-cyan-400'}`} placeholder="0" /></div>
+                      <div className="col-span-3"><input type="number" inputMode="decimal" min={INPUT_LIMITS.weight.min} max={INPUT_LIMITS.weight.max} value={set.weight} onChange={(e) => updateSet(ex.id, set.id, 'weight', e.target.value)} onFocus={e => e.target.select()} onBlur={(e) => updateSet(ex.id, set.id, 'weight', clampNumber(e.target.value, INPUT_LIMITS.weight.min, INPUT_LIMITS.weight.max))} className={`w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 font-mono text-sm outline-none text-center focus:bg-zinc-800 h-10 transition-colors ${warmup ? 'text-orange-300/70' : 'text-cyan-400'}`} placeholder="0" /></div>
                       <div className="col-span-2">
                         <input
                           type="number" inputMode="decimal" value={set.reps}
+                          min={INPUT_LIMITS.reps.min} max={INPUT_LIMITS.reps.max}
                           onChange={(e) => updateSet(ex.id, set.id, 'reps', e.target.value)}
                           onFocus={(e) => { e.target.select(); repsOnFocusRef.current = e.target.value; }}
                           onBlur={(e) => {
                             const changed = repsOnFocusRef.current !== e.target.value;
                             repsOnFocusRef.current = null;
+                            updateSet(ex.id, set.id, 'reps', clampNumber(e.target.value, INPUT_LIMITS.reps.min, INPUT_LIMITS.reps.max));
                             if (changed && settings.autoRestTimer && !warmup && parseNumber(e.target.value) > 0) {
                               startRest(settings.restSeconds);
                             }
@@ -272,7 +274,7 @@ const ActiveWorkoutView = memo(({
                           className={`w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 font-mono text-sm outline-none text-center focus:bg-zinc-800 h-10 transition-colors ${warmup ? 'text-zinc-500' : 'text-zinc-100'}`}
                           placeholder="0" />
                       </div>
-                      <div className="col-span-2"><input type="number" inputMode="decimal" step="0.5" value={set.rir} onChange={(e) => updateSet(ex.id, set.id, 'rir', e.target.value)} onFocus={e => e.target.select()} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-zinc-300 font-mono text-xs outline-none text-center focus:bg-zinc-800 h-10 transition-colors" placeholder="0" /></div>
+                      <div className="col-span-2"><input type="number" inputMode="decimal" step="0.5" min={INPUT_LIMITS.rir.min} max={INPUT_LIMITS.rir.max} value={set.rir} onChange={(e) => updateSet(ex.id, set.id, 'rir', e.target.value)} onFocus={e => e.target.select()} onBlur={(e) => updateSet(ex.id, set.id, 'rir', clampNumber(e.target.value, INPUT_LIMITS.rir.min, INPUT_LIMITS.rir.max))} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-zinc-300 font-mono text-xs outline-none text-center focus:bg-zinc-800 h-10 transition-colors" placeholder="0" /></div>
                       <div className="col-span-2"><input type="text" maxLength="4" value={set.tempo || ''} onChange={(e) => updateSet(ex.id, set.id, 'tempo', e.target.value)} onFocus={e => e.target.select()} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-zinc-400 font-mono text-[11px] outline-none text-center focus:bg-zinc-800 h-10 transition-colors" placeholder="TUT" /></div>
                       <div className="col-span-2 flex items-center pr-1">
                         <select value={set.formRating} onChange={(e) => updateSet(ex.id, set.id, 'formRating', parseNumber(e.target.value))} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-1 text-zinc-300 font-mono text-[11px] outline-none text-center h-10 appearance-none transition-colors">

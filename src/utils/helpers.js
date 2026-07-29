@@ -81,6 +81,39 @@ export const parseNumber = (val) => {
   return isNaN(num) ? 0 : num;
 };
 
+/**
+ * Sayıyı verilen aralığa çeker.
+ *
+ * Boş girdi boş kalır: kullanıcı alanı silip yeniden yazarken her tuşta
+ * alt sınıra zıplamamalı. Sınırlama yalnızca gerçek bir değer varken uygulanır.
+ */
+export const clampNumber = (val, min, max) => {
+  if (val === '' || val === null || val === undefined) return '';
+  const num = parseNumber(val);
+  return Math.min(max, Math.max(min, num));
+};
+
+/**
+ * Sayısal alanlar için ortak sınırlar.
+ *
+ * Amaç yazım hatasını yakalamak değil, absürt değerlerin hesaplara sızmasını
+ * engellemek: negatif kilo/boy vücut kompozisyonunda negatif yağ ve kas kütlesi
+ * üretiyordu ve ekranda geçerli bir sayı gibi görünüyordu.
+ */
+export const INPUT_LIMITS = {
+  weight: { min: 0, max: 500 },
+  reps: { min: 0, max: 100 },
+  rir: { min: 0, max: 10 },
+  macro: { min: 0, max: 1000 },
+  calories: { min: 0, max: 20000 },
+  bodyWeight: { min: 20, max: 400 },
+  height: { min: 100, max: 250 },
+  age: { min: 10, max: 100 },
+  measurement: { min: 0, max: 300 },
+  skinfold: { min: 0, max: 100 },
+  minutes: { min: 0, max: 600 },
+};
+
 export const mergeMetrics = (data) => ({
   id: data?.id || generateId(),
   date: data?.date || getLocalDateString(),
@@ -106,6 +139,66 @@ export const mergeNutrition = (data) => ({
   activeCaloriesOut: data?.activeCaloriesOut || '', bmrAtTheTime: data?.bmrAtTheTime || 0,
   caloriesIn: data?.caloriesIn || 0, protein: data?.protein || 0, carbs: data?.carbs || 0, fats: data?.fats || 0,
   meals: Array.isArray(data?.meals) && data.meals.length > 0 ? data.meals : [{ id: generateId(), name: '1. Öğün', calories: '', protein: '', carbs: '', fats: '' }]
+});
+
+/**
+ * Tek bir seti güvenli şekle sokar.
+ *
+ * İçe aktarılan yedeklerde set nesnesi eksik alanlı ya da tümden bozuk
+ * (string, null) gelebiliyor; hacim ve tonaj hesapları bu alanların varlığına
+ * güveniyor.
+ */
+const mergeSet = (set) => ({
+  id: set?.id || generateId(),
+  weight: set?.weight ?? '',
+  reps: set?.reps ?? '',
+  rir: set?.rir ?? 2,
+  tempo: set?.tempo || '',
+  formRating: set?.formRating ?? 8,
+  setType: SET_TYPE_KEYS.includes(set?.setType) ? set.setType : 'normal',
+});
+
+const mergeExercise = (ex) => ({
+  // Ad, antrenman kayıtlarını hareket veritabanına bağlayan tek anahtar;
+  // boş kalırsa kas eşlemesi hiç bulunamaz.
+  name: typeof ex?.name === 'string' && ex.name.trim() ? ex.name : 'Bilinmeyen Hareket',
+  id: ex?.id || generateId(),
+  sets: Array.isArray(ex?.sets) ? ex.sets.map(mergeSet) : [],
+  ...(ex?.supersetId ? { supersetId: ex.supersetId } : {}),
+});
+
+/**
+ * İçe aktarılan antrenman kaydını normalleştirir.
+ *
+ * `mergeMetrics`/`mergeNutrition` ile aynı kalıp: yedek dosyası bozuk şekilli
+ * geldiğinde (`workouts: [{}]` gibi) doğrudan state'e girip aşağıda
+ * `ex.sets.filter` çağrılarını patlatmasın diye tüm alanlar garanti altına alınır.
+ */
+export const mergeWorkout = (data) => ({
+  id: data?.id || generateId(),
+  date: data?.date || getLocalDateString(),
+  name: typeof data?.name === 'string' && data.name.trim() ? data.name : 'Serbest Antrenman',
+  duration: Number(data?.duration) > 0 ? Number(data.duration) : 0,
+  exercises: Array.isArray(data?.exercises) ? data.exercises.map(mergeExercise) : [],
+  cardio: Array.isArray(data?.cardio)
+    ? data.cardio
+      .filter(c => c && typeof c.type === 'string')
+      .map(c => ({ id: c.id || generateId(), type: c.type, minutes: Number(c.minutes) || 0 }))
+    : [],
+  // rating ACWR yük hesabına giriyor (App.jsx dashboardStats); düşerse geçmiş
+  // yük eğrisi sessizce değişir, bu yüzden varsayılanı oradaki fallback ile aynı.
+  rating: Number(data?.rating) > 0 ? Number(data.rating) : 3,
+  notes: typeof data?.notes === 'string' ? data.notes : '',
+  timer: { status: 'finished' },
+  ...(data?.readiness ? { readiness: data.readiness } : {}),
+});
+
+/** Şablonun antrenmandan tek farkı tarih değil ad taşıması. */
+export const mergeTemplate = (data) => ({
+  id: data?.id || generateId(),
+  name: typeof data?.name === 'string' && data.name.trim() ? data.name : 'Adsız Şablon',
+  createdAt: data?.createdAt || new Date().toISOString(),
+  exercises: Array.isArray(data?.exercises) ? data.exercises.map(mergeExercise) : [],
 });
 
 export const loadWithFallback = (keys, defaultVal, parser = (d) => d) => {

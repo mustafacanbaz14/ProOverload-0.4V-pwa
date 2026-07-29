@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { X, Target, Calendar } from 'lucide-react';
-import { getVolumeLandmarks } from '../utils/constants';
+import { getVolumeLandmarks, volumeStatusOf, VOLUME_STATUS } from '../utils/constants';
 
 const WEIGHT_LABEL = {
   1: 'Birincil',
@@ -23,11 +23,7 @@ const MuscleDetailModal = memo(({ isOpen, onClose, muscle, total = 0, breakdown 
 
   const landmark = getVolumeLandmarks(muscle, experienceLevel);
 
-  let status = 'Koruma altı';
-  let statusColor = 'text-amber-400';
-  if (total > landmark.mrv) { status = 'Tavanın üstünde'; statusColor = 'text-red-400'; }
-  else if (total > landmark.mav) { status = 'Yüksek'; statusColor = 'text-cyan-400'; }
-  else if (total >= landmark.mev) { status = 'Verimli aralık'; statusColor = 'text-emerald-400'; }
+  const state = VOLUME_STATUS[volumeStatusOf(total, muscle, experienceLevel)];
 
   return (
     <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[85] flex items-center justify-center p-4">
@@ -52,7 +48,7 @@ const MuscleDetailModal = memo(({ isOpen, onClose, muscle, total = 0, breakdown 
                 <span className="text-3xl font-mono font-bold text-zinc-100">{total}</span>
                 <span className="text-[11px] font-mono text-zinc-500 ml-1">set</span>
               </div>
-              <span className={`text-[11px] font-bold ${statusColor}`}>{status}</span>
+              <span className={`text-[11px] font-bold ${state.text}`}>{state.label}</span>
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
               {[

@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { AlertCircle, Activity, Target, Zap, BookmarkPlus, Trash2, Trophy, Clock, Layers, ChevronRight, Dumbbell, CalendarPlus, HeartPulse, Flame, CalendarRange, Pencil } from 'lucide-react';
-import { MUSCLE_SECTIONS, getVolumeLandmarks } from '../utils/constants';
+import { MUSCLE_SECTIONS, getVolumeLandmarks, volumeStatusOf, VOLUME_STATUS } from '../utils/constants';
 import { previewTemplateVolume, estimateDuration } from '../utils/templates';
 import MuscleHeatmap from './MuscleHeatmap';
 
@@ -116,24 +116,7 @@ const HomeView = memo(({
                 const vol = dashboardStats.muscleVolume[muscle] || 0;
                 const landmark = getVolumeLandmarks(muscle, experienceLevel);
                 const percentage = Math.min(100, Math.round((vol / landmark.mav) * 100));
-
-                let statusLabel = 'Düşük';
-                let statusColor = 'text-amber-400 bg-amber-950/40 border-amber-900/40';
-                let barColor = 'bg-amber-500';
-
-                if (vol >= landmark.mev && vol <= landmark.mav) {
-                  statusLabel = 'Verimli';
-                  statusColor = 'text-emerald-400 bg-emerald-950/40 border-emerald-900/40';
-                  barColor = 'bg-emerald-500';
-                } else if (vol > landmark.mav && vol <= landmark.mrv) {
-                  statusLabel = 'Yüksek';
-                  statusColor = 'text-cyan-400 bg-cyan-950/40 border-cyan-900/40';
-                  barColor = 'bg-cyan-500';
-                } else if (vol > landmark.mrv) {
-                  statusLabel = 'Tavan üstü';
-                  statusColor = 'text-red-400 bg-red-950/40 border-red-900/40';
-                  barColor = 'bg-red-500';
-                }
+                const status = VOLUME_STATUS[volumeStatusOf(vol, muscle, experienceLevel)];
 
                 return (
                   <button
@@ -144,7 +127,7 @@ const HomeView = memo(({
                     <div className="flex justify-between items-center gap-2">
                       <span className="flex items-center gap-1.5 min-w-0">
                         <span className="text-[11px] text-zinc-200 font-bold truncate">{muscle}</span>
-                        <span className={`text-[9px] px-1.5 py-0.5 rounded border shrink-0 ${statusColor}`}>{statusLabel}</span>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded border shrink-0 ${status.chip}`}>{status.label}</span>
                       </span>
                       <span className="text-[10px] text-zinc-400 font-mono shrink-0">
                         <strong className="text-zinc-100">{vol}</strong>/{landmark.mav}
@@ -152,7 +135,7 @@ const HomeView = memo(({
                       </span>
                     </div>
                     <div className="w-full bg-zinc-950 rounded-full h-1.5 border border-zinc-800">
-                      <div className={`h-1.5 rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${percentage}%` }} />
+                      <div className={`h-1.5 rounded-full transition-all duration-500 ${status.bar}`} style={{ width: `${percentage}%` }} />
                     </div>
                   </button>
                 );

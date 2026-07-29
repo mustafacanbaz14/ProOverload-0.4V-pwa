@@ -45,7 +45,9 @@
       "Bash(sed -n '/export const DEFAULT_SETTINGS/,/^};/p' src/utils/constants.js)",
       "Bash(sed -n '/const handleSelectExercise/,/^  }, \\\\[/p' src/App.jsx)",
       "Bash(git commit *)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Read(//c/Users/musta/.claude/plans/**)",
+      "Bash(grep -n \"key={i}\\\\|key={index}\\\\|filter\\(\\(_, j\\)\\\\|splice\" src/components/TemplateBuilderModal.jsx)"
     ]
   }
 }
