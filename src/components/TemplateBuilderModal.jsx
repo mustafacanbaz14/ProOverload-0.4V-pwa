@@ -19,13 +19,25 @@ const TemplateBuilderModal = memo(({
   isOpen,
   onClose,
   onSave,
+  onUpdate,
+  // Doluysa tek şablonu düzenleme kipi: gün sekmeleri gizlenir, program adı
+  // doğrudan şablonun adıdır. Üst bileşen key ile yeniden bağlar.
+  editing = null,
   customExercises = [],
   restSeconds = 120,
   experienceLevel = 'intermediate',
   libraryProps = {},
 }) => {
-  const [programName, setProgramName] = useState('');
-  const [days, setDays] = useState([{ name: DAY_NAMES[0], exercises: [] }]);
+  const [programName, setProgramName] = useState(editing?.name || '');
+  const [days, setDays] = useState(() => editing
+    ? [{
+      name: editing.name,
+      exercises: (editing.exercises || []).map(ex => ({
+        name: ex.name,
+        sets: Math.max(1, (ex.sets || []).length),
+      })),
+    }]
+    : [{ name: DAY_NAMES[0], exercises: [] }]);
   const [activeDay, setActiveDay] = useState(0);
   // Kütüphane bu bileşenin içinden açılır; böylece seçilen hareket bir üst
   // bileşene çıkıp geri dönmek zorunda kalmaz (render sırasında yan etki olurdu).
@@ -59,7 +71,7 @@ const TemplateBuilderModal = memo(({
 
       <div className="px-4 py-3 border-b border-zinc-800 flex justify-between items-center bg-zinc-900 shrink-0 pt-safe">
         <h3 className="text-[12px] font-bold text-zinc-100 uppercase tracking-wider flex items-center">
-          <Calendar size={15} className="mr-2 text-cyan-400" /> Program Oluştur
+          <Calendar size={15} className="mr-2 text-cyan-400" /> {editing ? 'Şablonu Düzenle' : 'Program Oluştur'}
         </h3>
         <button onClick={onClose} className="text-zinc-400 active:text-zinc-100 p-2 -mr-1" aria-label="Kapat">
           <X size={20} />
@@ -71,10 +83,11 @@ const TemplateBuilderModal = memo(({
           type="text"
           value={programName}
           onChange={(e) => setProgramName(e.target.value)}
-          placeholder="Program adı (örn. Push Pull Legs)"
+          placeholder={editing ? 'Şablon adı' : 'Program adı (örn. Push Pull Legs)'}
           className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-zinc-100 outline-none font-mono text-xs focus:border-cyan-500 transition-colors"
         />
 
+        {!editing && (
         <div className="flex gap-1.5 overflow-x-auto hide-scrollbar -mx-1 px-1 items-center">
           {days.map((d, i) => (
             <button
@@ -94,14 +107,17 @@ const TemplateBuilderModal = memo(({
             </button>
           )}
         </div>
+        )}
 
-        <input
-          type="text"
-          value={day.name}
-          onChange={(e) => updateDay({ name: e.target.value })}
-          placeholder="Gün adı (örn. Push)"
-          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-300 outline-none font-mono text-[11px] focus:border-cyan-500 transition-colors"
-        />
+        {!editing && (
+          <input
+            type="text"
+            value={day.name}
+            onChange={(e) => updateDay({ name: e.target.value })}
+            placeholder="Gün adı (örn. Push)"
+            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-300 outline-none font-mono text-[11px] focus:border-cyan-500 transition-colors"
+          />
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto hide-scrollbar p-3 space-y-3 pb-safe">
@@ -192,10 +208,17 @@ const TemplateBuilderModal = memo(({
       <div className="p-3 border-t border-zinc-800 bg-zinc-950 shrink-0 pb-safe">
         <button
           disabled={!canSave}
-          onClick={() => { onSave(programName.trim(), days); onClose(); }}
+          onClick={() => {
+            if (editing) onUpdate(editing.id, programName.trim(), days[0].exercises);
+            else onSave(programName.trim(), days);
+            onClose();
+          }}
           className="w-full bg-cyan-600 active:bg-cyan-700 disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-bold py-3.5 rounded-xl uppercase text-[11px] tracking-wider flex items-center justify-center gap-2 transition-colors"
         >
-          <Save size={15} /> {days.filter(d => d.exercises.length > 0).length} Günü Şablon Olarak Kaydet
+          <Save size={15} />
+          {editing
+            ? 'Şablonu Güncelle'
+            : `${days.filter(d => d.exercises.length > 0).length} Günü Şablon Olarak Kaydet`}
         </button>
       </div>
 

@@ -70,6 +70,7 @@ export default function App() {
   const [editorExercise, setEditorExercise] = useState(null); // hareket adı
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState(null);
   const [isCardioOpen, setIsCardioOpen] = useState(false);
   const [isWeekPlanOpen, setIsWeekPlanOpen] = useState(false);
   // Kütüphaneden "yeni hareket" ile gelindiğinde kapanışta oraya dönülür.
@@ -760,6 +761,30 @@ export default function App() {
 
   // Program oluşturucu her dolu günü ayrı bir şablon yapar: uygulamanın şablon
   // modeli tek seanslık, program adı gün adının önüne eklenir.
+  // Var olan şablonu günceller. Set sayısı değişse bile eski setlerin ağırlık ve
+  // tekrar bilgisi korunur — şablonlar bir sonraki seansın başlangıç değerlerini
+  // taşıyor, sıfırlamak kullanıcının girdiği veriyi çöpe atmak olurdu.
+  const handleUpdateTemplate = useCallback((templateId, name, exercises) => {
+    setTemplates(prev => prev.map(t => {
+      if (t.id !== templateId) return t;
+      const oldByName = new Map((t.exercises || []).map(ex => [ex.name, ex.sets || []]));
+      return {
+        ...t,
+        name: name || t.name,
+        exercises: exercises.map(ex => {
+          const old = oldByName.get(ex.name) || [];
+          return {
+            name: ex.name,
+            sets: Array.from({ length: ex.sets }, (_, i) => old[i]
+              ? { ...old[i], id: old[i].id || generateId() }
+              : { id: generateId(), weight: '', reps: '', rir: 2, tempo: '', formRating: 8, setType: 'normal' }),
+          };
+        }),
+      };
+    }));
+    showToast('Şablon güncellendi.');
+  }, [showToast]);
+
   const handleSaveProgram = useCallback((programName, days) => {
     const created = days
       .filter(d => d.exercises.length > 0)
@@ -1017,6 +1042,7 @@ export default function App() {
               setIsReportCardOpen={setIsReportCardOpen}
               onSelectMuscle={setDetailMuscle}
               onPreviewTemplate={setPreviewTemplate}
+              onEditTemplate={(t) => { setEditingTemplate(t); setIsBuilderOpen(true); }}
               customExercises={customExercises}
               restSeconds={settings.restSeconds}
               experienceLevel={settings.experienceLevel}
@@ -1228,9 +1254,12 @@ export default function App() {
 
         {/* PROGRAM OLUŞTURUCU */}
         <TemplateBuilderModal
+          key={editingTemplate?.id || 'new'}
           isOpen={isBuilderOpen}
-          onClose={() => setIsBuilderOpen(false)}
+          onClose={() => { setIsBuilderOpen(false); setEditingTemplate(null); }}
           onSave={handleSaveProgram}
+          onUpdate={handleUpdateTemplate}
+          editing={editingTemplate}
           customExercises={customExercises}
           restSeconds={settings.restSeconds}
           experienceLevel={settings.experienceLevel}

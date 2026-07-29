@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { AlertCircle, Activity, Target, Zap, BookmarkPlus, Trash2, Trophy, Clock, Layers, ChevronRight, Dumbbell, CalendarPlus, HeartPulse, Flame, CalendarRange } from 'lucide-react';
+import { AlertCircle, Activity, Target, Zap, BookmarkPlus, Trash2, Trophy, Clock, Layers, ChevronRight, Dumbbell, CalendarPlus, HeartPulse, Flame, CalendarRange, Pencil } from 'lucide-react';
 import { MUSCLE_SECTIONS, getVolumeLandmarks } from '../utils/constants';
 import { previewTemplateVolume, estimateDuration } from '../utils/templates';
 import MuscleHeatmap from './MuscleHeatmap';
@@ -14,6 +14,7 @@ const HomeView = memo(({
   setIsReportCardOpen,
   onSelectMuscle,
   onPreviewTemplate,
+  onEditTemplate,
   customExercises = [],
   restSeconds = 120,
   experienceLevel = 'intermediate',
@@ -236,6 +237,7 @@ const HomeView = memo(({
                     </button>
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button onClick={() => handleStartRequest(t)} className="bg-cyan-900/30 active:bg-cyan-900/60 text-cyan-400 border border-cyan-800 text-[10px] font-bold py-1.5 px-3 rounded-lg uppercase tracking-wider">Başlat</button>
+                      <button onClick={() => onEditTemplate?.(t)} title="Şablonu düzenle" className="text-zinc-600 active:text-cyan-400 p-1.5"><Pencil size={14} /></button>
                       <button onClick={() => setDeleteConfirm({ isOpen: true, type: 'template', id: t.id })} className="text-zinc-600 active:text-red-500 p-1.5"><Trash2 size={14} /></button>
                     </div>
                   </div>
