@@ -1,7 +1,8 @@
-import React, { memo, useState } from 'react';
+import React, { memo, useState, useMemo } from 'react';
+import { Search, Eye, EyeOff } from 'lucide-react';
 import TrendChart from './TrendChart';
 import { BODY_METRICS, MUSCLE_GROUPS, getVolumeLandmarks } from '../utils/constants';
-import { estimate1RM, isWorkingSet, parseNumber, detectMuscleGroup } from '../utils/helpers';
+import { estimate1RM, isWorkingSet, parseNumber, detectMuscleGroup, foldForSearch } from '../utils/helpers';
 import { movingAverage } from '../utils/tdee';
 
 const AnalyticsView = memo(({
@@ -16,9 +17,25 @@ const AnalyticsView = memo(({
   allExercisesNames,
   customExercises = [],
   experienceLevel = 'intermediate',
+  exercisePerformCounts = new Map(),
+  hidden1RMExercises = [],
+  onToggleHidden1RM,
 }) => {
   const [muscleKey, setMuscleKey] = useState('Göğüs');
   const [showAverage, setShowAverage] = useState(true);
+  const [exerciseQuery, setExerciseQuery] = useState('');
+
+  const hidden1RMSet = useMemo(() => new Set(hidden1RMExercises), [hidden1RMExercises]);
+
+  // Varsayılan liste yalnızca en az iki seansta yapılmış hareketler: 1RM
+  // eğilimi tek ölçümle çizilemez, 183 hareketin tamamı listede sadece gürültü.
+  // Arama yazıldığı anda kısıt kalkar, gizlenenler dahil her şey bulunabilir.
+  const rmExercises = useMemo(() => {
+    const q = foldForSearch(exerciseQuery).trim();
+    if (q) return allExercisesNames.filter(n => foldForSearch(n).includes(q));
+    return allExercisesNames.filter(n =>
+      (exercisePerformCounts.get(n) || 0) >= 2 && !hidden1RMSet.has(n));
+  }, [allExercisesNames, exerciseQuery, exercisePerformCounts, hidden1RMSet]);
   let chartData = [];
   let unit = '';
 
@@ -192,18 +209,63 @@ const AnalyticsView = memo(({
 
       {analysisType === '1rm' && (
         <div className="space-y-3">
-          <div className="bg-zinc-900 p-3 rounded-2xl border border-zinc-800">
-            <label className="text-[10px] font-mono text-zinc-500 uppercase block mb-1">Hareket Seçin</label>
-            <select
-              value={analysisExercise}
-              onChange={(e) => setAnalysisExercise(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-cyan-400 font-mono outline-none"
-            >
-              <option value="">Hareket Seçiniz...</option>
-              {allExercisesNames.map(name => (
-                <option key={name} value={name}>{name}</option>
-              ))}
-            </select>
+          <div className="bg-zinc-900 p-3 rounded-2xl border border-zinc-800 space-y-2.5">
+            <div className="flex justify-between items-baseline">
+              <label className="text-[10px] font-mono text-zinc-500 uppercase">Hareket Seçin</label>
+              <span className="text-[9px] font-mono text-zinc-600">
+                {exerciseQuery.trim() ? `${rmExercises.length} sonuç · tümü` : `${rmExercises.length} hareket · 2+ seans`}
+              </span>
+            </div>
+
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" size={14} />
+              <input
+                type="text"
+                value={exerciseQuery}
+                onChange={(e) => setExerciseQuery(e.target.value)}
+                placeholder="Ara (tüm hareketlerde)..."
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-8 pr-3 py-2 text-xs text-zinc-100 font-mono outline-none focus:border-cyan-600 transition-colors"
+              />
+            </div>
+
+            <div className="max-h-52 overflow-y-auto hide-scrollbar -mx-1 px-1 space-y-1">
+              {rmExercises.length === 0 ? (
+                <p className="text-[10px] font-mono text-zinc-600 text-center py-4 leading-relaxed">
+                  {exerciseQuery.trim()
+                    ? 'Eşleşen hareket yok.'
+                    : 'En az iki seansta yaptığın hareket yok. Grafik için aynı hareketi tekrar çalışman gerekiyor — aramayla tüm hareketlere ulaşabilirsin.'}
+                </p>
+              ) : rmExercises.map(name => {
+                const hidden = hidden1RMSet.has(name);
+                const count = exercisePerformCounts.get(name) || 0;
+                return (
+                  <div
+                    key={name}
+                    className={`flex items-center gap-1 rounded-xl border transition-colors ${
+                      analysisExercise === name ? 'border-cyan-600 bg-cyan-950/20' : 'border-zinc-800 bg-zinc-950'
+                    } ${hidden ? 'opacity-45' : ''}`}
+                  >
+                    <button
+                      onClick={() => setAnalysisExercise(name)}
+                      className="flex-1 min-w-0 text-left px-2.5 py-2 active:opacity-60"
+                    >
+                      <span className={`text-[11px] font-mono block truncate ${analysisExercise === name ? 'text-cyan-400 font-bold' : 'text-zinc-300'}`}>
+                        {name}
+                      </span>
+                      <span className="text-[9px] font-mono text-zinc-600">{count} seans</span>
+                    </button>
+                    <button
+                      onClick={() => onToggleHidden1RM?.(name)}
+                      title={hidden ? 'Listede göster' : 'Listeden gizle'}
+                      aria-label={hidden ? 'Listede göster' : 'Listeden gizle'}
+                      className="text-zinc-600 active:text-cyan-400 p-2 shrink-0"
+                    >
+                      {hidden ? <EyeOff size={13} /> : <Eye size={13} />}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {analysisExercise ? (

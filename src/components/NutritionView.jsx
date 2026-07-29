@@ -16,6 +16,51 @@ const NutritionView = memo(({
   adaptiveTDEE,
 }) => {
   const safeMeals = Array.isArray(currentNutritionForm.meals) ? currentNutritionForm.meals : [];
+  const isDaily = currentNutritionForm.entryMode === 'daily';
+
+  // Günlük modda tüm gün tek bir sentetik öğünde tutulur. Böylece toplamlar,
+  // geçmiş kayıtlar ve TDEE hesabı gibi öğün toplamına dayanan her şey
+  // değişmeden çalışır — fark yalnızca giriş arayüzünde.
+  const dailyMeal = safeMeals[0] || {};
+
+  const setEntryMode = (mode) => {
+    setCurrentNutritionForm(prev => {
+      if (mode === prev.entryMode) return prev;
+      if (mode === 'daily') {
+        // Öğünlerden günlük moda geçerken girilen veri toplanarak korunur.
+        const sum = (Array.isArray(prev.meals) ? prev.meals : []).reduce((acc, m) => ({
+          protein: acc.protein + parseNumber(m.protein),
+          carbs: acc.carbs + parseNumber(m.carbs),
+          fats: acc.fats + parseNumber(m.fats),
+        }), { protein: 0, carbs: 0, fats: 0 });
+        return {
+          ...prev,
+          entryMode: 'daily',
+          meals: [{
+            id: prev.meals?.[0]?.id || `daily-${Date.now()}`,
+            name: 'Günlük Toplam',
+            calories: Math.round(sum.protein * 4 + sum.carbs * 4 + sum.fats * 9),
+            protein: sum.protein || '',
+            carbs: sum.carbs || '',
+            fats: sum.fats || '',
+          }],
+        };
+      }
+      return { ...prev, entryMode: 'meals' };
+    });
+  };
+
+  // Kalori makrolardan türetilir (4/4/9), elle girilmez.
+  const updateDailyMacro = (field, value) => {
+    setCurrentNutritionForm(prev => {
+      const base = (Array.isArray(prev.meals) && prev.meals[0]) || {};
+      const next = { ...base, name: 'Günlük Toplam', id: base.id || `daily-${Date.now()}`, [field]: value };
+      next.calories = Math.round(
+        parseNumber(next.protein) * 4 + parseNumber(next.carbs) * 4 + parseNumber(next.fats) * 9
+      );
+      return { ...prev, meals: [next] };
+    });
+  };
 
   const totals = safeMeals.reduce((acc, m) => ({
     calories: acc.calories + parseNumber(m.calories),
@@ -116,12 +161,16 @@ const NutritionView = memo(({
             <h3 className="text-xs font-bold text-zinc-100 uppercase tracking-wider">Beslenme & Makrolar</h3>
           </div>
           <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setIsFoodSearchOpen(true)}
-              className="bg-orange-950/50 border border-orange-900/60 text-orange-400 text-[10px] font-bold px-2 py-1 rounded-lg flex items-center hover:bg-orange-900/50 transition-colors"
-            >
-              <Search size={10} className="mr-1" /> Gıda Ara
-            </button>
+            {/* Gıda arama öğün moduna özel: günlük toplam modunda besinler
+                tek tek eklenmiyor, makrolar doğrudan yazılıyor. */}
+            {!isDaily && (
+              <button
+                onClick={() => setIsFoodSearchOpen(true)}
+                className="bg-orange-950/50 border border-orange-900/60 text-orange-400 text-[10px] font-bold px-2 py-1 rounded-lg flex items-center hover:bg-orange-900/50 transition-colors"
+              >
+                <Search size={10} className="mr-1" /> Gıda Ara
+              </button>
+            )}
             <input
               type="date"
               value={currentNutritionForm.date}
@@ -184,7 +233,63 @@ const NutritionView = memo(({
         </div>
       )}
 
-      {/* Öğün Listesi */}
+      {/* Giriş modu: öğün öğün mü, günün toplamı mı */}
+      <div className="flex bg-zinc-900 p-1 rounded-2xl border border-zinc-800">
+        {[
+          { key: 'meals', label: 'Öğün Öğün' },
+          { key: 'daily', label: 'Günlük Toplam' },
+        ].map(m => (
+          <button
+            key={m.key}
+            onClick={() => setEntryMode(m.key)}
+            className={`flex-1 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-colors ${
+              (currentNutritionForm.entryMode || 'meals') === m.key ? 'bg-orange-600 text-white' : 'text-zinc-500'
+            }`}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+
+      {isDaily ? (
+        <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 space-y-3">
+          <p className="text-[10px] font-mono text-zinc-500 leading-relaxed">
+            Günün toplam makrolarını gir; kalori bunlardan hesaplanır
+            (protein ve karbonhidrat 4 kcal/g, yağ 9 kcal/g). Kaloriyi başka bir
+            uygulamada saydıysan öğün öğün girmene gerek yok.
+          </p>
+
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { key: 'protein', label: 'Protein (g)', color: 'text-emerald-400' },
+              { key: 'carbs', label: 'Karb (g)', color: 'text-amber-400' },
+              { key: 'fats', label: 'Yağ (g)', color: 'text-purple-400' },
+            ].map(f => (
+              <div key={f.key}>
+                <label className="text-[10px] font-mono text-zinc-500 uppercase block mb-1">{f.label}</label>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={INPUT_LIMITS.macro.min}
+                  max={INPUT_LIMITS.macro.max}
+                  value={dailyMeal[f.key] ?? ''}
+                  onChange={(e) => updateDailyMacro(f.key, e.target.value)}
+                  onBlur={(e) => updateDailyMacro(f.key, clampNumber(e.target.value, INPUT_LIMITS.macro.min, INPUT_LIMITS.macro.max))}
+                  placeholder="0"
+                  className={`w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 font-mono text-sm text-center outline-none focus:border-orange-500 transition-colors ${f.color}`}
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-center">
+            <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest block">Hesaplanan Kalori</span>
+            <span className="text-2xl font-mono font-bold text-cyan-400">{parseNumber(dailyMeal.calories)}</span>
+            <span className="text-[11px] font-mono text-zinc-500 ml-1">kcal</span>
+          </div>
+        </div>
+      ) : (
+      /* Öğün Listesi */
       <div className="space-y-3">
         {safeMeals.map((meal, index) => (
           <div key={meal.id} className="bg-zinc-900 rounded-2xl border border-zinc-800 p-3.5 space-y-2.5">
@@ -253,14 +358,17 @@ const NutritionView = memo(({
           </div>
         ))}
       </div>
+      )}
 
       <div className="flex space-x-2">
-        <button
-          onClick={addMeal}
-          className="flex-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 font-bold py-3 px-4 rounded-2xl flex justify-center items-center uppercase tracking-wide text-xs transition-all"
-        >
-          <Plus size={14} className="mr-1.5" /> Öğün Ekle
-        </button>
+        {!isDaily && (
+          <button
+            onClick={addMeal}
+            className="flex-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 font-bold py-3 px-4 rounded-2xl flex justify-center items-center uppercase tracking-wide text-xs transition-all"
+          >
+            <Plus size={14} className="mr-1.5" /> Öğün Ekle
+          </button>
+        )}
         <button
           onClick={handleSaveNutrition}
           className="flex-1 bg-cyan-600 active:bg-cyan-700 text-white font-bold py-3 px-4 rounded-2xl flex justify-center items-center uppercase tracking-wide text-xs shadow-lg shadow-cyan-900/20 transition-all"

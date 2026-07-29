@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { AlertCircle, Activity, Target, Zap, BookmarkPlus, Trash2, Trophy, Clock, Layers, ChevronRight, Dumbbell, CalendarPlus, HeartPulse, Flame, CalendarRange, Pencil } from 'lucide-react';
-import { MUSCLE_SECTIONS, getVolumeLandmarks, volumeStatusOf, VOLUME_STATUS } from '../utils/constants';
+import { MUSCLE_SECTIONS, getVolumeLandmarks, volumeStatusOf, VOLUME_STATUS, acwrStatusOf, ACWR_STATUS } from '../utils/constants';
 import { previewTemplateVolume, estimateDuration } from '../utils/templates';
 import MuscleHeatmap from './MuscleHeatmap';
 
@@ -76,10 +76,20 @@ const HomeView = memo(({
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-zinc-900 p-4 rounded-2xl border border-zinc-800">
           <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 block mb-1">Aşırı Yük Riski (ACWR)</span>
-          <span className={`text-xl font-mono font-bold block mb-1 ${dashboardStats.acwr < 0.8 ? 'text-blue-400' : dashboardStats.acwr > 1.3 ? 'text-red-500' : 'text-emerald-500'}`}>{dashboardStats.acwr}</span>
-          <div className={`text-[10px] font-bold uppercase tracking-widest ${dashboardStats.acwr < 0.8 ? 'text-blue-400' : dashboardStats.acwr > 1.3 ? 'text-red-500' : 'text-emerald-500'}`}>
-            {dashboardStats.acwr < 0.8 ? 'Yetersiz' : dashboardStats.acwr > 1.3 ? 'Riskli' : 'İdeal'}
-          </div>
+          {(() => {
+            // Eşik ve renkler tek kaynaktan (constants.js) gelir; burada
+            // tekrarlanınca iki yer birbirinden sapıyordu.
+            const { acwr, hasEnoughData } = dashboardStats;
+            const durum = ACWR_STATUS[acwrStatusOf(acwr, hasEnoughData)];
+            return (
+              <>
+                <span className={`text-xl font-mono font-bold block mb-1 ${durum.text}`}>
+                  {hasEnoughData ? acwr : '—'}
+                </span>
+                <div className={`text-[10px] font-bold uppercase tracking-widest ${durum.text}`}>{durum.label}</div>
+              </>
+            );
+          })()}
         </div>
         <div className="bg-zinc-900 p-4 rounded-2xl border border-zinc-800">
           <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 block mb-1">İtme / Çekme Oranı</span>

@@ -136,6 +136,9 @@ export const mergeNutrition = (data) => ({
   id: data?.id || generateId(),
   date: data?.date || getLocalDateString(),
   dayType: data?.dayType || 'training',
+  // 'daily' = günün toplam makroları tek seferde girilmiş (başka bir uygulamada
+  // sayılmış olabilir). Eski kayıtlarda alan yok, öğün moduna düşerler.
+  entryMode: data?.entryMode === 'daily' ? 'daily' : 'meals',
   activeCaloriesOut: data?.activeCaloriesOut || '', bmrAtTheTime: data?.bmrAtTheTime || 0,
   caloriesIn: data?.caloriesIn || 0, protein: data?.protein || 0, carbs: data?.carbs || 0, fats: data?.fats || 0,
   meals: Array.isArray(data?.meals) && data.meals.length > 0 ? data.meals : [{ id: generateId(), name: '1. Öğün', calories: '', protein: '', carbs: '', fats: '' }]
@@ -326,7 +329,7 @@ const TRUTHY_SETTINGS = [
 ];
 
 // Dizi olması gereken alanlar; kayıt bozuksa varsayılana dönülür.
-const ARRAY_SETTINGS = ['hiddenExercises', 'pinnedExercises'];
+const ARRAY_SETTINGS = ['hiddenExercises', 'pinnedExercises', 'hidden1RMExercises'];
 
 /**
  * Kaydedilmiş ayarları varsayılanların ÜSTÜNE serer.
@@ -373,6 +376,7 @@ export const loadPersistedState = () => {
     templates: loadWithFallback(keys('templates'), []),
     customExercises: migrateCustomExercises(loadWithFallback(keys('custom_exercises'), [])),
     customFoods: loadWithFallback(keys('custom_foods'), []),
+    recentFoods: loadWithFallback(keys('recent_foods'), []),
     mealTemplates: loadWithFallback(keys('meal_templates'), []),
     dayTemplates: loadWithFallback(keys('day_templates'), []),
     activeWorkout: loadWithFallback(keys('active_workout'), null),

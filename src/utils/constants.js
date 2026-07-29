@@ -15,6 +15,8 @@ export const DEFAULT_SETTINGS = {
   // listeden çıkarır, pinnedExercises hiç yapılmamış olsa bile listeye sokar.
   hiddenExercises: [],
   pinnedExercises: [],
+  // 1RM analiz listesinin kendi gizleme listesi — antrenman seçimindekinden ayrı.
+  hidden1RMExercises: [],
   // Haftalık program: gün anahtarı -> şablon kimliği (null = dinlenme günü).
   weekPlan: {}
 };
@@ -403,6 +405,37 @@ export const volumeStatusOf = (volume, muscle, level = 'intermediate') => {
  * Cyan bilinçli olarak yok: uygulamanın her yerinde "birincil aksiyon" rengi,
  * durum göstergesinde kullanılınca uyarılar "iyi" gibi okunuyordu.
  */
+/**
+ * Akut:kronik yük oranının (ACWR) risk sınıfı.
+ *
+ * `hasEnoughData` yanlışken sınıflandırma yapılmaz: kronik yük geçmişi
+ * oluşmadan hesaplanan oran anlamsızdır ve yeni kullanıcıyı boşuna korkutur.
+ *
+ * 1.3'ten sonra doğrudan kırmızıya geçmek yerine 1.3-1.5 arası ayrı bir
+ * "dikkat" bandı var; literatürde de bu aralık yüksek risk değil, izlenmesi
+ * gereken bölge olarak geçiyor.
+ */
+export const acwrStatusOf = (acwr, hasEnoughData) => {
+  if (!hasEnoughData) return 'insufficient';
+  const value = Number(acwr);
+  if (!Number.isFinite(value) || value <= 0) return 'insufficient';
+  if (value < 0.8) return 'low';
+  if (value <= 1.3) return 'optimal';
+  if (value <= 1.5) return 'caution';
+  return 'high';
+};
+
+export const ACWR_STATUS = {
+  insufficient: { label: 'Yeterli Veri Yok', text: 'text-zinc-500' },
+  low: { label: 'Yetersiz', text: 'text-blue-400' },
+  optimal: { label: 'İdeal', text: 'text-emerald-500' },
+  caution: { label: 'Dikkat', text: 'text-amber-400' },
+  high: { label: 'Riskli', text: 'text-red-500' },
+};
+
+/** ACWR'ın anlamlı sayılması için ilk kayıttan bu yana geçmesi gereken gün. */
+export const ACWR_MIN_DAYS = 21;
+
 export const VOLUME_STATUS = {
   none: { label: 'Çalışılmadı', chip: 'text-zinc-500 border-zinc-800 bg-zinc-950', bar: 'bg-zinc-700', text: 'text-zinc-500', hex: '#27272a' },
   under: { label: 'Koruma altı', chip: 'text-amber-400 border-amber-900/40 bg-amber-950/40', bar: 'bg-amber-500', text: 'text-amber-400', hex: '#fbbf24' },

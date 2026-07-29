@@ -7,11 +7,14 @@ import {
   requestWakeLock, playRestAlert, vibrateAlert
 } from './lockScreen';
 
-import { DEFAULT_EXERCISES, MUSCLE_GROUPS, getVolumeLandmarks } from './utils/constants';
+import { DEFAULT_EXERCISES, MUSCLE_GROUPS, getVolumeLandmarks, ACWR_MIN_DAYS } from './utils/constants';
 import { migrateCustomExercises } from './utils/migrations';
 import { computeAdaptiveTDEE } from './utils/tdee';
 import { totalCardioCalories } from './utils/cardio';
 import { safeSetItem, safeSetRawItem, createErrorThrottle } from './utils/persist';
+// Sürüm tek kaynaktan okunur: package.json. Ekranda gösterilen sürüm ile
+// yedek dosyasına yazılan sürümün birbirinden sapması böyle engellenir.
+import pkg from '../package.json';
 import { templateToExercises, workoutToTemplate, suggestTemplateName } from './utils/templates';
 
 import {
@@ -60,6 +63,7 @@ export default function App() {
 
   const [customExercises, setCustomExercises] = useState(initial.customExercises);
   const [customFoods, setCustomFoods] = useState(initial.customFoods);
+  const [recentFoods, setRecentFoods] = useState(initial.recentFoods);
   const [isExerciseModalOpen, setIsExerciseModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
@@ -136,6 +140,7 @@ export default function App() {
   useEffect(() => { persist('templates', templates); }, [templates, persist]);
   useEffect(() => { persist('custom_exercises', customExercises); }, [customExercises, persist]);
   useEffect(() => { persist('custom_foods', customFoods); }, [customFoods, persist]);
+  useEffect(() => { persist('recent_foods', recentFoods); }, [recentFoods, persist]);
   useEffect(() => { persist('active_workout', activeWorkout); }, [activeWorkout, persist]);
   useEffect(() => { persist('metrics', metricsHistory); }, [metricsHistory, persist]);
   useEffect(() => { persist('nutrition', nutritionHistory); }, [nutritionHistory, persist]);
@@ -182,6 +187,32 @@ export default function App() {
     workouts.forEach(w => (w.exercises || []).forEach(ex => { if (ex?.name) s.add(ex.name); }));
     return s;
   }, [workouts]);
+
+  // Her hareketin kaç ayrı seansta yapıldığı. 1RM grafiği en az iki ölçüm
+  // olmadan bir eğilim gösteremediği için o liste bu sayıya göre filtrelenir.
+  const exercisePerformCounts = useMemo(() => {
+    const counts = new Map();
+    workouts.forEach(w => {
+      const seen = new Set();
+      (w.exercises || []).forEach(ex => {
+        // Aynı hareket bir seansta iki kez varsa (süperset vb.) tek sayılır.
+        if (!ex?.name || seen.has(ex.name)) return;
+        seen.add(ex.name);
+        counts.set(ex.name, (counts.get(ex.name) || 0) + 1);
+      });
+    });
+    return counts;
+  }, [workouts]);
+
+  // 1RM listesinin kendi gizleme listesi var: antrenman seçiminde görünmesini
+  // istediğin bir hareketi burada gizlemek isteyebilirsin.
+  const handleToggleHidden1RM = useCallback((name) => {
+    setSettings(prev => {
+      const hidden = new Set(prev.hidden1RMExercises || []);
+      if (hidden.has(name)) hidden.delete(name); else hidden.add(name);
+      return { ...prev, hidden1RMExercises: [...hidden] };
+    });
+  }, []);
 
   // Yerleşik veritabanında olmayan her ad kullanıcının kendi eklediğidir.
   // Yerleşik bir hareketin kas eşlemesini düzenlemek de customExercises'a kayıt
@@ -289,24 +320,61 @@ export default function App() {
       ? (pushSets / pullSets) <= 1.5 && (pullSets / pushSets) <= 1.5
       : !hasPushPullData;
 
-    // ACWR (akut:kronik yük oranı). Akut = son 7 gün, kronik = son 28 günün
-    // haftalık ortalaması. 0.8-1.3 aralığı güvenli kabul edilir.
+    // ACWR (akut:kronik yük oranı) — üstel ağırlıklı hareketli ortalama ile.
+    //
+    // Eskiden akut (son 7 gün) ve kronik (son 28 gün) yükler düz toplamdı ve
+    // akut pencere kroniğin içinde yer alıyordu. Hiç yumuşatma olmadığı için
+    // tek bir ağır ya da hafif seans oranı doğrudan sallıyor, boş yere alarm
+    // veriyordu. EWMA son günlere daha çok ağırlık verir ama tek günün etkisini
+    // söndürür — spor bilimi literatüründe de düz toplamın yerini bu aldı.
+    const DAY_MS = 1000 * 60 * 60 * 24;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    let acuteLoad = 0;
-    let chronicLoad = 0;
+
+    // Yük metriği: sRPE benzeri — seans zorluğu × etkili set sayısı.
+    const loadByDay = new Map();
+    let firstDayTime = null;
     workouts.forEach(w => {
       const wDate = new Date(w.date);
       wDate.setHours(0, 0, 0, 0);
-      const diffDays = Math.floor((today - wDate) / (1000 * 60 * 60 * 24));
-      if (diffDays < 0) return; // gelecek tarihli kayıtlar sayılmaz
-      // Seans yükü: sRPE benzeri — zorluk derecesi × etkili set sayısı
-      const load = (w.rating || 3) * calcEffectiveSets(w.exercises);
-      if (diffDays <= 7) acuteLoad += load;
-      if (diffDays <= 28) chronicLoad += load;
+      if (wDate > today) return; // gelecek tarihli kayıtlar sayılmaz
+      const key = wDate.getTime();
+      loadByDay.set(key, (loadByDay.get(key) || 0) + (w.rating || 3) * calcEffectiveSets(w.exercises));
+      if (firstDayTime === null || key < firstDayTime) firstDayTime = key;
     });
-    const averageChronic = chronicLoad / 4;
-    const acwr = averageChronic > 0 ? (acuteLoad / averageChronic).toFixed(2) : '0.00';
+
+    let acwr = '0.00';
+    let hasEnoughData = false;
+
+    if (firstDayTime !== null) {
+      // EWMA günlük bir seri bekler; antrenman yapılmayan günler 0 yük olarak
+      // doldurulur, yoksa dinlenme günleri hesaba hiç girmez ve oran şişer.
+      const LAMBDA_ACUTE = 2 / 8;    // N = 7 gün
+      const LAMBDA_CHRONIC = 2 / 29; // N = 28 gün
+      let acuteEWMA = null;
+      let chronicEWMA = null;
+      const dailyRatios = [];
+
+      for (let t = firstDayTime; t <= today.getTime(); t += DAY_MS) {
+        const load = loadByDay.get(t) || 0;
+        acuteEWMA = acuteEWMA === null ? load : LAMBDA_ACUTE * load + (1 - LAMBDA_ACUTE) * acuteEWMA;
+        chronicEWMA = chronicEWMA === null ? load : LAMBDA_CHRONIC * load + (1 - LAMBDA_CHRONIC) * chronicEWMA;
+        if (chronicEWMA > 0) dailyRatios.push(acuteEWMA / chronicEWMA);
+      }
+
+      // Tek günün oranı yerine son 7 günün ortalaması gösterilir. Akut EWMA
+      // antrenman gününde yükselip dinlenme gününde düştüğü için, aynı rutini
+      // sürdüren biri sırf hangi gün baktığına göre farklı sonuç görüyordu
+      // (haftada 2 gün çalışanda 0.67 ile 1.30 arası). Ortalama alınca düzenli
+      // rutin sıklıktan bağımsız 1.00 civarına oturuyor, buna karşılık gerçek
+      // yük değişimlerini daha net yakalıyor.
+      if (dailyRatios.length > 0) {
+        const window = dailyRatios.slice(-7);
+        acwr = (window.reduce((sum, r) => sum + r, 0) / window.length).toFixed(2);
+      }
+      // Kronik bileşen anlam kazanana kadar risk sınıflandırması gösterilmez.
+      hasEnoughData = Math.floor((today.getTime() - firstDayTime) / DAY_MS) >= ACWR_MIN_DAYS;
+    }
 
     return {
       thisWeekSessions,
@@ -314,6 +382,7 @@ export default function App() {
       muscleVolume,
       isDeloadNeeded,
       acwr,
+      hasEnoughData,
       pushPullRatio,
       pushPullBalanced,
       hasPushPullData
@@ -794,7 +863,7 @@ export default function App() {
 
   const handleExportData = () => {
     const backup = {
-      version: '0.5.0',
+      version: pkg.version,
       exportedAt: new Date().toISOString(),
       workouts, templates, customExercises, customFoods, metricsHistory, nutritionHistory, settings
     };
@@ -1010,6 +1079,7 @@ export default function App() {
             <h1 className="text-sm font-black tracking-widest uppercase bg-gradient-to-r from-cyan-400 via-emerald-400 to-cyan-500 bg-clip-text text-transparent">
               Hypertrophy<span className="text-cyan-400 font-light ml-0.5">LAB</span>
             </h1>
+            <span className="text-[9px] font-mono text-zinc-600 self-center">v{pkg.version}</span>
           </div>
           <button onClick={() => setIsSettingsModalOpen(true)} className="px-4 py-3.5 text-zinc-400 hover:text-cyan-400 active:scale-95 transition-all">
             <Settings size={18} />
@@ -1094,6 +1164,9 @@ export default function App() {
               allExercisesNames={allExercisesNames}
               customExercises={customExercises}
               experienceLevel={settings.experienceLevel}
+              exercisePerformCounts={exercisePerformCounts}
+              hidden1RMExercises={settings.hidden1RMExercises}
+              onToggleHidden1RM={handleToggleHidden1RM}
             />
           )}
 
@@ -1177,19 +1250,22 @@ export default function App() {
           onClose={() => setIsFoodSearchOpen(false)}
           customFoods={customFoods}
           setCustomFoods={setCustomFoods}
-          onAddFoodToMeal={(food) => {
+          recentFoods={recentFoods}
+          onAddFoodToMeal={(meal, sourceFood) => {
             setCurrentNutritionForm(prev => ({
               ...prev,
-              meals: [...(prev.meals || []), {
-                id: generateId(),
-                name: food.name,
-                calories: food.calories,
-                protein: food.protein,
-                carbs: food.carbs,
-                fats: food.fats,
-              }]
+              meals: [...(prev.meals || []), { id: generateId(), ...meal }]
             }));
-            showToast(`${food.name} öğüne eklendi.`);
+            // Kaynak besin (100g bazlı değerleriyle) sık kullanılanlara yazılır;
+            // öğün kaydı porsiyona göre ölçeklenmiş olduğu için tekrar
+            // kullanılamazdı. Aynı besin başa alınır, liste 8 ile sınırlanır.
+            if (sourceFood?.name) {
+              setRecentFoods(prev => [
+                sourceFood,
+                ...prev.filter(f => f.name !== sourceFood.name),
+              ].slice(0, 8));
+            }
+            showToast(`${meal.name} öğüne eklendi.`);
           }}
         />
 

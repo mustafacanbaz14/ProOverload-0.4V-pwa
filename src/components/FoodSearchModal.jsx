@@ -1,5 +1,5 @@
 import React, { useState, useMemo, memo, lazy, Suspense } from 'react';
-import { X, Search, Barcode, Plus, Loader2, Utensils, Database, Star, Trash2, Save, Globe, Camera } from 'lucide-react';
+import { X, Search, Barcode, Plus, Loader2, Utensils, Database, Star, Trash2, Save, Globe, Camera, Check, History } from 'lucide-react';
 import { parseNumber, foldForSearch } from '../utils/helpers';
 import { FOOD_DATABASE, FOOD_CATEGORIES } from '../utils/foodDatabase';
 const BarcodeScannerModal = lazy(() => import('./BarcodeScannerModal'));
@@ -12,6 +12,7 @@ const FoodSearchModal = memo(({
   onAddFoodToMeal,
   customFoods = [],
   setCustomFoods,
+  recentFoods = [],
 }) => {
   const [tab, setTab] = useState('local'); // 'local' | 'online' | 'custom'
   const [query, setQuery] = useState('');
@@ -25,6 +26,8 @@ const FoodSearchModal = memo(({
 
   const [customForm, setCustomForm] = useState(EMPTY_CUSTOM);
   const [scannerOpen, setScannerOpen] = useState(false);
+  // Kaydedilen çevrimiçi sonuçların kimlikleri — düğme "Kaydedildi"ye döner.
+  const [savedIds, setSavedIds] = useState([]);
 
   // Yerel liste: kullanıcının kendi besinleri her zaman en üstte.
   const localResults = useMemo(() => {
@@ -59,6 +62,13 @@ const FoodSearchModal = memo(({
         protein100g: Math.round(parseNumber(n.proteins_100g ?? n.proteins) * 10) / 10,
         carbs100g: Math.round(parseNumber(n.carbohydrates_100g ?? n.carbohydrates) * 10) / 10,
         fats100g: Math.round(parseNumber(n.fat_100g ?? n.fat) * 10) / 10,
+        // Open Food Facts bu üç değeri de veriyordu ama okunmuyordu.
+        // Bazı ürünlerde sodyum yerine yalnızca tuz var; tuz = sodyum × 2.5.
+        fiber100g: Math.round(parseNumber(n.fiber_100g ?? n.fiber) * 10) / 10,
+        sugars100g: Math.round(parseNumber(n.sugars_100g ?? n.sugars) * 10) / 10,
+        sodium100g: Math.round(
+          (parseNumber(n.sodium_100g) || parseNumber(n.salt_100g) / 2.5) * 1000
+        ) / 1000,
       };
     };
 
@@ -94,14 +104,52 @@ const FoodSearchModal = memo(({
 
   const addToMeal = (food) => {
     const factor = (parseNumber(servingGram) || 100) / 100;
+    const scale = (v, digits = 1) => {
+      const m = Math.pow(10, digits);
+      return Math.round(parseNumber(v) * factor * m) / m;
+    };
     onAddFoodToMeal({
       name: `${food.name}${food.brand ? ` (${food.brand})` : ''} · ${servingGram}g`,
-      calories: Math.round(food.calories100g * factor),
-      protein: Math.round(food.protein100g * factor * 10) / 10,
-      carbs: Math.round(food.carbs100g * factor * 10) / 10,
-      fats: Math.round(food.fats100g * factor * 10) / 10,
-    });
+      calories: Math.round(parseNumber(food.calories100g) * factor),
+      protein: scale(food.protein100g),
+      carbs: scale(food.carbs100g),
+      fats: scale(food.fats100g),
+      // Yalnızca veri varsa yazılır; sıfır yazmak "ölçülmedi" ile "gerçekten 0"
+      // ayrımını kaybettirirdi.
+      ...(food.fiber100g ? { fiber: scale(food.fiber100g) } : {}),
+      ...(food.sugars100g ? { sugars: scale(food.sugars100g) } : {}),
+      ...(food.sodium100g ? { sodium: scale(food.sodium100g, 3) } : {}),
+    }, food);
     onClose();
+  };
+
+  // Aynı isimli kayıt varsa çoğaltmak yerine üzerine yazılır — yedek içe
+  // aktarmanın (App.jsx handleImportData) zaten kullandığı kalıp.
+  const upsertCustomFood = (entry) => {
+    setCustomFoods(prev => {
+      const byName = new Map(prev.map(f => [f.name, f]));
+      byName.set(entry.name, entry);
+      return [...byName.values()];
+    });
+  };
+
+  // Çevrimiçi bulunan bir besini kalıcı listeye alır; bir daha aramak gerekmez.
+  const saveOnlineFoodToCustom = (food) => {
+    upsertCustomFood({
+      id: `custom-${Date.now()}`,
+      name: food.name,
+      category: 'Kendi Besinlerim',
+      brand: food.brand || '',
+      source: 'custom',
+      calories100g: parseNumber(food.calories100g),
+      protein100g: parseNumber(food.protein100g),
+      carbs100g: parseNumber(food.carbs100g),
+      fats100g: parseNumber(food.fats100g),
+      fiber100g: parseNumber(food.fiber100g),
+      sugars100g: parseNumber(food.sugars100g),
+      sodium100g: parseNumber(food.sodium100g),
+    });
+    setSavedIds(prev => [...prev, food.id]);
   };
 
   // Makrolardan kalori tahmini: kullanıcı kalori alanını boş bırakırsa bu değer kullanılır.
@@ -114,7 +162,7 @@ const FoodSearchModal = memo(({
   const saveCustomFood = () => {
     const name = customForm.name.trim();
     if (!name) return;
-    const entry = {
+    upsertCustomFood({
       id: `custom-${Date.now()}`,
       name,
       category: 'Kendi Besinlerim',
@@ -124,8 +172,7 @@ const FoodSearchModal = memo(({
       protein100g: parseNumber(customForm.protein100g),
       carbs100g: parseNumber(customForm.carbs100g),
       fats100g: parseNumber(customForm.fats100g),
-    };
-    setCustomFoods(prev => [entry, ...prev]);
+    });
     setCustomForm(EMPTY_CUSTOM);
     setQuery('');
     setTab('local');
@@ -255,6 +302,28 @@ const FoodSearchModal = memo(({
           )}
         </div>
 
+        {/* Sık kullanılanlar: son eklenen besinler tek dokunuşla geri eklenir.
+            Yalnızca yerel sekmede ve arama yokken gösterilir, sonuç listesini
+            bastırmasın diye. */}
+        {tab === 'local' && !query.trim() && recentFoods.length > 0 && (
+          <div className="px-3 pt-2.5 pb-1 border-b border-zinc-800 bg-zinc-950">
+            <span className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest flex items-center mb-1.5">
+              <History size={10} className="mr-1" /> Sık Kullandıkların
+            </span>
+            <div className="flex gap-1.5 overflow-x-auto hide-scrollbar -mx-1 px-1 pb-1">
+              {recentFoods.map(food => (
+                <button
+                  key={food.id || food.name}
+                  onClick={() => addToMeal(food)}
+                  className="shrink-0 px-2.5 py-1.5 rounded-lg border border-zinc-800 bg-zinc-900 text-[10px] font-bold text-zinc-300 active:border-orange-600 active:text-orange-400 transition-colors max-w-[150px] truncate"
+                >
+                  {food.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* --- İÇERİK --- */}
         <div className="flex-1 overflow-y-auto p-3 space-y-2.5 hide-scrollbar">
           {tab === 'custom' ? (
@@ -324,6 +393,16 @@ const FoodSearchModal = memo(({
                   { label: 'KARB', value: `${Math.round(food.carbs100g * factor * 10) / 10}g`, color: 'text-amber-400' },
                   { label: 'YAĞ', value: `${Math.round(food.fats100g * factor * 10) / 10}g`, color: 'text-purple-400' },
                 ];
+                const micros = [
+                  { label: 'Lif', raw: food.fiber100g, unit: 'g', digits: 1 },
+                  { label: 'Şeker', raw: food.sugars100g, unit: 'g', digits: 1 },
+                  { label: 'Sodyum', raw: food.sodium100g, unit: 'g', digits: 2 },
+                ]
+                  .filter(m => parseNumber(m.raw) > 0)
+                  .map(m => {
+                    const mult = Math.pow(10, m.digits);
+                    return { label: m.label, value: `${Math.round(parseNumber(m.raw) * factor * mult) / mult}${m.unit}` };
+                  });
                 return (
                   <div key={food.id} className="bg-zinc-950 p-3 rounded-2xl border border-zinc-800 space-y-2">
                     <div className="flex justify-between items-start gap-2">
@@ -341,9 +420,21 @@ const FoodSearchModal = memo(({
                           <button
                             onClick={() => setCustomFoods(prev => prev.filter(f => f.id !== food.id))}
                             title="Bu özel besini sil"
+                            aria-label="Bu özel besini sil"
                             className="text-zinc-600 active:text-red-500 p-1.5"
                           >
                             <Trash2 size={12} />
+                          </button>
+                        )}
+                        {food.source === 'online' && (
+                          <button
+                            onClick={() => saveOnlineFoodToCustom(food)}
+                            disabled={savedIds.includes(food.id)}
+                            title="Kendi besinlerime kaydet"
+                            aria-label="Kendi besinlerime kaydet"
+                            className={`p-1.5 transition-colors ${savedIds.includes(food.id) ? 'text-emerald-500' : 'text-zinc-600 active:text-orange-400'}`}
+                          >
+                            {savedIds.includes(food.id) ? <Check size={13} /> : <Save size={13} />}
                           </button>
                         )}
                         <button
@@ -363,6 +454,18 @@ const FoodSearchModal = memo(({
                         </div>
                       ))}
                     </div>
+
+                    {/* Mikro besinler yalnızca veri varsa gösterilir; yoksa
+                        sıfır yazmak "ölçülmedi" ile karıştırılırdı. */}
+                    {micros.length > 0 && (
+                      <div className="flex flex-wrap gap-1 text-[9px] font-mono">
+                        {micros.map(m => (
+                          <span key={m.label} className="bg-zinc-900 border border-zinc-800 rounded-lg px-1.5 py-0.5 text-zinc-400">
+                            {m.label} <strong className="text-zinc-200">{m.value}</strong>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}

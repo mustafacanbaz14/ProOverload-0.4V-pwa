@@ -20,6 +20,8 @@ export const generateQRCodeMatrix = (text) => {
 export const createQRDataString = (backupData) => {
   try {
     return JSON.stringify({
+      // Aktarım formatının sürümü — uygulama sürümünden (package.json) bağımsızdır,
+      // yalnızca bu metin kodunun yapısı değiştiğinde artar.
       version: '0.6.0',
       schema: 2,
       exportedAt: new Date().toISOString(),
