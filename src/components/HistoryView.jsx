@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { Trash2, Calendar, Scale, Beef, Pencil, Copy } from 'lucide-react';
+import { Trash2, Calendar, Scale, Beef, Pencil, Copy, BookmarkPlus } from 'lucide-react';
 import { calcTonnage, calcEffectiveSets, isWorkingSet } from '../utils/helpers';
 
 // Listeler App tarafından tarihe göre azalan sırada verilir (en yeni en üstte).
@@ -16,6 +16,7 @@ const HistoryView = memo(({
   handleRepeatWorkout,
   handleEditMetric,
   handleEditNutrition,
+  handleSaveAsTemplate,
 }) => {
   return (
     <div className="p-4 space-y-4 pb-24 h-full overflow-y-auto hide-scrollbar bg-black">
@@ -64,6 +65,13 @@ const HistoryView = memo(({
                       </div>
                     </div>
                     <div className="flex items-center shrink-0">
+                      <button
+                        onClick={() => handleSaveAsTemplate?.(w)}
+                        title="Şablon olarak kaydet"
+                        className="text-zinc-500 active:text-cyan-400 p-2"
+                      >
+                        <BookmarkPlus size={14} />
+                      </button>
                       <button
                         onClick={() => handleRepeatWorkout?.(w)}
                         title="Bu antrenmanı bugün tekrarla"

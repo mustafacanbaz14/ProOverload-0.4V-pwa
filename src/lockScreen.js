@@ -97,116 +97,155 @@ const drawArtwork = ({
   effectiveSets,
   isPaused,
   restSecondsLeft,
+  restTotalSeconds,
   exerciseIndex = 1,
   totalExercises = 1,
   completedSetsCount = 0,
   totalSetsCount = 0,
+  targetText = '',
+  supersetName = '',
 }) => {
   const SIZE = 512;
-  const PAD = 36;
-  const BOTTOM_LIMIT = SIZE - 16; // Hiçbir şey bu çizginin altına taşmamalı
+  const PAD = 32;
+  const W = SIZE - PAD * 2;
 
   const canvas = document.createElement('canvas');
   canvas.width = SIZE;
   canvas.height = SIZE;
   const ctx = canvas.getContext('2d');
 
+  const isResting = Number(restSecondsLeft) > 0;
+
+  // Zemin
   ctx.fillStyle = '#09090b';
   ctx.fillRect(0, 0, SIZE, SIZE);
-  ctx.fillStyle = '#0891b2';
-  ctx.fillRect(0, 0, SIZE, 6);
-
   ctx.textBaseline = 'top';
 
-  // Durum etiketi (sol) ve etkili set rozeti (sağ) aynı satırda
-  ctx.fillStyle = '#52525b';
-  ctx.font = 'bold 19px system-ui, -apple-system, sans-serif';
-  ctx.fillText(isPaused ? 'DURAKLATILDI' : 'ANTRENMAN SÜRÜYOR', PAD, 32);
+  // Yardımcılar
+  const roundRect = (x, y, w, h, r) => {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  };
+  const label = (text, x, y, color = '#52525b', size = 15) => {
+    ctx.fillStyle = color;
+    ctx.font = `bold ${size}px system-ui, -apple-system, sans-serif`;
+    ctx.fillText(text, x, y);
+  };
 
-  const badge = `${effectiveSets} ETKİLİ SET`;
+  // ---------- ÜST ŞERİT: durum + ilerleme ----------
+  // Dinlenmedeyken renk kodu değişir; kilide bakan biri tek bakışta
+  // "çalışıyor mu, dinleniyor mu" ayırt edebilsin.
+  const accent = isResting ? '#06b6d4' : isPaused ? '#71717a' : '#34d399';
+  ctx.fillStyle = accent;
+  ctx.fillRect(0, 0, SIZE, 5);
+
+  label(isPaused ? 'DURAKLATILDI' : isResting ? 'DİNLENME' : 'ÇALIŞMA', PAD, 24, accent, 16);
+
   ctx.textAlign = 'right';
-  ctx.fillStyle = '#22d3ee';
-  ctx.fillText(badge, SIZE - PAD, 32);
+  label(`${exerciseIndex}/${totalExercises} HAREKET · ${effectiveSets} SET`, SIZE - PAD, 24, '#52525b', 15);
   ctx.textAlign = 'left';
 
-  // Toplam Geçen süre & Dakika göstergesi
-  const elapsedMins = Math.floor(elapsedSeconds / 60);
-  ctx.fillStyle = isPaused ? '#a1a1aa' : '#34d399';
-  ctx.font = 'bold 76px ui-monospace, SFMono-Regular, Menlo, monospace';
-  ctx.fillText(formatDuration(elapsedSeconds), PAD, 58);
+  // ---------- ANA SAYAÇ ----------
+  // Dinlenmedeyken kalan süre öne çıkar; asıl merak edilen o.
+  let y = 52;
+  const mainSeconds = isResting ? restSecondsLeft : elapsedSeconds;
+  ctx.fillStyle = isResting ? '#ecfeff' : isPaused ? '#a1a1aa' : '#fafafa';
+  ctx.font = 'bold 92px ui-monospace, SFMono-Regular, Menlo, monospace';
+  ctx.fillText(formatDuration(mainSeconds), PAD, y);
 
-  ctx.fillStyle = '#a1a1aa';
-  ctx.font = 'bold 18px system-ui, -apple-system, sans-serif';
-  ctx.fillText(`TOPLAM SÜRE: ${elapsedMins} DK`, PAD, 140);
-
-  let y = 172;
-
-  // Dinlenme sayacı — set arasındayken en dikkat çekici bilgi
-  const isResting = Number(restSecondsLeft) > 0;
+  ctx.textAlign = 'right';
   if (isResting) {
-    const barH = 64;
-    ctx.fillStyle = '#164e63';
-    ctx.fillRect(PAD, y, SIZE - PAD * 2, barH);
+    label('KALAN', SIZE - PAD, y + 24, '#67e8f9', 16);
+    label(`SEANS ${Math.floor(elapsedSeconds / 60)} DK`, SIZE - PAD, y + 46, '#3f3f46', 14);
+  } else {
+    label('TOPLAM SÜRE', SIZE - PAD, y + 24, '#52525b', 16);
+  }
+  ctx.textAlign = 'left';
+
+  y += 108;
+
+  // ---------- DİNLENME İLERLEME ÇUBUĞU ----------
+  if (isResting && restTotalSeconds > 0) {
+    const ratio = Math.max(0, Math.min(1, restSecondsLeft / restTotalSeconds));
+    ctx.fillStyle = '#18181b';
+    roundRect(PAD, y, W, 12, 6);
+    ctx.fill();
     ctx.fillStyle = '#06b6d4';
-    ctx.fillRect(PAD, y, 6, barH);
-
-    ctx.fillStyle = '#67e8f9';
-    ctx.font = 'bold 16px system-ui, -apple-system, sans-serif';
-    ctx.fillText(`DİNLENME KANALI (${restSecondsLeft} SN KALDI)`, PAD + 18, y + 10);
-
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#ecfeff';
-    ctx.font = 'bold 38px ui-monospace, SFMono-Regular, Menlo, monospace';
-    ctx.fillText(formatDuration(restSecondsLeft), SIZE - PAD - 16, y + 12);
-    ctx.textAlign = 'left';
-
-    y += barH + 16;
+    roundRect(PAD, y, Math.max(12, W * ratio), 12, 6);
+    ctx.fill();
+    y += 30;
+  } else {
+    y += 6;
   }
 
-  // Mevcut hareket ve set detayları
-  ctx.fillStyle = '#06b6d4';
-  ctx.font = 'bold 17px system-ui, -apple-system, sans-serif';
-  const exLabel = `MEVCUT HAREKET (${exerciseIndex}/${totalExercises}) · SET ${completedSetsCount + 1}/${Math.max(completedSetsCount + 1, totalSetsCount)}`;
-  ctx.fillText(exLabel, PAD, y);
-  y += 24;
+  // ---------- MEVCUT HAREKET ----------
+  const cardH = supersetName ? 118 : 96;
+  ctx.fillStyle = '#18181b';
+  roundRect(PAD, y, W, cardH, 14);
+  ctx.fill();
+  ctx.fillStyle = accent;
+  roundRect(PAD, y, 5, cardH, 3);
+  ctx.fill();
+
+  const innerX = PAD + 20;
+  label(`SET ${completedSetsCount + 1}/${Math.max(completedSetsCount + 1, totalSetsCount)}`, innerX, y + 14, '#52525b', 14);
 
   ctx.fillStyle = '#fafafa';
-  ctx.font = 'bold 30px system-ui, -apple-system, sans-serif';
-  const nameLines = wrapText(ctx, exerciseName || 'Hareket seçilmedi', SIZE - PAD * 2).slice(0, 2);
-  nameLines.forEach((line, i) => ctx.fillText(line, PAD, y + i * 36));
+  ctx.font = 'bold 28px system-ui, -apple-system, sans-serif';
+  const nameLines = wrapText(ctx, exerciseName || 'Hareket seçilmedi', W - 40).slice(0, 1);
+  ctx.fillText(nameLines[0] || '', innerX, y + 36);
 
-  y += nameLines.length * 36 + 14;
+  if (targetText) {
+    label(`HEDEF: ${targetText}`, innerX, y + 70, '#34d399', 17);
+  }
+  if (supersetName) {
+    label(`SÜPERSET → ${supersetName}`, innerX, y + (targetText ? 92 : 70), '#c084fc', 15);
+  }
 
-  ctx.fillStyle = '#27272a';
-  ctx.fillRect(PAD, y, SIZE - PAD * 2, 2);
-  y += 18;
+  y += cardH + 18;
 
-  ctx.fillStyle = '#52525b';
-  ctx.font = 'bold 17px system-ui, -apple-system, sans-serif';
-  ctx.fillText(previousDate ? `GEÇEN ANTRENMAN · ${previousDate}` : 'GEÇEN ANTRENMAN', PAD, y);
-  y += 28;
+  // ---------- GEÇEN ANTRENMAN ----------
+  label(previousDate ? `GEÇEN ANTRENMAN · ${previousDate}` : 'GEÇEN ANTRENMAN', PAD, y, '#52525b', 15);
+  y += 26;
 
-  const sets = Array.isArray(previousSets) ? previousSets.slice(0, 4) : [];
+  const sets = Array.isArray(previousSets) ? previousSets : [];
   if (sets.length === 0) {
-    ctx.fillStyle = '#71717a';
-    ctx.font = '22px ui-monospace, SFMono-Regular, Menlo, monospace';
-    ctx.fillText('Bu hareket için geçmiş kayıt yok', PAD, y);
+    label('Bu hareket için geçmiş kayıt yok', PAD, y, '#3f3f46', 18);
   } else {
-    const ROW = 34;
-    ctx.font = '25px ui-monospace, SFMono-Regular, Menlo, monospace';
-    for (let i = 0; i < sets.length; i++) {
-      if (y + ROW > BOTTOM_LIMIT) break;
-      const set = sets[i];
-      ctx.fillStyle = '#52525b';
-      ctx.fillText(`${i + 1}`, PAD, y);
+    // Setler yan yana kutularda: dikey listeden daha az yer kaplar ve
+    // kilit ekranındaki küçük görselde daha okunaklı olur.
+    const maxCols = 4;
+    const shown = sets.slice(0, maxCols);
+    const gap = 10;
+    const boxW = (W - gap * (shown.length - 1)) / shown.length;
+
+    shown.forEach((set, i) => {
+      const x = PAD + i * (boxW + gap);
+      ctx.fillStyle = '#18181b';
+      roundRect(x, y, boxW, 74, 12);
+      ctx.fill();
+
+      ctx.textAlign = 'center';
+      const cx = x + boxW / 2;
+
       ctx.fillStyle = '#22d3ee';
-      ctx.fillText(`${set.weight || 0} kg`, PAD + 36, y);
-      ctx.fillStyle = '#e4e4e7';
-      ctx.fillText(`× ${set.reps || 0}`, PAD + 168, y);
-      ctx.fillStyle = '#a1a1aa';
-      ctx.fillText(`RIR ${set.rir ?? '-'}`, PAD + 276, y);
-      y += ROW;
-    }
+      ctx.font = 'bold 26px ui-monospace, SFMono-Regular, Menlo, monospace';
+      ctx.fillText(`${set.weight || 0}`, cx, y + 12);
+
+      ctx.fillStyle = '#71717a';
+      ctx.font = 'bold 14px system-ui, -apple-system, sans-serif';
+      ctx.fillText(`× ${set.reps || 0}`, cx, y + 42);
+
+      ctx.fillStyle = '#3f3f46';
+      ctx.font = '13px ui-monospace, SFMono-Regular, Menlo, monospace';
+      ctx.fillText(`RIR ${set.rir ?? '-'}`, cx, y + 58);
+      ctx.textAlign = 'left';
+    });
   }
 
   return new Promise((resolve) => {
@@ -274,6 +313,8 @@ export const updateLockScreenActivity = async ({
   totalExercises = 1,
   completedSetsCount = 0,
   totalSetsCount = 0,
+  targetText = '',
+  supersetName = '',
 }) => {
   if (!isLockScreenSupported() || !isActive) return;
 
@@ -293,10 +334,13 @@ export const updateLockScreenActivity = async ({
     effectiveSets,
     isPaused,
     restSecondsLeft,
+    restTotalSeconds,
     exerciseIndex,
     totalExercises,
     completedSetsCount,
     totalSetsCount,
+    targetText,
+    supersetName,
   });
 
   // Bu çağrı beklerken daha yenisi başladıysa sonucu at, aksi halde eski veriyi yazardık.

@@ -31,7 +31,19 @@ export const DEFAULT_EXERCISES = [
   "Barbell Bicep Curl", "Dumbbell Bicep Curl", "Hammer Curl", "Incline Dumbbell Curl", "Preacher Curl", "Cable Bicep Curl",
   "Tricep Pushdown", "Tricep Overhead Extension", "Skull Crusher", "Close Grip Bench Press", "Tricep Kickback",
   "Wrist Curl", "Reverse Wrist Curl", "Reverse Curl",
-  "Cable Crunch", "Hanging Leg Raise", "Ab Wheel Rollout", "Plank", "Russian Twist", "Farmer's Walk"
+  "Cable Crunch", "Hanging Leg Raise", "Hanging Knee Raise", "Ab Wheel Rollout", "Plank", "Side Plank",
+  "Russian Twist", "Decline Sit-up", "Cable Woodchopper", "Farmer's Walk",
+
+  // --- v0.6 eklemeleri ---
+  "Incline Dumbbell Fly", "Cable Fly (Low to High)", "Machine Fly", "Smith Machine Bench Press",
+  "Diamond Push-ups",
+  "Inverted Row", "Seated Row (Wide Grip)", "Single Arm Lat Pulldown", "Barbell Pullover", "Rack Pull",
+  "Landmine Press", "Cable Rear Delt Fly", "Y-Raise",
+  "EZ Bar Curl", "Zottman Curl", "Cable Hammer Curl", "Cable Overhead Tricep Extension",
+  "Goblet Squat", "Belt Squat", "Smith Machine Squat", "Sissy Squat", "Single Leg Press",
+  "Standing Leg Curl", "Glute Ham Raise", "Cable Pull Through",
+  "Leg Press Calf Raise", "Smith Machine Calf Raise",
+  "Behind the Back Wrist Curl"
 ].sort();
 
 // 16 kas grubu. Ayrım hipertrofi hacim takibinin gerektirdiği çözünürlüğe göre:
@@ -112,6 +124,7 @@ export const LEGACY_MUSCLE_MAP = {
 export const EXERCISE_RULES = [
   // --- KARIN & BEL ---
   [/ab wheel|rollout/, 'Core', { 'Karın': 1, 'Bel': 0.25 }],
+  [/woodchop|cable twist/, 'Core', { 'Karın': 1 }],
   [/hanging (leg|knee) raise|toes to bar|captain'?s chair|sit-?up|crunch|dead bug|pallof|russian twist|plank|hollow/, 'Core', { 'Karın': 1 }],
   [/back extension|hyper-?extension|reverse hyper/, 'Core', { 'Bel': 1, 'Kalça': 0.5, 'Hamstring': 0.5 }],
   // Farmer's walk öncelikle kavrama çalışmasıdır; trapez yükü taşır.
@@ -121,6 +134,10 @@ export const EXERCISE_RULES = [
   [/calf raise|calf press|donkey calf/, 'Legs', { 'Baldır': 1 }],
 
   // --- KALÇA BASKIN ---
+  // Glute Ham Raise adında 'glute' geçse de hamstring baskın bir harekettir;
+  // genel glute kuralından önce yakalanmalı.
+  [/glute ham raise|\bghr\b/, 'Legs', { 'Hamstring': 1, 'Kalça': 0.5 }],
+  [/pull through/, 'Legs', { 'Kalça': 1, 'Hamstring': 0.5 }],
   [/hip thrust|glute bridge|glute kickback|glute/, 'Legs', { 'Kalça': 1, 'Hamstring': 0.25 }],
 
   // --- HAMSTRING BASKIN (genel /curl/ kuralından önce olmalı) ---
@@ -132,6 +149,7 @@ export const EXERCISE_RULES = [
   // Sumo'da duruş dik olduğu için kalça/quad payı artar, bel payı azalır.
   [/sumo deadlift/, 'Legs', { 'Kalça': 1, 'Quadriceps': 0.5, 'Hamstring': 0.5, 'Bel': 0.5, 'Trapez': 0.25, 'Önkol': 0.5 }],
   [/trap bar deadlift|hex bar/, 'Legs', { 'Quadriceps': 1, 'Kalça': 0.5, 'Bel': 0.5, 'Trapez': 0.5, 'Önkol': 0.5 }],
+  [/rack pull/, 'Legs', { 'Bel': 1, 'Trapez': 0.5, 'Kanat': 0.5, 'Kalça': 0.5, 'Önkol': 0.5 }],
   [/deadlift/, 'Legs', { 'Bel': 1, 'Kalça': 1, 'Hamstring': 0.5, 'Trapez': 0.5, 'Önkol': 0.5, 'Kanat': 0.25 }],
 
   // --- QUAD BASKIN ---
@@ -144,6 +162,7 @@ export const EXERCISE_RULES = [
   // --- OMUZ İZOLASYON (üç baş ayrı) ---
   [/face pull/, 'Pull', { 'Arka Omuz': 1, 'Trapez': 0.5, 'Orta Sırt': 0.25 }],
   [/reverse pec|rear delt|reverse fly/, 'Pull', { 'Arka Omuz': 1, 'Orta Sırt': 0.25 }],
+  [/y-?raise/, 'Pull', { 'Arka Omuz': 1, 'Trapez': 0.5 }],
   [/lateral raise|side raise/, 'Push', { 'Yan Omuz': 1 }],
   [/front raise/, 'Push', { 'Ön Omuz': 1 }],
   [/upright row/, 'Pull', { 'Yan Omuz': 1, 'Trapez': 0.5, 'Biseps': 0.25 }],
@@ -151,14 +170,18 @@ export const EXERCISE_RULES = [
 
   // --- OMUZ BİLEŞKE ---
   // Dikey baslarda yük ön deltoiddedir; yan baş yalnızca kısmi katkı alır.
+  [/landmine press/, 'Push', { 'Ön Omuz': 1, 'Göğüs': 0.5, 'Triseps': 0.5 }],
   [/overhead press|\bohp\b|shoulder press|arnold press|military press|push press/, 'Push', { 'Ön Omuz': 1, 'Triseps': 0.5, 'Yan Omuz': 0.25, 'Trapez': 0.25 }],
 
   // --- KOL ---
   // Close grip bench triceps baskındır; göğüs kuralından önce yakalanmalı.
   [/close grip bench/, 'Push', { 'Triseps': 1, 'Göğüs': 0.5, 'Ön Omuz': 0.25 }],
+  [/diamond push/, 'Push', { 'Triseps': 1, 'Göğüs': 0.5 }],
   [/tricep|skull crusher|pushdown|kickback|overhead extension/, 'Push', { 'Triseps': 1 }],
   // Önkol izolasyonu genel /curl/ kuralından önce yakalanmalı.
-  [/wrist curl|reverse wrist|wrist roller|grip|plate pinch/, 'Pull', { 'Önkol': 1 }],
+  // Dikkat: burada çıplak /grip/ KULLANILAMAZ — "Seated Row (Wide Grip)",
+  // "Neutral Grip Pulldown" gibi hareketleri önkol sanardı.
+  [/wrist curl|reverse wrist|wrist roller|grip trainer|plate pinch|dead hang|barbell hold/, 'Pull', { 'Önkol': 1 }],
   [/reverse curl/, 'Pull', { 'Önkol': 1, 'Biseps': 0.5 }],
   [/hammer/, 'Pull', { 'Biseps': 1, 'Önkol': 0.5 }],
   // Bacak curl'leri yukarıda yakalandığı için buradaki genel /curl/ güvenlidir.

@@ -1,6 +1,7 @@
 import React, { memo } from 'react';
-import { AlertCircle, Activity, Target, Zap, BookmarkPlus, Trash2, Trophy } from 'lucide-react';
+import { AlertCircle, Activity, Target, Zap, BookmarkPlus, Trash2, Trophy, Clock, Layers, ChevronRight } from 'lucide-react';
 import { MUSCLE_VOLUME_LANDMARKS, MUSCLE_SECTIONS } from '../utils/constants';
+import { previewTemplateVolume, estimateDuration } from '../utils/templates';
 import MuscleHeatmap from './MuscleHeatmap';
 
 const HomeView = memo(({
@@ -12,6 +13,9 @@ const HomeView = memo(({
   setDeleteConfirm,
   setIsReportCardOpen,
   onSelectMuscle,
+  onPreviewTemplate,
+  customExercises = [],
+  restSeconds = 120,
 }) => {
   return (
     <div className="p-4 space-y-5 pb-24 h-full overflow-y-auto hide-scrollbar bg-black">
@@ -157,19 +161,52 @@ const HomeView = memo(({
 
       {templates.length > 0 && (
         <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
-          <div className="p-3 border-b border-zinc-800 bg-zinc-950/50">
-            <h3 className="text-[11px] font-bold text-zinc-400 uppercase tracking-widest flex items-center"><BookmarkPlus size={12} className="mr-2 text-cyan-500" /> Şablonlar</h3>
+          <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-950/60">
+            <h3 className="text-[11px] font-bold text-zinc-200 uppercase tracking-wider flex items-center">
+              <BookmarkPlus size={13} className="mr-2 text-cyan-400" /> Şablonlar
+            </h3>
           </div>
           <div className="divide-y divide-zinc-800">
-            {templates.map(t => (
-              <div key={t.id} className="p-3 flex justify-between items-center">
-                <span className="text-xs font-bold text-cyan-400 truncate pr-2">{t.name}</span>
-                <div className="flex items-center space-x-2 shrink-0">
-                  <button onClick={() => handleStartRequest(t)} className="bg-cyan-900/30 active:bg-cyan-900/60 text-cyan-400 border border-cyan-800 text-[11px] font-bold py-1.5 px-3 rounded-lg uppercase tracking-wider">Başlat</button>
-                  <button onClick={() => setDeleteConfirm({ isOpen: true, type: 'template', id: t.id })} className="text-zinc-600 hover:text-red-500 p-1"><Trash2 size={14} /></button>
+            {templates.map(t => {
+              // Kart üzerinde kısa önizleme: süre, set ve en çok yüklenen üç bölge.
+              const { byMuscle, totalSets } = previewTemplateVolume(t.exercises, customExercises);
+              const minutes = estimateDuration(t.exercises, restSeconds);
+              const top = Object.entries(byMuscle).sort((a, b) => b[1] - a[1]).slice(0, 3);
+
+              return (
+                <div key={t.id} className="p-3 space-y-2">
+                  <div className="flex justify-between items-start gap-2">
+                    <button
+                      onClick={() => onPreviewTemplate?.(t)}
+                      className="min-w-0 flex-1 text-left active:opacity-70 transition-opacity"
+                    >
+                      <span className="text-xs font-bold text-cyan-400 truncate flex items-center">
+                        <span className="truncate">{t.name}</span>
+                        <ChevronRight size={13} className="ml-1 shrink-0 text-zinc-600" />
+                      </span>
+                      <span className="flex items-center gap-3 mt-1 text-[10px] font-mono text-zinc-500">
+                        <span className="flex items-center"><Clock size={10} className="mr-1" />~{minutes} dk</span>
+                        <span className="flex items-center"><Layers size={10} className="mr-1" />{totalSets} set</span>
+                      </span>
+                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button onClick={() => handleStartRequest(t)} className="bg-cyan-900/30 active:bg-cyan-900/60 text-cyan-400 border border-cyan-800 text-[10px] font-bold py-1.5 px-3 rounded-lg uppercase tracking-wider">Başlat</button>
+                      <button onClick={() => setDeleteConfirm({ isOpen: true, type: 'template', id: t.id })} className="text-zinc-600 active:text-red-500 p-1.5"><Trash2 size={14} /></button>
+                    </div>
+                  </div>
+
+                  {top.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {top.map(([m, v]) => (
+                        <span key={m} className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-zinc-800 bg-zinc-950 text-zinc-400">
+                          {m} <strong className="text-cyan-400">{v}</strong>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

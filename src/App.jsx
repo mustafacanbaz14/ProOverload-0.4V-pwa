@@ -10,12 +10,13 @@ import {
 import { DEFAULT_EXERCISES, MUSCLE_GROUPS, MUSCLE_VOLUME_LANDMARKS } from './utils/constants';
 import { migrateCustomExercises } from './utils/migrations';
 import { computeAdaptiveTDEE } from './utils/tdee';
+import { templateToExercises, workoutToTemplate, suggestTemplateName } from './utils/templates';
 
 import {
   generateId, getLocalDateString, getMondayOfCurrentWeek, detectMuscleGroup,
   foldForSearch, parseNumber, mergeMetrics, mergeNutrition,
   isWorkingSet, calcEffectiveSets, buildPersonalRecords, loadPersistedState,
-  computeComposition, sortByDateDesc, storageKey
+  computeComposition, sortByDateDesc, storageKey, suggestNextTarget
 } from './utils/helpers';
 
 import Navbar from './components/Navbar';
@@ -32,6 +33,8 @@ import MetricsComparisonModal from './components/MetricsComparisonModal';
 import ReportCardModal from './components/ReportCardModal';
 import MuscleDetailModal from './components/MuscleDetailModal';
 import PlateCalculatorModal from './components/PlateCalculatorModal';
+import TemplatePreviewModal from './components/TemplatePreviewModal';
+import ExerciseEditorModal from './components/ExerciseEditorModal';
 
 export default function App() {
   const [initial] = useState(loadPersistedState);
@@ -58,6 +61,8 @@ export default function App() {
   const [isReportCardOpen, setIsReportCardOpen] = useState(false);
   const [detailMuscle, setDetailMuscle] = useState(null);
   const [plateCalc, setPlateCalc] = useState(null); // { weight } | null
+  const [previewTemplate, setPreviewTemplate] = useState(null);
+  const [editorExercise, setEditorExercise] = useState(null); // hareket adı
 
   const [exerciseSearchQuery, setExerciseSearchQuery] = useState('');
   const [isAddingCustom, setIsAddingCustom] = useState(false);
@@ -420,6 +425,12 @@ export default function App() {
       const currentRest = restRef.current;
       const secondsLeft = currentRest ? Math.max(0, Math.ceil((currentRest.endsAt - Date.now()) / 1000)) : 0;
 
+      const { muscle } = active ? detectMuscleGroup(active.name, customExercises) : {};
+      const target = history ? suggestNextTarget(history.sets, settings, muscle) : null;
+      const partner = active?.supersetId
+        ? exercises.find(e => e.supersetId === active.supersetId && e.id !== active.id)
+        : null;
+
       updateLockScreenActivity({
         elapsedSeconds: elapsed,
         exerciseName: active?.name || '',
@@ -433,6 +444,9 @@ export default function App() {
         totalExercises,
         completedSetsCount,
         totalSetsCount,
+        // Bugünkü hedef ve süperset eşi kilit ekranından da görünsün.
+        targetText: target ? `${target.weight} kg × ${target.reps}` : '',
+        supersetName: partner?.name || '',
       });
     };
 
@@ -453,7 +467,7 @@ export default function App() {
       document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [lockScreenOn, activeWorkoutId, isEditingOldWorkout, currentExerciseName, timerStatus, rest,
-      settings.keepScreenAwake, getRecentExerciseData]);
+      settings, customExercises, getRecentExerciseData]);
 
 
   const handleStartRequest = useCallback((templateOrWorkout = null) => {
@@ -465,16 +479,8 @@ export default function App() {
     const todayStr = getLocalDateString();
     const readinessScore = readinessForm.sleep + (6 - readinessForm.stress) + (6 - readinessForm.soreness);
 
-    let initialExercises = [];
-    if (template && Array.isArray(template.exercises)) {
-      initialExercises = template.exercises.map(ex => ({
-        id: generateId(),
-        name: ex.name,
-        sets: (ex.sets || []).map(s => ({
-          id: generateId(), weight: s.weight || '', reps: s.reps || '', rir: s.rir ?? 2, tempo: s.tempo || '', formRating: s.formRating || 8, setType: s.setType || 'normal'
-        }))
-      }));
-    }
+    // Süperset bağları ve set yapısı şablondan aynen taşınır.
+    const initialExercises = template ? templateToExercises(template, generateId) : [];
 
     const newWorkout = {
       id: generateId(),
@@ -610,6 +616,78 @@ export default function App() {
     setPreWorkoutModal({ template: workout });
   }, []);
 
+  // --- SÜPERSET ---
+  // Model olabildiğince basit: bir hareket, kendisinden SONRA gelen hareketle
+  // eşleşir ve ikisi aynı supersetId'yi paylaşır. Bağı koparmak ikisini de
+  // serbest bırakır. Üçlü/dörtlü grup gerekmediği için ayrı bir yapı kurulmadı.
+  const handleToggleSuperset = useCallback((exerciseId) => {
+    setActiveWorkout(prev => {
+      if (!prev) return prev;
+      const list = prev.exercises || [];
+      const i = list.findIndex(e => e.id === exerciseId);
+      if (i < 0) return prev;
+
+      const current = list[i];
+
+      // Zaten bağlıysa: aynı gruptaki tüm hareketleri serbest bırak.
+      if (current.supersetId) {
+        return {
+          ...prev,
+          exercises: list.map(e => e.supersetId === current.supersetId ? { ...e, supersetId: null } : e)
+        };
+      }
+
+      const next = list[i + 1];
+      if (!next || next.supersetId) return prev; // eşleşecek serbest hareket yok
+
+      const groupId = generateId();
+      return {
+        ...prev,
+        exercises: list.map((e, idx) =>
+          idx === i || idx === i + 1 ? { ...e, supersetId: groupId } : e)
+      };
+    });
+  }, []);
+
+  // --- ŞABLONLAR ---
+
+  // Aktif veya geçmiş bir antrenmanı şablona çevirir.
+  const handleSaveAsTemplate = useCallback((workout) => {
+    const source = workout || activeWorkoutRef.current;
+    if (!source) return;
+    const suggested = source.name && source.name !== 'Serbest Antrenman'
+      ? source.name
+      : suggestTemplateName(source.exercises, customExercises);
+    const template = workoutToTemplate(source, suggested, generateId);
+    if (template.exercises.length === 0) {
+      showToast('Şablon için en az bir dolu set gerekiyor.');
+      return;
+    }
+    setTemplates(prev => [template, ...prev]);
+    showToast(`"${suggested}" şablon olarak kaydedildi.`);
+  }, [customExercises, showToast]);
+
+
+  // --- HAREKET KAS EŞLEMESİ ---
+
+  // Yerleşik hareketler de düzenlenebilir: kayıt customExercises içine aynı ADLA
+  // yazılır, detectMuscleGroup önce oraya baktığı için yerleşik kuralı ezer.
+  const handleSaveExerciseMapping = useCallback((name, { contributions, mechanics }) => {
+    const primary = Object.entries(contributions).sort((a, b) => b[1] - a[1])[0]?.[0];
+    setCustomExercises(prev => {
+      const rest = prev.filter(ex => (typeof ex === 'object' ? ex.name : ex) !== name);
+      return [...rest, { name, contributions, muscle: primary, mechanics, schema: 2 }];
+    });
+    setEditorExercise(null);
+    showToast('Kas eşlemesi kaydedildi.');
+  }, [showToast]);
+
+  const handleResetExerciseMapping = useCallback((name) => {
+    setCustomExercises(prev => prev.filter(ex => (typeof ex === 'object' ? ex.name : ex) !== name));
+    setEditorExercise(null);
+    showToast('Varsayılan eşlemeye dönüldü.');
+  }, [showToast]);
+
   const handleExportData = () => {
     const backup = {
       version: '0.5.0',
@@ -737,6 +815,9 @@ export default function App() {
               setDeleteConfirm={setDeleteConfirm}
               setIsReportCardOpen={setIsReportCardOpen}
               onSelectMuscle={setDetailMuscle}
+              onPreviewTemplate={setPreviewTemplate}
+              customExercises={customExercises}
+              restSeconds={settings.restSeconds}
             />
           )}
 
@@ -808,6 +889,7 @@ export default function App() {
               handleRepeatWorkout={handleRepeatWorkout}
               handleEditMetric={handleEditMetric}
               handleEditNutrition={handleEditNutrition}
+              handleSaveAsTemplate={handleSaveAsTemplate}
             />
           )}
 
@@ -829,6 +911,9 @@ export default function App() {
               startRest={startRest}
               stopRest={stopRest}
               onOpenPlateCalc={(w) => setPlateCalc({ weight: w })}
+              onSaveAsTemplate={() => handleSaveAsTemplate(null)}
+              onToggleSuperset={handleToggleSuperset}
+              onEditExercise={setEditorExercise}
               rest={rest}
               restSecondsLeft={restSecondsLeft}
             />
@@ -889,6 +974,29 @@ export default function App() {
           isOpen={isComparisonOpen}
           onClose={() => setIsComparisonOpen(false)}
           metricsHistory={metricsHistory}
+        />
+
+        {/* TEMPLATE PREVIEW */}
+        <TemplatePreviewModal
+          isOpen={Boolean(previewTemplate)}
+          onClose={() => setPreviewTemplate(null)}
+          template={previewTemplate}
+          customExercises={customExercises}
+          restSeconds={settings.restSeconds}
+          onStart={(t) => handleStartRequest(t)}
+        />
+
+        {/* EXERCISE MAPPING EDITOR */}
+        <ExerciseEditorModal
+          key={editorExercise || 'none'}
+          isOpen={Boolean(editorExercise)}
+          onClose={() => setEditorExercise(null)}
+          exerciseName={editorExercise || ''}
+          currentContributions={editorExercise ? detectMuscleGroup(editorExercise, customExercises).contributions : {}}
+          currentMechanics={editorExercise ? detectMuscleGroup(editorExercise, customExercises).mechanics : 'Push'}
+          isOverridden={customExercises.some(ex => (typeof ex === 'object' ? ex.name : ex) === editorExercise)}
+          onSave={(data) => handleSaveExerciseMapping(editorExercise, data)}
+          onReset={() => handleResetExerciseMapping(editorExercise)}
         />
 
         {/* PLATE CALCULATOR */}
@@ -1120,7 +1228,19 @@ export default function App() {
                         ))}
                       </div>
                     </div>
-                    {getRecentExerciseData(ex) && <Activity size={14} className="text-cyan-600 shrink-0 mt-1" />}
+                    <span className="flex items-center gap-1 shrink-0 mt-0.5">
+                      {getRecentExerciseData(ex) && <Activity size={14} className="text-cyan-600" />}
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => { e.stopPropagation(); setEditorExercise(ex); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setEditorExercise(ex); } }}
+                        title="Kas eşlemesini düzenle"
+                        className="text-zinc-600 active:text-cyan-400 p-1.5 -m-0.5 cursor-pointer"
+                      >
+                        <Settings size={13} />
+                      </span>
+                    </span>
                   </button>
                 );
               })}

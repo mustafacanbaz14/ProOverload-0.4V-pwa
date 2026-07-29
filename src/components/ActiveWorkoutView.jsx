@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { Activity, Pause, Play, Plus, X, Trash2, Trophy, TrendingUp, AlertCircle, Save, Timer, Layers } from 'lucide-react';
+import { Activity, Pause, Play, Plus, X, Trash2, Trophy, TrendingUp, AlertCircle, Save, Timer, Layers, Link2, Unlink, BookmarkPlus, Settings } from 'lucide-react';
 import WorkoutTimer from './WorkoutTimer';
 import { FORM_RATINGS, SET_TYPES } from '../utils/constants';
 import {
@@ -26,6 +26,9 @@ const ActiveWorkoutView = memo(({
   rest,
   restSecondsLeft,
   onOpenPlateCalc,
+  onSaveAsTemplate,
+  onToggleSuperset,
+  onEditExercise,
 }) => {
   if (!activeWorkout) return null;
 
@@ -120,10 +123,39 @@ const ActiveWorkoutView = memo(({
 
           return (
             <div key={ex.id} className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
-              <div className="bg-zinc-950 px-3 py-2 border-b border-zinc-800 flex justify-between items-center">
-                <h3 className="text-xs font-bold text-zinc-100 uppercase tracking-wide truncate pr-2"><span className="text-cyan-500 mr-1">{exIndex + 1}.</span>{ex.name}</h3>
-                <button onClick={() => setActiveWorkout(prev => ({ ...prev, exercises: prev.exercises.filter(e => e.id !== ex.id) }))} className="text-zinc-600 p-1"><X size={14} /></button>
+              <div className="bg-zinc-950 px-3 py-2 border-b border-zinc-800 flex justify-between items-center gap-2">
+                <h3 className="text-xs font-bold text-zinc-100 uppercase tracking-wide truncate min-w-0 flex items-center">
+                  {ex.supersetId && <Link2 size={12} className="mr-1.5 text-purple-400 shrink-0" />}
+                  <span className="text-cyan-500 mr-1">{exIndex + 1}.</span>
+                  <span className="truncate">{ex.name}</span>
+                </h3>
+                <div className="flex items-center shrink-0">
+                  <button
+                    onClick={() => onToggleSuperset?.(ex.id)}
+                    title={ex.supersetId ? 'Süperset bağını kaldır' : 'Sonraki hareketle süperset yap'}
+                    className={`p-1.5 transition-colors ${ex.supersetId ? 'text-purple-400' : 'text-zinc-600 active:text-purple-400'}`}
+                  >
+                    {ex.supersetId ? <Unlink size={13} /> : <Link2 size={13} />}
+                  </button>
+                  <button
+                    onClick={() => onEditExercise?.(ex.name)}
+                    title="Kas eşlemesini düzenle"
+                    className="text-zinc-600 active:text-cyan-400 p-1.5"
+                  >
+                    <Settings size={13} />
+                  </button>
+                  <button onClick={() => setActiveWorkout(prev => ({ ...prev, exercises: prev.exercises.filter(e => e.id !== ex.id) }))} className="text-zinc-600 active:text-red-500 p-1.5"><X size={14} /></button>
+                </div>
               </div>
+
+              {ex.supersetId && (
+                <div className="bg-purple-950/25 px-3 py-1.5 border-b border-purple-900/40 flex items-center gap-1.5">
+                  <Link2 size={10} className="text-purple-400 shrink-0" />
+                  <span className="text-[9px] font-mono text-purple-300">
+                    Süperset — {(activeWorkout.exercises || []).filter(e => e.supersetId === ex.supersetId && e.id !== ex.id).map(e => e.name).join(', ') || 'eş bekleniyor'}
+                  </span>
+                </div>
+              )}
 
               {/* Bu hareketin bir setinin hangi kasa ne kadar yazıldığı */}
               {muscleParts.length > 0 && (
@@ -314,6 +346,15 @@ const ActiveWorkoutView = memo(({
         >
           <Plus size={16} className="mr-2 text-cyan-400" /> Hareket Ekle
         </button>
+
+        {(activeWorkout.exercises || []).length > 0 && (
+          <button
+            onClick={onSaveAsTemplate}
+            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-400 active:bg-zinc-900 font-bold py-3 px-4 rounded-2xl flex justify-center items-center uppercase tracking-wide text-[11px] transition-colors"
+          >
+            <BookmarkPlus size={15} className="mr-2 text-cyan-500" /> Bu Antrenmanı Şablon Yap
+          </button>
+        )}
       </div>
 
       {/* Dinlenme geri sayımı — ekranın altında sabit durur */}
