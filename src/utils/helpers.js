@@ -225,6 +225,32 @@ export const detectStandalone = () =>
     (document.referrer && document.referrer.includes('android-app://'))
   );
 
+// Sıfır/boş değerin anlamlı olmadığı alanlar: kayıtta 0 veya '' varsa
+// varsayılana dönülür (0 sn dinlenme, 0 tekrar hedefi gibi bozuk durumları önler).
+const TRUTHY_SETTINGS = [
+  'nutritionGoal', 'proteinPerFfmBulk', 'proteinPerFfmCut',
+  'restSeconds', 'repRangeMin', 'repRangeMax', 'experienceLevel',
+];
+
+// Dizi olması gereken alanlar; kayıt bozuksa varsayılana dönülür.
+const ARRAY_SETTINGS = ['hiddenExercises', 'pinnedExercises'];
+
+/**
+ * Kaydedilmiş ayarları varsayılanların ÜSTÜNE serer.
+ *
+ * Eskiden her alan tek tek elle sayılıyordu; DEFAULT_SETTINGS'e sonradan eklenen
+ * her ayar (deneyim seviyesi, görünürlük listeleri, haftalık program) her açılışta
+ * sessizce düşüyordu. Artık yeni bir ayar eklemek için burada bir şey yapmak
+ * gerekmiyor — yalnızca yukarıdaki iki listeye özel kural gerekiyorsa eklenir.
+ */
+export const mergeSettings = (saved = {}) => {
+  const merged = { ...DEFAULT_SETTINGS, ...(saved && typeof saved === 'object' ? saved : {}) };
+  TRUTHY_SETTINGS.forEach(k => { if (!merged[k]) merged[k] = DEFAULT_SETTINGS[k]; });
+  ARRAY_SETTINGS.forEach(k => { if (!Array.isArray(merged[k])) merged[k] = []; });
+  if (!merged.weekPlan || typeof merged.weekPlan !== 'object') merged.weekPlan = {};
+  return merged;
+};
+
 export const loadPersistedState = () => {
   const keys = (name) => STORAGE_VERSIONS.map(v => `po_${name}${v}`);
   const todayStr = getLocalDateString();
@@ -261,19 +287,7 @@ export const loadPersistedState = () => {
     currentMetricsForm,
     nutritionHistory,
     currentNutritionForm: todayNutrition ? mergeNutrition(todayNutrition) : mergeNutrition({ date: todayStr }),
-    settings: {
-      autoCopyLastSet: savedSettings.autoCopyLastSet ?? DEFAULT_SETTINGS.autoCopyLastSet,
-      nutritionGoal: savedSettings.nutritionGoal || DEFAULT_SETTINGS.nutritionGoal,
-      proteinPerFfmBulk: savedSettings.proteinPerFfmBulk || DEFAULT_SETTINGS.proteinPerFfmBulk,
-      proteinPerFfmCut: savedSettings.proteinPerFfmCut || DEFAULT_SETTINGS.proteinPerFfmCut,
-      lockScreenActivity: savedSettings.lockScreenActivity ?? DEFAULT_SETTINGS.lockScreenActivity,
-      keepScreenAwake: savedSettings.keepScreenAwake ?? DEFAULT_SETTINGS.keepScreenAwake,
-      autoRestTimer: savedSettings.autoRestTimer ?? DEFAULT_SETTINGS.autoRestTimer,
-      restSeconds: savedSettings.restSeconds || DEFAULT_SETTINGS.restSeconds,
-      restAlert: savedSettings.restAlert ?? DEFAULT_SETTINGS.restAlert,
-      repRangeMin: savedSettings.repRangeMin || DEFAULT_SETTINGS.repRangeMin,
-      repRangeMax: savedSettings.repRangeMax || DEFAULT_SETTINGS.repRangeMax
-    },
+    settings: mergeSettings(savedSettings),
     lastBackupDate: typeof localStorage !== 'undefined' ? localStorage.getItem('po_last_backup') : null
   };
 };

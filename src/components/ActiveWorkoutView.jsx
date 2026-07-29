@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { Activity, Pause, Play, Plus, X, Trash2, Trophy, TrendingUp, AlertCircle, Save, Timer, Layers, Link2, Unlink, BookmarkPlus, Settings } from 'lucide-react';
+import { Activity, Pause, Play, Plus, X, Trash2, Trophy, TrendingUp, AlertCircle, Save, Timer, Layers, Link2, Unlink, BookmarkPlus, Settings, HeartPulse } from 'lucide-react';
 import WorkoutTimer from './WorkoutTimer';
 import { FORM_RATINGS, SET_TYPES } from '../utils/constants';
 import {
@@ -27,6 +27,8 @@ const ActiveWorkoutView = memo(({
   restSecondsLeft,
   onOpenPlateCalc,
   onSaveAsTemplate,
+  onOpenCardio,
+  cardioKcal = 0,
   onToggleSuperset,
   onEditExercise,
 }) => {
@@ -345,6 +347,19 @@ const ActiveWorkoutView = memo(({
           className="w-full bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 font-bold py-3.5 px-4 rounded-2xl flex justify-center items-center uppercase tracking-wide text-xs transition-colors"
         >
           <Plus size={16} className="mr-2 text-cyan-400" /> Hareket Ekle
+        </button>
+
+        <button
+          onClick={onOpenCardio}
+          className="w-full bg-zinc-900 active:bg-zinc-800 border border-zinc-800 text-zinc-200 font-bold py-3.5 px-4 rounded-2xl flex justify-center items-center uppercase tracking-wide text-xs transition-colors"
+        >
+          <HeartPulse size={16} className="mr-2 text-red-400" />
+          Kardiyo Ekle
+          {(activeWorkout.cardio || []).length > 0 && (
+            <span className="ml-2 text-[10px] font-mono text-zinc-500 normal-case tracking-normal">
+              ({activeWorkout.cardio.length} kayıt{cardioKcal > 0 ? ` · ${cardioKcal} kcal` : ''})
+            </span>
+          )}
         </button>
 
         {(activeWorkout.exercises || []).length > 0 && (

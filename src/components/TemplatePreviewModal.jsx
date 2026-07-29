@@ -3,6 +3,7 @@ import { X, Zap, Clock, Layers, Link2 } from 'lucide-react';
 import { getVolumeLandmarks } from '../utils/constants';
 import { previewTemplateVolume, estimateDuration } from '../utils/templates';
 import { isWorkingSet } from '../utils/helpers';
+import MuscleHeatmap from './MuscleHeatmap';
 
 const TemplatePreviewModal = memo(({
   isOpen,
@@ -21,6 +22,11 @@ const TemplatePreviewModal = memo(({
   // En çok yüklenen kaslar üstte
   const ranked = Object.entries(byMuscle).sort((a, b) => b[1] - a[1]);
   const maxVol = ranked.length ? ranked[0][1] : 1;
+
+  // Tek seansta haftalık verimli tavanı geçen bölgeler: hacmi yaymak gerekir.
+  const overMav = ranked
+    .filter(([muscle, vol]) => vol > getVolumeLandmarks(muscle, experienceLevel).mav)
+    .map(([muscle]) => muscle);
 
   return (
     <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[90] flex items-center justify-center p-4">
@@ -52,6 +58,14 @@ const TemplatePreviewModal = memo(({
               </div>
             ))}
           </div>
+
+          {/* Bu şablonun bölge dağılımı — ana sayfadakiyle aynı ısı haritası */}
+          <MuscleHeatmap
+            muscleVolume={byMuscle}
+            experienceLevel={experienceLevel}
+            title="Bu Şablonun Isı Haritası"
+            subtitle="Teorik"
+          />
 
           {/* Kas dağılımı */}
           <div>
@@ -112,6 +126,25 @@ const TemplatePreviewModal = memo(({
               })}
             </div>
           </div>
+
+          {(overMav.length > 0 || ranked.length > 0) && (
+            <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-3.5 space-y-1.5">
+              <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Bu Seans Ne Söylüyor</h4>
+              <p className="text-[10px] font-mono text-zinc-400 leading-relaxed">
+                En çok yüklenen bölge <strong className="text-cyan-400">{ranked[0]?.[0] || '—'}</strong>
+                {ranked[0] && ` (${ranked[0][1]} set)`}.
+              </p>
+              {overMav.length > 0 && (
+                <p className="text-[10px] font-mono text-orange-300 leading-relaxed">
+                  Tek seansta haftalık MAV hedefini aşan bölge: {overMav.join(', ')}.
+                  Hacmi haftaya yaymak toparlanma açısından daha verimli.
+                </p>
+              )}
+              <p className="text-[9px] font-mono text-zinc-600 leading-relaxed">
+                Haftanın tamamını görmek için ana sayfadaki Haftalık Program'ı kullan.
+              </p>
+            </div>
+          )}
 
           <p className="text-[9px] font-mono text-zinc-600 leading-relaxed">
             Süre tahmini set başına 45 sn ve {restSeconds} sn dinlenme varsayar.

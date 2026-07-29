@@ -1,6 +1,7 @@
 import React, { memo } from 'react';
-import { Trash2, Calendar, Scale, Beef, Pencil, Copy, BookmarkPlus } from 'lucide-react';
+import { Trash2, Calendar, Scale, Beef, Pencil, Copy, BookmarkPlus, HeartPulse } from 'lucide-react';
 import { calcTonnage, calcEffectiveSets, isWorkingSet } from '../utils/helpers';
+import { findActivity, cardioEntryCalories, totalCardioCalories } from '../utils/cardio';
 
 // Listeler App tarafından tarihe göre azalan sırada verilir (en yeni en üstte).
 // Burada tekrar sıralama veya ters çevirme yapılmaz.
@@ -17,6 +18,7 @@ const HistoryView = memo(({
   handleEditMetric,
   handleEditNutrition,
   handleSaveAsTemplate,
+  latestWeight = 0,
 }) => {
   return (
     <div className="p-4 space-y-4 pb-24 h-full overflow-y-auto hide-scrollbar bg-black">
@@ -49,6 +51,8 @@ const HistoryView = memo(({
             workouts.map(w => {
               const tonnage = calcTonnage(w.exercises);
               const effectiveSets = calcEffectiveSets(w.exercises);
+              const cardio = w.cardio || [];
+              const cardioKcal = totalCardioCalories(cardio, latestWeight);
               return (
                 <div key={w.id} className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 space-y-3">
                   <div className="flex justify-between items-start border-b border-zinc-800 pb-2">
@@ -106,6 +110,30 @@ const HistoryView = memo(({
                       <span className="text-cyan-400 font-bold">{effectiveSets} Set</span>
                     </div>
                   </div>
+
+                  {cardio.length > 0 && (
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex items-center justify-between px-0.5">
+                        <span className="text-[10px] font-bold text-red-400 uppercase tracking-widest flex items-center">
+                          <HeartPulse size={11} className="mr-1.5" /> Kardiyo
+                        </span>
+                        {cardioKcal > 0 && (
+                          <span className="text-[10px] font-mono text-zinc-500">
+                            toplam <strong className="text-red-400">{cardioKcal}</strong> kcal
+                          </span>
+                        )}
+                      </div>
+                      {cardio.map(c => (
+                        <div key={c.id} className="text-[11px] font-mono text-zinc-300 bg-red-950/10 p-2 rounded-xl border border-red-900/25 flex justify-between items-center">
+                          <span className="font-bold text-zinc-200 truncate pr-2">{findActivity(c.type)?.label || c.type}</span>
+                          <span className="text-zinc-400 text-[10px] shrink-0">
+                            {c.minutes} dk
+                            {latestWeight > 0 && ` · ${cardioEntryCalories(c, latestWeight)} kcal`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   <div className="space-y-1.5 pt-1">
                     {(w.exercises || []).map((ex, i) => (

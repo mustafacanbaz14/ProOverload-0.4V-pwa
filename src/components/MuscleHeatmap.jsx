@@ -21,7 +21,14 @@ function getMuscleStatus(count, muscle, level) {
   return `Tavanın üstünde · MRV ${mrv}`;
 }
 
-const MuscleHeatmap = memo(({ muscleVolume = {}, onSelectMuscle, experienceLevel = 'intermediate' }) => {
+const MuscleHeatmap = memo(({
+  muscleVolume = {},
+  onSelectMuscle,
+  experienceLevel = 'intermediate',
+  // Şablon ve haftalık plan önizlemelerinde de kullanılıyor; başlık oradan gelir.
+  title = 'Kas Isı Haritası',
+  subtitle = 'Bu Hafta',
+}) => {
   const [selected, setSelected] = useState('Göğüs');
 
   const vol = (m) => muscleVolume[m] || 0;
@@ -40,9 +47,9 @@ const MuscleHeatmap = memo(({ muscleVolume = {}, onSelectMuscle, experienceLevel
     <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
       <div className="flex justify-between items-center px-4 py-3 border-b border-zinc-800 bg-zinc-950/60">
         <h3 className="text-[11px] font-bold text-zinc-100 uppercase tracking-wider flex items-center">
-          <Flame size={14} className="mr-2 text-orange-500" /> Kas Isı Haritası
+          <Flame size={14} className="mr-2 text-orange-500" /> {title}
         </h3>
-        <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Bu Hafta</span>
+        <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">{subtitle}</span>
       </div>
 
       <div className="p-4 space-y-3">

@@ -44,7 +44,8 @@
       "Bash(npm audit *)",
       "Bash(sed -n '/export const DEFAULT_SETTINGS/,/^};/p' src/utils/constants.js)",
       "Bash(sed -n '/const handleSelectExercise/,/^  }, \\\\[/p' src/App.jsx)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(node -e ' *)"
     ]
   }
 }

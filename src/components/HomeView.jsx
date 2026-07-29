@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { AlertCircle, Activity, Target, Zap, BookmarkPlus, Trash2, Trophy, Clock, Layers, ChevronRight, Dumbbell, CalendarPlus } from 'lucide-react';
+import { AlertCircle, Activity, Target, Zap, BookmarkPlus, Trash2, Trophy, Clock, Layers, ChevronRight, Dumbbell, CalendarPlus, HeartPulse, Flame, CalendarRange } from 'lucide-react';
 import { MUSCLE_SECTIONS, getVolumeLandmarks } from '../utils/constants';
 import { previewTemplateVolume, estimateDuration } from '../utils/templates';
 import MuscleHeatmap from './MuscleHeatmap';
@@ -19,6 +19,9 @@ const HomeView = memo(({
   experienceLevel = 'intermediate',
   onOpenLibrary,
   onOpenTemplateBuilder,
+  onOpenCardio,
+  onOpenWeekPlan,
+  weeklyCardioKcal = 0,
 }) => {
   return (
     <div className="p-4 space-y-5 pb-24 h-full overflow-y-auto hide-scrollbar bg-black">
@@ -162,6 +165,18 @@ const HomeView = memo(({
         <Zap size={18} className="mr-2" /> Antrenman Başlat
       </button>
 
+      <button
+        onClick={() => onOpenCardio?.()}
+        className="w-full bg-zinc-900 active:bg-zinc-800 border border-zinc-800 text-zinc-200 font-bold py-3.5 px-4 rounded-2xl flex justify-center items-center uppercase tracking-wide text-xs transition-colors"
+      >
+        <HeartPulse size={16} className="mr-2 text-red-400" /> Kardiyo Ekle
+        {weeklyCardioKcal > 0 && (
+          <span className="ml-2 flex items-center text-[10px] font-mono text-zinc-500 normal-case tracking-normal">
+            <Flame size={11} className="mr-1 text-red-400" />bu hafta {weeklyCardioKcal} kcal
+          </span>
+        )}
+      </button>
+
       <div className="grid grid-cols-2 gap-3">
         <button
           onClick={() => onOpenLibrary?.()}
@@ -178,6 +193,16 @@ const HomeView = memo(({
           Program Oluştur
         </button>
       </div>
+
+      <button
+        onClick={() => onOpenWeekPlan?.()}
+        className="w-full bg-zinc-900 active:bg-zinc-800 border border-zinc-800 text-zinc-200 font-bold py-3.5 px-4 rounded-2xl flex justify-center items-center uppercase tracking-wide text-xs transition-colors"
+      >
+        <CalendarRange size={16} className="mr-2 text-cyan-400" /> Haftalık Program
+        <span className="ml-2 text-[10px] font-mono text-zinc-500 normal-case tracking-normal">
+          şablonları günlere dağıt
+        </span>
+      </button>
 
       {templates.length > 0 && (
         <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">

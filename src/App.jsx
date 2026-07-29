@@ -10,13 +10,14 @@ import {
 import { DEFAULT_EXERCISES, MUSCLE_GROUPS, getVolumeLandmarks } from './utils/constants';
 import { migrateCustomExercises } from './utils/migrations';
 import { computeAdaptiveTDEE } from './utils/tdee';
+import { totalCardioCalories } from './utils/cardio';
 import { templateToExercises, workoutToTemplate, suggestTemplateName } from './utils/templates';
 
 import {
   generateId, getLocalDateString, getMondayOfCurrentWeek, detectMuscleGroup,
   foldForSearch, parseNumber, mergeMetrics, mergeNutrition,
   isWorkingSet, calcEffectiveSets, buildPersonalRecords, loadPersistedState,
-  computeComposition, sortByDateDesc, storageKey, suggestNextTarget
+  computeComposition, sortByDateDesc, storageKey, suggestNextTarget, mergeSettings
 } from './utils/helpers';
 
 import Navbar from './components/Navbar';
@@ -37,6 +38,8 @@ import TemplatePreviewModal from './components/TemplatePreviewModal';
 import ExerciseEditorModal from './components/ExerciseEditorModal';
 import ExerciseLibraryModal from './components/ExerciseLibraryModal';
 import TemplateBuilderModal from './components/TemplateBuilderModal';
+import CardioModal from './components/CardioModal';
+import WeeklyPlanModal from './components/WeeklyPlanModal';
 
 export default function App() {
   const [initial] = useState(loadPersistedState);
@@ -67,6 +70,8 @@ export default function App() {
   const [editorExercise, setEditorExercise] = useState(null); // hareket adı
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
+  const [isCardioOpen, setIsCardioOpen] = useState(false);
+  const [isWeekPlanOpen, setIsWeekPlanOpen] = useState(false);
   // Kütüphaneden "yeni hareket" ile gelindiğinde kapanışta oraya dönülür.
   const [pickerReturnsToLibrary, setPickerReturnsToLibrary] = useState(false);
 
@@ -845,13 +850,30 @@ export default function App() {
     }
     if (Array.isArray(data.metricsHistory || data.m)) setMetricsHistory((data.metricsHistory || data.m).map(mergeMetrics));
     if (Array.isArray(data.nutritionHistory || data.n)) setNutritionHistory((data.nutritionHistory || data.n).map(mergeNutrition));
-    if (data.settings || data.s) setSettings(prev => ({ ...prev, ...(data.settings || data.s) }));
+    // Eski yedekler eksik/bozuk ayar taşıyabilir; aynı birleştirme kuralından geçirilir.
+    if (data.settings || data.s) setSettings(prev => mergeSettings({ ...prev, ...(data.settings || data.s) }));
     showToast('Veriler başarıyla yüklendi.');
   };
 
   const handleDeleteConfirmExecute = () => {
     const { type, id } = deleteConfirm;
     if (!type || !id) return;
+
+    if (type === 'template') {
+      setTemplates(prev => prev.filter(t => t.id !== id));
+      // Plana atanmış şablon silinirse o gün dinlenmeye döner, yoksa plan
+      // var olmayan bir kimliği gösterip boş kalırdı.
+      setSettings(prev => {
+        const plan = prev.weekPlan || {};
+        if (!Object.values(plan).includes(id)) return prev;
+        const next = {};
+        Object.entries(plan).forEach(([k, v]) => { next[k] = v === id ? null : v; });
+        return { ...prev, weekPlan: next };
+      });
+      setDeleteConfirm({ isOpen: false, type: null, id: null });
+      showToast('Şablon silindi.');
+      return;
+    }
 
     if (type === 'exercise') {
       handleDeleteExercise(id);
@@ -862,7 +884,6 @@ export default function App() {
     if (type === 'workout') setWorkouts(prev => prev.filter(w => w.id !== id));
     else if (type === 'metric') setMetricsHistory(prev => prev.filter(m => m.id !== id));
     else if (type === 'nutrition') setNutritionHistory(prev => prev.filter(n => n.id !== id));
-    else if (type === 'template') setTemplates(prev => prev.filter(t => t.id !== id));
 
     setDeleteConfirm({ isOpen: false, type: null, id: null });
     showToast('Kayıt silindi.');
@@ -887,6 +908,68 @@ export default function App() {
     }
     setView(next);
   }, [nutritionHistory]);
+
+  // --- KARDİYO ---
+
+  // Kalori tahmini vücut ağırlığına dayanır; en son girilen ölçüm kullanılır.
+  const latestWeight = useMemo(() => {
+    const rec = sortedMetrics.find(m => parseNumber(m.weight) > 0);
+    return rec ? parseNumber(rec.weight) : 0;
+  }, [sortedMetrics]);
+
+  // Aktif antrenman varsa oraya yazılır; yoksa bugünün kardiyo kaydına eklenir
+  // (yoksa oluşturulur), böylece basketbol/koşu için seans başlatmak gerekmez.
+  const handleAddCardio = useCallback((entry) => {
+    const item = { id: generateId(), ...entry };
+    if (activeWorkoutRef.current) {
+      setActiveWorkout(prev => prev ? { ...prev, cardio: [...(prev.cardio || []), item] } : prev);
+      showToast('Kardiyo antrenmana eklendi.');
+      return;
+    }
+    const today = getLocalDateString();
+    setWorkouts(prev => {
+      const idx = prev.findIndex(w => w.date === today && (w.exercises || []).length === 0 && w.cardio);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...next[idx], cardio: [...(next[idx].cardio || []), item] };
+        return next;
+      }
+      return [{
+        id: generateId(), date: today, name: 'Kardiyo', duration: 0,
+        exercises: [], cardio: [item], timer: { status: 'finished' },
+      }, ...prev];
+    });
+    showToast('Kardiyo bugüne kaydedildi.');
+  }, [showToast]);
+
+  const handleDeleteCardio = useCallback((entryId) => {
+    if (activeWorkoutRef.current) {
+      setActiveWorkout(prev => prev ? { ...prev, cardio: (prev.cardio || []).filter(c => c.id !== entryId) } : prev);
+      return;
+    }
+    const today = getLocalDateString();
+    setWorkouts(prev => prev
+      .map(w => w.date === today && w.cardio
+        ? { ...w, cardio: w.cardio.filter(c => c.id !== entryId) }
+        : w)
+      // Son kardiyo da silinince boş kayıt geride kalmasın.
+      .filter(w => (w.exercises || []).length > 0 || (w.cardio || []).length > 0));
+  }, []);
+
+  // Kardiyo penceresinde listelenecek girişler: aktif seans varsa onunkiler.
+  const cardioEntries = useMemo(() => {
+    if (activeWorkout) return activeWorkout.cardio || [];
+    const today = getLocalDateString();
+    return workouts.find(w => w.date === today && w.cardio)?.cardio || [];
+  }, [activeWorkout, workouts]);
+
+  // Bu haftaki toplam kardiyo kalorisi (dinlenme üstü).
+  const weeklyCardioKcal = useMemo(() => {
+    const monday = getMondayOfCurrentWeek();
+    return workouts
+      .filter(w => new Date(w.date) >= monday)
+      .reduce((sum, w) => sum + totalCardioCalories(w.cardio || [], latestWeight), 0);
+  }, [workouts, latestWeight]);
 
   const needsBackup = useMemo(() => {
     if (!lastBackupDate) return true;
@@ -939,6 +1022,9 @@ export default function App() {
               experienceLevel={settings.experienceLevel}
               onOpenLibrary={() => setIsLibraryOpen(true)}
               onOpenTemplateBuilder={() => setIsBuilderOpen(true)}
+              onOpenCardio={() => setIsCardioOpen(true)}
+              onOpenWeekPlan={() => setIsWeekPlanOpen(true)}
+              weeklyCardioKcal={weeklyCardioKcal}
             />
           )}
 
@@ -1012,6 +1098,7 @@ export default function App() {
               handleEditMetric={handleEditMetric}
               handleEditNutrition={handleEditNutrition}
               handleSaveAsTemplate={handleSaveAsTemplate}
+              latestWeight={latestWeight}
             />
           )}
 
@@ -1036,6 +1123,8 @@ export default function App() {
               onSaveAsTemplate={() => handleSaveAsTemplate(null)}
               onToggleSuperset={handleToggleSuperset}
               onEditExercise={setEditorExercise}
+              onOpenCardio={() => setIsCardioOpen(true)}
+              cardioKcal={totalCardioCalories(activeWorkout.cardio || [], latestWeight)}
               rest={rest}
               restSecondsLeft={restSecondsLeft}
             />
@@ -1154,6 +1243,29 @@ export default function App() {
           }}
         />
 
+        {/* HAFTALIK PROGRAM */}
+        <WeeklyPlanModal
+          isOpen={isWeekPlanOpen}
+          onClose={() => setIsWeekPlanOpen(false)}
+          plan={settings.weekPlan || {}}
+          onChangePlan={(plan) => setSettings(prev => ({ ...prev, weekPlan: plan }))}
+          templates={templates}
+          customExercises={customExercises}
+          restSeconds={settings.restSeconds}
+          experienceLevel={settings.experienceLevel}
+          weightKg={latestWeight}
+        />
+
+        {/* KARDİYO */}
+        <CardioModal
+          isOpen={isCardioOpen}
+          onClose={() => setIsCardioOpen(false)}
+          onSave={handleAddCardio}
+          onDelete={handleDeleteCardio}
+          weightKg={latestWeight}
+          existing={cardioEntries}
+        />
+
         {/* PLATE CALCULATOR */}
         <PlateCalculatorModal
           isOpen={Boolean(plateCalc)}
@@ -1249,12 +1361,19 @@ export default function App() {
         )}
 
         {/* DELETE CONFIRM MODAL */}
+        {/* z-[120]: kütüphane (92), kardiyo (95), hareket seçimi (100) ve barkod
+            tarayıcının (110) üstünde kalmalı — aksi halde onay penceresi açık
+            pencerenin arkasında kalır ve ancak oradan çıkınca görünür. */}
         {deleteConfirm.isOpen && (
-          <div className="absolute inset-0 bg-black/90 z-[70] flex justify-center items-center px-4 backdrop-blur-sm">
+          <div className="fixed inset-0 bg-black/90 z-[120] flex justify-center items-center px-4 backdrop-blur-sm">
             <div className="bg-zinc-900 w-full max-w-xs rounded-2xl border border-zinc-800 p-5 text-center space-y-4">
               <AlertCircle size={32} className="text-red-500 mx-auto" />
               <h4 className="text-xs font-bold text-zinc-100 uppercase tracking-wider">Silme Onayı</h4>
-              <p className="text-[11px] text-zinc-400 font-mono">Bu kaydı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.</p>
+              <p className="text-[11px] text-zinc-400 font-mono">
+                {deleteConfirm.type === 'exercise'
+                  ? `"${deleteConfirm.id}" kütüphaneden silinecek. Geçmiş antrenman kayıtların korunur.`
+                  : 'Bu kaydı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.'}
+              </p>
               <div className="flex space-x-2 pt-2">
                 <button onClick={() => setDeleteConfirm({ isOpen: false, type: null, id: null })} className="flex-1 bg-zinc-800 text-zinc-300 font-bold py-2.5 rounded-xl text-xs uppercase">İptal</button>
                 <button onClick={handleDeleteConfirmExecute} className="flex-1 bg-red-600 text-white font-bold py-2.5 rounded-xl text-xs uppercase shadow-lg shadow-red-900/30">Sil</button>

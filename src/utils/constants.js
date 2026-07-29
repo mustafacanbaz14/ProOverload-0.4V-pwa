@@ -14,7 +14,9 @@ export const DEFAULT_SETTINGS = {
   // Kullanıcının kendi görünürlük listesi: hiddenExercises yapılmış olsa bile
   // listeden çıkarır, pinnedExercises hiç yapılmamış olsa bile listeye sokar.
   hiddenExercises: [],
-  pinnedExercises: []
+  pinnedExercises: [],
+  // Haftalık program: gün anahtarı -> şablon kimliği (null = dinlenme günü).
+  weekPlan: {}
 };
 
 export const DELETE_LABELS = {
@@ -51,7 +53,40 @@ export const DEFAULT_EXERCISES = [
   "Goblet Squat", "Belt Squat", "Smith Machine Squat", "Sissy Squat", "Single Leg Press",
   "Standing Leg Curl", "Glute Ham Raise", "Cable Pull Through",
   "Leg Press Calf Raise", "Smith Machine Calf Raise",
-  "Behind the Back Wrist Curl"
+  "Behind the Back Wrist Curl",
+
+  // --- v0.7 eklemeleri ---
+  // Göğüs
+  "Incline Cable Fly", "Decline Dumbbell Press", "Floor Press", "Guillotine Press",
+  "Weighted Push-ups", "Deficit Push-ups", "Smith Machine Incline Press", "Machine Chest Dip",
+  // Sırt
+  "Seal Row", "Kroc Row", "Gorilla Row", "Single Arm Cable Row", "Chest Supported T-Bar Row",
+  "Wide Grip Pull-up", "Neutral Grip Pull-up", "Weighted Pull-up", "Assisted Pull-up",
+  "Reverse Grip Lat Pulldown", "Kneeling Cable Pullover", "Machine Pullover",
+  // Omuz
+  "Seated Dumbbell Shoulder Press", "Z Press", "Viking Press", "Behind the Neck Press",
+  "Leaning Cable Lateral Raise", "Lu Lateral Raise", "Cable Front Raise", "Plate Front Raise",
+  "Bent Over Lateral Raise", "Reverse Cable Fly",
+  // Trapez
+  "Trap Bar Shrug", "Cable Shrug", "Smith Machine Shrug",
+  // Kol
+  "Cable Preacher Curl", "Machine Preacher Curl", "Bayesian Cable Curl", "Drag Curl",
+  "Barbell Curl 21s", "Concentration Curl", "Cross Body Hammer Curl",
+  "Rope Pushdown", "V-Bar Pushdown", "JM Press", "Bench Dip",
+  // Önkol
+  "Wrist Roller", "Plate Pinch Hold", "Dead Hang", "Farmer's Hold",
+  // Bacak
+  "Reverse Lunge", "Curtsy Lunge", "Box Step-up", "Box Squat", "Pause Squat",
+  "Pendulum Squat", "Standing Leg Extension", "Single Leg Romanian Deadlift",
+  "Hip Abduction Machine", "Hip Adduction Machine",
+  // Kalça
+  "Single Leg Hip Thrust", "Machine Hip Thrust", "Frog Pump", "Cable Glute Kickback",
+  // Baldır
+  "Single Leg Calf Raise",
+  // Karın & Bel
+  "Machine Crunch", "Toes to Bar", "Dragon Flag", "Pallof Press", "Dead Bug",
+  "Hollow Body Hold", "V-Ups", "Bicycle Crunch", "Weighted Plank",
+  "Reverse Hyperextension", "Jefferson Curl", "Superman Hold", "Bird Dog"
 ].sort();
 
 // 16 kas grubu. Ayrım hipertrofi hacim takibinin gerektirdiği çözünürlüğe göre:
@@ -135,6 +170,11 @@ export const EXERCISE_RULES = [
   [/woodchop|cable twist/, 'Core', { 'Karın': 1 }],
   [/hanging (leg|knee) raise|toes to bar|captain'?s chair|sit-?up|crunch|dead bug|pallof|russian twist|plank|hollow/, 'Core', { 'Karın': 1 }],
   [/back extension|hyper-?extension|reverse hyper/, 'Core', { 'Bel': 1, 'Kalça': 0.5, 'Hamstring': 0.5 }],
+  // "Jefferson Curl" adında curl geçer ama omurga hareketidir; biseps kuralından
+  // çok önce yakalanmak zorunda.
+  [/jefferson curl/, 'Core', { 'Bel': 1, 'Hamstring': 0.5 }],
+  [/superman|bird dog/, 'Core', { 'Bel': 1, 'Kalça': 0.25 }],
+  [/dragon flag|\bv-?ups?\b|windshield wiper/, 'Core', { 'Karın': 1 }],
   // Farmer's walk öncelikle kavrama çalışmasıdır; trapez yükü taşır.
   [/farmer|suitcase carry|carry/, 'Core', { 'Önkol': 1, 'Trapez': 0.5, 'Karın': 0.5, 'Bel': 0.25 }],
 
@@ -146,7 +186,10 @@ export const EXERCISE_RULES = [
   // genel glute kuralından önce yakalanmalı.
   [/glute ham raise|\bghr\b/, 'Legs', { 'Hamstring': 1, 'Kalça': 0.5 }],
   [/pull through/, 'Legs', { 'Kalça': 1, 'Hamstring': 0.5 }],
-  [/hip thrust|glute bridge|glute kickback|glute/, 'Legs', { 'Kalça': 1, 'Hamstring': 0.25 }],
+  // Abduksiyon gluteus medius/minimus, adduksiyon adduktor magnus çalıştırır.
+  // Ayrı bir adduktor grubu yok; ikisi de kalça bütçesine yazılır.
+  [/hip abduction|abductor machine|hip adduction|adductor machine|clamshell/, 'Legs', { 'Kalça': 1 }],
+  [/hip thrust|glute bridge|glute kickback|frog pump|glute/, 'Legs', { 'Kalça': 1, 'Hamstring': 0.25 }],
 
   // --- HAMSTRING BASKIN (genel /curl/ kuralından önce olmalı) ---
   [/nordic|leg curl|hamstring curl/, 'Legs', { 'Hamstring': 1 }],
@@ -169,7 +212,9 @@ export const EXERCISE_RULES = [
 
   // --- OMUZ İZOLASYON (üç baş ayrı) ---
   [/face pull/, 'Pull', { 'Arka Omuz': 1, 'Trapez': 0.5, 'Orta Sırt': 0.25 }],
-  [/reverse pec|rear delt|reverse fly/, 'Pull', { 'Arka Omuz': 1, 'Orta Sırt': 0.25 }],
+  // "Reverse Cable Fly" gibi araya kelime giren adlar da yakalanmalı.
+  // "Bent Over Lateral Raise" arka deltoiddir; yan omuz kuralından önce gelmeli.
+  [/reverse pec|rear delt|reverse \w* ?fly|bent[- ]over (lateral|dumbbell) raise/, 'Pull', { 'Arka Omuz': 1, 'Orta Sırt': 0.25 }],
   [/y-?raise/, 'Pull', { 'Arka Omuz': 1, 'Trapez': 0.5 }],
   [/lateral raise|side raise/, 'Push', { 'Yan Omuz': 1 }],
   [/front raise/, 'Push', { 'Ön Omuz': 1 }],
@@ -179,12 +224,17 @@ export const EXERCISE_RULES = [
   // --- OMUZ BİLEŞKE ---
   // Dikey baslarda yük ön deltoiddedir; yan baş yalnızca kısmi katkı alır.
   [/landmine press/, 'Push', { 'Ön Omuz': 1, 'Göğüs': 0.5, 'Triseps': 0.5 }],
-  [/overhead press|\bohp\b|shoulder press|arnold press|military press|push press/, 'Push', { 'Ön Omuz': 1, 'Triseps': 0.5, 'Yan Omuz': 0.25, 'Trapez': 0.25 }],
+  // Ense arkası baste omuz dış rotasyonda olduğu için yan baş payı belirgin artar.
+  [/behind the neck press|bradford press/, 'Push', { 'Ön Omuz': 1, 'Yan Omuz': 0.5, 'Triseps': 0.5, 'Trapez': 0.25 }],
+  [/overhead press|\bohp\b|shoulder press|arnold press|military press|push press|\bz press\b|viking press/, 'Push', { 'Ön Omuz': 1, 'Triseps': 0.5, 'Yan Omuz': 0.25, 'Trapez': 0.25 }],
 
   // --- KOL ---
   // Close grip bench triceps baskındır; göğüs kuralından önce yakalanmalı.
   [/close grip bench/, 'Push', { 'Triseps': 1, 'Göğüs': 0.5, 'Ön Omuz': 0.25 }],
   [/diamond push/, 'Push', { 'Triseps': 1, 'Göğüs': 0.5 }],
+  // "Bench Dip" genel /dips?/ kuralından, "JM Press" genel /press/ kuralından
+  // önce yakalanmalı — ikisi de triseps hareketidir.
+  [/bench dip|jm press/, 'Push', { 'Triseps': 1, 'Göğüs': 0.25 }],
   [/tricep|skull crusher|pushdown|kickback|overhead extension/, 'Push', { 'Triseps': 1 }],
   // Önkol izolasyonu genel /curl/ kuralından önce yakalanmalı.
   // Dikkat: burada çıplak /grip/ KULLANILAMAZ — "Seated Row (Wide Grip)",
@@ -210,6 +260,8 @@ export const EXERCISE_RULES = [
   [/\bdips?\b/, 'Push', { 'Göğüs': 1, 'Triseps': 0.5, 'Ön Omuz': 0.25 }],
   [/decline.*(press|bench|fly)/, 'Push', { 'Göğüs': 1, 'Triseps': 0.5, 'Ön Omuz': 0.25 }],
   [/incline.*(press|bench|fly)/, 'Push', { 'Göğüs': 1, 'Ön Omuz': 0.5, 'Triseps': 0.5 }],
+  // Floor press'te hareket açıklığı kısıtlı, yük triseps üzerine kayar.
+  [/floor press/, 'Push', { 'Göğüs': 1, 'Triseps': 0.5, 'Ön Omuz': 0.25 }],
   [/bench press|chest press|push-?up/, 'Push', { 'Göğüs': 1, 'Triseps': 0.5, 'Ön Omuz': 0.5 }],
 
   // --- GENEL YAKALAYICI (en sonda) ---
