@@ -7,6 +7,7 @@ import { movingAverage } from '../utils/tdee';
 import {
   buildNutritionSeries, averageOverDays, macroSplit, proteinPerKg, adherenceStats
 } from '../utils/nutritionStats';
+import { energyBalanceAdvice, recommendedCalories } from '../utils/goals';
 
 // Beslenme grafiğinde izlenebilecek alanlar.
 const NUTRITION_METRICS = [
@@ -150,10 +151,19 @@ const AnalyticsView = memo(({
     const avg7 = averageOverDays(nutritionSeries, 7);
     const avg30 = averageOverDays(nutritionSeries, 30);
 
-    // Kalori hedefi: gerçek TDEE varsa ondan, yoksa BMR tahmininden.
-    const targetCalories = adaptiveTDEE?.tdee > 0
+    // Korunum kalorisi: gerçek TDEE varsa ondan, yoksa BMR tahmininden.
+    const maintenance = adaptiveTDEE?.tdee > 0
       ? Math.round(adaptiveTDEE.tdee)
       : Math.round(parseNumber(computedComp?.bmr) * 1.5) || 0;
+
+    // Hedef alım döneme göre korunumdan sapar: kesmede altında, büyümede
+    // üstünde. Korunumu hedef saymak bilinçli açıkta olan kullanıcıya her günü
+    // "hedefin altında" gösteriyordu.
+    const recommended = recommendedCalories(maintenance, settings.nutritionGoal, {
+      weightKg: latestWeight,
+      bodyFatPct: parseNumber(computedComp?.activeBF),
+    });
+    const targetCalories = recommended?.target || maintenance;
 
     const ffm = parseNumber(computedComp?.ffm) || 0;
     const proteinMultiplier = settings.nutritionGoal === 'bulk'
@@ -186,17 +196,30 @@ const AnalyticsView = memo(({
       avg7,
       avg30,
       targetCalories,
+      maintenance,
+      recommended,
       targetProtein,
       split: macroSplit(avg7 || avg30),
       proteinKg: proteinPerKg((avg7 || avg30)?.protein, latestWeight),
       adherence: adherenceStats(nutritionSeries, targetCalories, 30),
+      // Açık/fazla değerlendirmesi: mevcut kütle, yağ oranı ve FFMI'a göre.
+      // Korunum olarak gerçek TDEE varsa o kullanılır; yoksa değerlendirme
+      // yapılmaz, çünkü BMR tahmini üzerinden "kas kaybediyorsun" demek
+      // dayanaksız olurdu.
+      balance: adaptiveTDEE?.tdee > 0
+        ? energyBalanceAdvice((avg7 || avg30)?.calories, adaptiveTDEE.tdee, {
+          weightKg: latestWeight,
+          bodyFatPct: parseNumber(computedComp?.activeBF),
+          ffmi: parseNumber(computedComp?.ffmi),
+        })
+        : null,
       // Tablo en yeni gün üstte olacak şekilde ters çevrilir.
       table: [...nutritionSeries].reverse().slice(0, 14),
     };
   }, [analysisType, nutritionSeries, nutritionMetric, showAverage, adaptiveTDEE, computedComp, settings, latestWeight]);
 
   return (
-    <div className="p-4 space-y-4 pb-24 h-full overflow-y-auto hide-scrollbar bg-black">
+    <div className="p-4 space-y-4 pb-nav h-full overflow-y-auto hide-scrollbar bg-black">
       {/* Dört sekme tek satırda sığmıyor; etiketler kısaltıldı. */}
       <div className="flex bg-zinc-900 p-1 rounded-2xl border border-zinc-800">
         {[
@@ -426,6 +449,75 @@ const AnalyticsView = memo(({
                 </div>
               )}
 
+              {/* Açık / fazla değerlendirmesi */}
+              {nutritionAnalysis.balance && (() => {
+                const b = nutritionAnalysis.balance;
+                const tone = b.severity === 'warn'
+                  ? 'bg-orange-950/20 border-orange-900/40'
+                  : b.severity === 'info'
+                    ? 'bg-amber-950/15 border-amber-900/40'
+                    : 'bg-emerald-950/15 border-emerald-900/40';
+                const stateLabel = b.state === 'deficit' ? 'Kalori Açığı'
+                  : b.state === 'surplus' ? 'Kalori Fazlası' : 'Korunum';
+                const valueColor = b.state === 'deficit' ? 'text-cyan-400'
+                  : b.state === 'surplus' ? 'text-amber-400' : 'text-emerald-400';
+                return (
+                  <div className={`border rounded-2xl p-3.5 space-y-2 ${tone}`}>
+                    <div className="flex justify-between items-baseline">
+                      <h4 className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest">{stateLabel}</h4>
+                      <span className="text-[9px] font-mono text-zinc-500">7 günlük ortalamaya göre</span>
+                    </div>
+
+                    <div className="flex items-end gap-3">
+                      <span className={`text-2xl font-mono font-bold ${valueColor}`}>
+                        {b.balance > 0 ? '+' : ''}{b.balance}
+                      </span>
+                      <span className="text-[10px] font-mono text-zinc-500 pb-1">
+                        kcal/gün
+                        {b.weeklyKg !== 0 && (
+                          <span className="block text-zinc-600">
+                            ≈ haftada {b.weeklyKg > 0 ? '+' : ''}{b.weeklyKg} kg
+                            {b.weeklyPct !== null && ` (%${b.weeklyPct})`}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+
+                    {b.notes.map((note, i) => (
+                      <p
+                        key={i}
+                        className={`text-[10px] font-mono leading-relaxed ${
+                          b.severity === 'warn' && i === 0 ? 'text-orange-200' : 'text-zinc-400'
+                        }`}
+                      >
+                        {note}
+                      </p>
+                    ))}
+
+                    {b.state === 'deficit' && b.maxSafeDeficit > 0 && (
+                      <p className="text-[9px] font-mono text-zinc-600 leading-relaxed pt-1 border-t border-zinc-800/60">
+                        Güvenli aralık: günde 0 – {b.maxSafeDeficit} kcal açık
+                        (haftada en fazla ağırlığının %{b.maxSafeLossPct}&apos;i).
+                        Sınır yağ oranına göre belirlenir; yağ azaldıkça daralır.
+                      </p>
+                    )}
+
+                    {nutritionAnalysis.recommended && (
+                      <p className="text-[9px] font-mono text-zinc-500 leading-relaxed pt-1 border-t border-zinc-800/60">
+                        <strong className="text-zinc-300">{nutritionAnalysis.recommended.label}</strong> dönemi
+                        için önerilen alım:{' '}
+                        <strong className="text-cyan-400">{nutritionAnalysis.recommended.target} kcal/gün</strong>
+                        {nutritionAnalysis.recommended.offset !== 0 && (
+                          <> (korunum {nutritionAnalysis.maintenance} kcal
+                            {nutritionAnalysis.recommended.offset > 0 ? ' + ' : ' − '}
+                            {Math.abs(nutritionAnalysis.recommended.offset)})</>
+                        )}.
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* Makro dağılımı */}
               {nutritionAnalysis.split && (
                 <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-3.5 space-y-2">
@@ -559,7 +651,10 @@ const AnalyticsView = memo(({
                   <p className="text-[9px] font-mono text-zinc-600 leading-relaxed px-3 py-2 border-t border-zinc-800">
                     Kalori rengi hedefe göre: mavi altında, yeşil hedefte, turuncu üstünde.
                     Hedef {nutritionAnalysis.targetCalories} kcal
-                    {adaptiveTDEE?.tdee > 0 ? ' (gerçek TDEE)' : ' (BMR tahmini)'}.
+                    {nutritionAnalysis.recommended?.label
+                      ? ` — ${nutritionAnalysis.recommended.label} dönemi`
+                      : ''}
+                    {adaptiveTDEE?.tdee > 0 ? ', gerçek TDEE üzerinden' : ', BMR tahmini üzerinden'}.
                   </p>
                 )}
               </div>

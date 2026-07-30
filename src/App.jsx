@@ -262,6 +262,32 @@ export default function App() {
     return computeComposition(currentMetricsForm);
   }, [currentMetricsForm]);
 
+  // Hedef ilerlemesi için başlangıç noktası: elimizdeki EN ESKİ ölçüm.
+  // Hedef sonradan konulduğu için "hedefi koyduğum an" referans alınsaydı
+  // ilerleme her zaman %0 görünürdü.
+  const earliestMetrics = useMemo(() => {
+    const withWeight = metricsHistory.filter(m => parseNumber(m.weight) > 0);
+    if (withWeight.length === 0) return null;
+    return withWeight.reduce((oldest, m) =>
+      new Date(m.date) < new Date(oldest.date) ? m : oldest);
+  }, [metricsHistory]);
+
+  // Hedef kartı, hedef anahtarlarıyla eşleşen mevcut/başlangıç değerlerini bekler.
+  const goalValues = useMemo(() => {
+    const shape = (metrics, comp) => ({
+      goalWeight: parseNumber(metrics?.weight),
+      goalBodyFat: parseNumber(comp?.activeBF),
+      goalFFM: parseNumber(comp?.ffm),
+      goalFFMI: parseNumber(comp?.ffmi),
+    });
+    return {
+      current: shape(currentMetricsForm, computedComp),
+      earliest: earliestMetrics
+        ? shape(earliestMetrics, computeComposition(earliestMetrics))
+        : {},
+    };
+  }, [currentMetricsForm, computedComp, earliestMetrics]);
+
   const dashboardStats = useMemo(() => {
     const monday = getMondayOfCurrentWeek();
     const thisWeekWorkouts = workouts.filter(w => new Date(w.date) >= monday);
@@ -297,6 +323,13 @@ export default function App() {
     // Deload kararı kasa özel MRV tavanına göre verilir, sabit bir eşiğe göre değil.
     const isDeloadNeeded = Object.entries(muscleVolume).some(
       ([muscle, volume]) => volume > getVolumeLandmarks(muscle, settings.experienceLevel).mrv
+    );
+
+    // En az bir kas verimli tavana (MAV) ulaştı mı? ACWR oranı göreli olduğu
+    // için tek başına risk göstergesi değil; mutlak yük de tavana yaklaşmadıkça
+    // yüksek oran "risk" değil "rampa" sayılır.
+    const nearCeiling = Object.entries(muscleVolume).some(
+      ([muscle, volume]) => volume >= getVolumeLandmarks(muscle, settings.experienceLevel).mav
     );
 
     // İtme/çekme dengesi: bu haftaki etkili setlerin mekanik dağılımı.
@@ -383,6 +416,7 @@ export default function App() {
       isDeloadNeeded,
       acwr,
       hasEnoughData,
+      nearCeiling,
       pushPullRatio,
       pushPullBalanced,
       hasPushPullData
@@ -1124,6 +1158,10 @@ export default function App() {
               setIsComparisonOpen={setIsComparisonOpen}
               latestMetrics={sortedMetrics[0] || null}
               isExistingRecord={metricsHistory.some(m => m.date === currentMetricsForm.date)}
+              settings={settings}
+              setSettings={setSettings}
+              goalValues={goalValues}
+              weeklyKg={adaptiveTDEE?.insufficient ? 0 : (adaptiveTDEE?.weightChangePerWeek || 0)}
             />
           )}
 
@@ -1150,6 +1188,8 @@ export default function App() {
               nutritionHistory={nutritionHistory}
               setIsFoodSearchOpen={setIsFoodSearchOpen}
               adaptiveTDEE={adaptiveTDEE}
+              workouts={workouts}
+              latestWeight={latestWeight}
             />
           )}
 

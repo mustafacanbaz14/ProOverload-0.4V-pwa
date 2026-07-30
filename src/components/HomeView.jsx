@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { AlertCircle, Activity, Target, Zap, BookmarkPlus, Trash2, Trophy, Clock, Layers, ChevronRight, ChevronDown, Dumbbell, CalendarPlus, HeartPulse, Flame, CalendarRange, Pencil } from 'lucide-react';
-import { MUSCLE_SECTIONS, getVolumeLandmarks, volumeStatusOf, VOLUME_STATUS, acwrStatusOf, ACWR_STATUS } from '../utils/constants';
+import { MUSCLE_SECTIONS, getVolumeLandmarks, volumeStatusOf, VOLUME_STATUS, acwrStatusOf, ACWR_STATUS, ACWR_HINT } from '../utils/constants';
 import { previewTemplateVolume, estimateDuration } from '../utils/templates';
 import MuscleHeatmap from './MuscleHeatmap';
 
@@ -27,7 +27,7 @@ const HomeView = memo(({
   onToggleMuscleVolume,
 }) => {
   return (
-    <div className="p-4 space-y-5 pb-24 h-full overflow-y-auto hide-scrollbar bg-black">
+    <div className="p-4 space-y-5 pb-nav h-full overflow-y-auto hide-scrollbar bg-black">
 
       {needsBackup && (
         <div className="bg-orange-900/20 border border-orange-900/50 p-3 rounded-2xl flex items-start space-x-3">
@@ -81,14 +81,16 @@ const HomeView = memo(({
           {(() => {
             // Eşik ve renkler tek kaynaktan (constants.js) gelir; burada
             // tekrarlanınca iki yer birbirinden sapıyordu.
-            const { acwr, hasEnoughData } = dashboardStats;
-            const durum = ACWR_STATUS[acwrStatusOf(acwr, hasEnoughData)];
+            const { acwr, hasEnoughData, nearCeiling } = dashboardStats;
+            const key = acwrStatusOf(acwr, hasEnoughData, nearCeiling);
+            const durum = ACWR_STATUS[key];
             return (
               <>
                 <span className={`text-xl font-mono font-bold block mb-1 ${durum.text}`}>
                   {hasEnoughData ? acwr : '—'}
                 </span>
                 <div className={`text-[10px] font-bold uppercase tracking-widest ${durum.text}`}>{durum.label}</div>
+                <p className="text-[9px] font-mono text-zinc-600 leading-snug mt-1">{ACWR_HINT[key]}</p>
               </>
             );
           })()}

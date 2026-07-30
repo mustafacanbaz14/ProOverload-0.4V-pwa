@@ -63,3 +63,26 @@ export const totalCardioCalories = (entries = [], weightKg) =>
 /** Ağırlık antrenmanının tahmini kalorisi (dinlenme üstü). */
 export const estimateLiftingCalories = (minutes, weightKg) =>
   estimateCardioCalories(LIFTING_MET, weightKg, minutes);
+
+/**
+ * Bir antrenman kaydının toplam yakımı: ağırlık kısmı + kardiyo girişleri.
+ *
+ * Kardiyo süresi antrenman süresinin içindeyse çifte sayım olur; ama kardiyo
+ * çoğunlukla seans sonrası ya da ayrı yapılıyor ve `duration` yalnızca ağırlık
+ * bölümünü ölçüyor. Yine de ayrı ayrı döndürülüyor ki kullanıcı ikisini görüp
+ * gerekirse elle düzeltebilsin.
+ */
+export const workoutCalories = (workout, weightKg) => {
+  const lifting = estimateLiftingCalories(workout?.duration || 0, weightKg);
+  const cardio = totalCardioCalories(workout?.cardio || [], weightKg);
+  return { lifting, cardio, total: lifting + cardio };
+};
+
+/** Belirli bir günün tüm antrenman kayıtlarından toplam yakım. */
+export const dayWorkoutCalories = (workouts = [], dateStr, weightKg) => {
+  const same = workouts.filter(w => w.date === dateStr);
+  return same.reduce((acc, w) => {
+    const c = workoutCalories(w, weightKg);
+    return { lifting: acc.lifting + c.lifting, cardio: acc.cardio + c.cardio, total: acc.total + c.total };
+  }, { lifting: 0, cardio: 0, total: 0 });
+};

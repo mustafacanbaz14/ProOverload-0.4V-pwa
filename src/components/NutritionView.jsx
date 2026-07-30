@@ -1,7 +1,8 @@
 import React, { memo } from 'react';
-import { Beef, Plus, Save, Trash2, Calendar, Search, TrendingUp, Activity } from 'lucide-react';
+import { Beef, Plus, Save, Trash2, Calendar, Search, TrendingUp, Activity, Flame } from 'lucide-react';
 import { parseNumber, clampNumber, INPUT_LIMITS } from '../utils/helpers';
 import { dailyTotals } from '../utils/nutritionStats';
+import { dayWorkoutCalories } from '../utils/cardio';
 
 const NutritionView = memo(({
   currentNutritionForm,
@@ -15,6 +16,8 @@ const NutritionView = memo(({
   nutritionHistory,
   setIsFoodSearchOpen,
   adaptiveTDEE,
+  workouts = [],
+  latestWeight = 0,
 }) => {
   const safeMeals = Array.isArray(currentNutritionForm.meals) ? currentNutritionForm.meals : [];
   const isDaily = currentNutritionForm.entryMode === 'daily';
@@ -73,6 +76,13 @@ const NutritionView = memo(({
     : (settings.proteinPerFfmCut || 2.6);
   const targetProtein = Math.round(ffm * targetProteinMultiplier);
 
+  // Günün yakımı: antrenman kayıtlarından otomatik + kullanıcının elle eklediği.
+  const burned = (() => {
+    const auto = dayWorkoutCalories(workouts, currentNutritionForm.date, latestWeight);
+    const manual = parseNumber(currentNutritionForm.activeCaloriesOut);
+    return { ...auto, manual, total: auto.total + manual };
+  })();
+
   const recent7Days = (nutritionHistory || []).slice(0, 7);
   const weeklyAvg = (() => {
     if (recent7Days.length === 0) return null;
@@ -93,7 +103,7 @@ const NutritionView = memo(({
   })();
 
   return (
-    <div className="p-4 space-y-4 pb-24 h-full overflow-y-auto hide-scrollbar bg-black">
+    <div className="p-4 space-y-4 pb-nav h-full overflow-y-auto hide-scrollbar bg-black">
       {/* Gerçek harcama: kilo trendi + alım geçmişinden hesaplanır */}
       {adaptiveTDEE && (
         <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
@@ -225,6 +235,81 @@ const NutritionView = memo(({
           </div>
         </div>
       )}
+
+      {/* Enerji dengesi: yakım antrenman kayıtlarından otomatik gelir, kullanıcı
+          üstüne elle ekleme yapabilir (adım sayısı, iş günü hareketliliği vb.) */}
+      <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
+        <div className="flex justify-between items-center px-4 py-3 border-b border-zinc-800 bg-zinc-950/60">
+          <h3 className="text-[11px] font-bold text-zinc-200 uppercase tracking-wider flex items-center">
+            <Flame size={13} className="mr-2 text-red-400" /> Enerji Dengesi
+          </h3>
+          <span className="text-[10px] font-mono text-zinc-500">{currentNutritionForm.date}</span>
+        </div>
+
+        <div className="p-4 space-y-3">
+          {latestWeight > 0 ? (
+            <>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="bg-zinc-950 border border-zinc-800 rounded-xl py-2.5">
+                  <span className="text-[9px] font-mono text-zinc-500 uppercase block">Alınan</span>
+                  <span className="text-sm font-mono font-bold text-cyan-400">{Math.round(totals.calories)}</span>
+                </div>
+                <div className="bg-zinc-950 border border-zinc-800 rounded-xl py-2.5">
+                  <span className="text-[9px] font-mono text-zinc-500 uppercase block">Yakılan</span>
+                  <span className="text-sm font-mono font-bold text-red-400">{burned.total}</span>
+                </div>
+                <div className="bg-zinc-950 border border-zinc-800 rounded-xl py-2.5">
+                  <span className="text-[9px] font-mono text-zinc-500 uppercase block">Net</span>
+                  <span className={`text-sm font-mono font-bold ${totals.calories - burned.total >= 0 ? 'text-zinc-100' : 'text-emerald-400'}`}>
+                    {Math.round(totals.calories) - burned.total > 0 ? '+' : ''}{Math.round(totals.calories) - burned.total}
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-1.5 text-[10px] font-mono">
+                <div className="flex justify-between text-zinc-500">
+                  <span>Ağırlık antrenmanı (otomatik)</span>
+                  <span className="text-zinc-300">{burned.lifting} kcal</span>
+                </div>
+                <div className="flex justify-between text-zinc-500">
+                  <span>Kardiyo (otomatik)</span>
+                  <span className="text-zinc-300">{burned.cardio} kcal</span>
+                </div>
+                <div className="flex justify-between items-center text-zinc-500 pt-1.5 border-t border-zinc-800">
+                  <span>Elle eklenen</span>
+                  <span className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      max={5000}
+                      value={currentNutritionForm.activeCaloriesOut ?? ''}
+                      onChange={(e) => setCurrentNutritionForm(prev => ({
+                        ...prev,
+                        activeCaloriesOut: clampNumber(e.target.value, 0, 5000),
+                      }))}
+                      placeholder="0"
+                      className="w-20 bg-zinc-950 border border-zinc-800 rounded-lg py-1.5 text-center font-mono text-red-400 text-[11px] outline-none focus:border-red-500"
+                    />
+                    <span className="text-zinc-600">kcal</span>
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-[9px] font-mono text-zinc-600 leading-relaxed">
+                Otomatik yakım {latestWeight} kg üzerinden, dinlenmenin üstüne hesaplanır.
+                Adım sayısı gibi gün içi hareketliliği elle ekleyebilirsin.
+              </p>
+            </>
+          ) : (
+            <p className="text-[11px] font-mono text-amber-400 leading-relaxed">
+              Kalori yakımı tahmini için kiloya ihtiyaç var.
+              <br />
+              <span className="text-zinc-500">Vücut sekmesinden bir ölçüm girdiğinde otomatik hesaplanacak.</span>
+            </p>
+          )}
+        </div>
+      </div>
 
       {/* Giriş modu: öğün öğün mü, günün toplamı mı */}
       <div className="flex bg-zinc-900 p-1 rounded-2xl border border-zinc-800">

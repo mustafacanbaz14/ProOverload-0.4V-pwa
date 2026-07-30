@@ -1,4 +1,8 @@
-import { parseNumber } from './helpers';
+// Doğrudan en alt katmandan alınır: bu modül saf hesap kalsın ki tdee.js gibi
+// bağımsız modüller de kullanabilsin (helpers üzerinden gitmek constants,
+// migrations ve React tarafını içeri çekerdi).
+// Uzantı açık: node bu modülü doğrudan çalıştırabilsin.
+import { parseNumber } from './number.js';
 
 /**
  * Beslenme istatistikleri.

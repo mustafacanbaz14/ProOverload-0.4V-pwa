@@ -22,6 +22,13 @@
   .pt-safe {
     padding-top: env(safe-area-inset-top, 20px);
   }
+  /* Alt gezinme çubuğunun üstünde kalması gereken içerik için. Çubuk 4rem
+     yüksekliğinde ve altına cihazın güvenli alanı ekleniyor; sabit bir pb-24
+     (6rem) ana ekrana eklenmiş uygulamada son satırı çubuğun altında
+     bırakıyordu. */
+  .pb-nav {
+    padding-bottom: calc(5rem + env(safe-area-inset-bottom, 20px));
+  }
 
   /* Premium Glassmorphism & Neon Glow Utilities */
   .glass-card {

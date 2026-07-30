@@ -3,6 +3,7 @@ import {
   SET_TYPE_KEYS, SMALL_MUSCLE_GROUPS
 } from './constants';
 import { migrateCustomExercises, normalizeMuscleName } from './migrations';
+import { parseNumber } from './number';
 
 /** Yazma daima en yeni sürüm anahtarına yapılır. */
 export const storageKey = (name) => `po_${name}${STORAGE_VERSION}`;
@@ -74,12 +75,10 @@ export const foldForSearch = (text) => String(text || '')
   .replace(/[İIı]/g, 'i')
   .toLowerCase();
 
-export const parseNumber = (val) => {
-  if (val === '' || val === null || val === undefined) return 0;
-  const normalized = String(val).replace(',', '.');
-  const num = Number(normalized);
-  return isNaN(num) ? 0 : num;
-};
+// parseNumber en alt katmanda (number.js) duruyor; saf hesap modülleri onu
+// uygulamanın geri kalanını içeri çekmeden kullanabilsin diye. Mevcut
+// `from './helpers'` import'ları bozulmasın diye buradan yeniden dışa aktarılır.
+export { parseNumber };
 
 /**
  * Sayıyı verilen aralığa çeker.

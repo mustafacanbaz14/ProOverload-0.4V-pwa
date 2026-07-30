@@ -20,7 +20,14 @@ export const DEFAULT_SETTINGS = {
   // Haftalık program: gün anahtarı -> şablon kimliği (null = dinlenme günü).
   weekPlan: {},
   // Ana sayfadaki 16 satırlık kas hacmi listesi varsayılan olarak kapalı.
-  showMuscleVolume: false
+  showMuscleVolume: false,
+  // Vücut kompozisyonu hedefleri. Boş string = hedef konulmamış; ölçüm kaydına
+  // değil ayarlara yazılıyor çünkü hedef zaman içinde sabit bir niyet, o günün
+  // ölçümü değil.
+  goalWeight: '',
+  goalBodyFat: '',
+  goalFFM: '',
+  goalFFMI: ''
 };
 
 export const DELETE_LABELS = {
@@ -417,12 +424,27 @@ export const volumeStatusOf = (volume, muscle, level = 'intermediate') => {
  * "dikkat" bandı var; literatürde de bu aralık yüksek risk değil, izlenmesi
  * gereken bölge olarak geçiyor.
  */
-export const acwrStatusOf = (acwr, hasEnoughData) => {
+/**
+ * ACWR durumu.
+ *
+ * ACWR GÖRELİ bir ölçüdür: kendi son 28 gününle kıyaslar. Ara verip sonra
+ * normal bir haftaya dönen biri, mutlak yükü hâlâ çok düşük olsa bile yüksek
+ * oran görür. Bu yüzden yalnızca orana bakıp "Riskli" demek yanıltıcıydı —
+ * kullanıcı hiçbir kasta verimli tavanı (MAV) geçmemişken alarm alıyordu.
+ *
+ * Çözüm: yüksek oran ancak MUTLAK yük de anlamlı seviyedeyse risk sayılır.
+ * `nearCeiling`, en az bir kasın MAV'ına ulaşıp ulaşmadığını söyler. Ulaşmamışsa
+ * hızlı artış "Yükseliyor" olarak bilgi amaçlı gösterilir; düşük bir tabandan
+ * hacmi artırmak zaten olması gereken şeydir, uyarı konusu değildir.
+ */
+export const acwrStatusOf = (acwr, hasEnoughData, nearCeiling = true) => {
   if (!hasEnoughData) return 'insufficient';
   const value = Number(acwr);
   if (!Number.isFinite(value) || value <= 0) return 'insufficient';
   if (value < 0.8) return 'low';
   if (value <= 1.3) return 'optimal';
+  // Oran yükselmiş: mutlak yük tavana yaklaşmadıysa bu bir risk değil, rampa.
+  if (!nearCeiling) return 'ramping';
   if (value <= 1.5) return 'caution';
   return 'high';
 };
@@ -431,8 +453,19 @@ export const ACWR_STATUS = {
   insufficient: { label: 'Yeterli Veri Yok', text: 'text-zinc-500' },
   low: { label: 'Yetersiz', text: 'text-blue-400' },
   optimal: { label: 'İdeal', text: 'text-emerald-500' },
+  ramping: { label: 'Yükseliyor', text: 'text-cyan-400' },
   caution: { label: 'Dikkat', text: 'text-amber-400' },
   high: { label: 'Riskli', text: 'text-red-500' },
+};
+
+/** Durumun kısa açıklaması — kartın altında tek satır olarak gösterilir. */
+export const ACWR_HINT = {
+  insufficient: 'İlk kayıttan 21 gün geçince hesaplanır.',
+  low: 'Yük son haftalarda düşmüş. Hacmi kademeli artırabilirsin.',
+  optimal: 'Yük artışı toparlanma kapasitenle uyumlu.',
+  ramping: 'Hacim hızlı artıyor ama mutlak yük hâlâ tavanın altında.',
+  caution: 'Artış hızlı ve bazı kaslar verimli tavanda. Bu hafta sabit kal.',
+  high: 'Artış hızlı ve hacim tavanda. Set sayısını düşürmeyi düşün.',
 };
 
 /** ACWR'ın anlamlı sayılması için ilk kayıttan bu yana geçmesi gereken gün. */

@@ -2,6 +2,7 @@ import React, { memo } from 'react';
 import { Trash2, Calendar, Scale, Beef, Pencil, Copy, BookmarkPlus, HeartPulse } from 'lucide-react';
 import { calcTonnage, calcEffectiveSets, isWorkingSet } from '../utils/helpers';
 import { findActivity, cardioEntryCalories, totalCardioCalories } from '../utils/cardio';
+import { dailyTotals } from '../utils/nutritionStats';
 
 // Listeler App tarafından tarihe göre azalan sırada verilir (en yeni en üstte).
 // Burada tekrar sıralama veya ters çevirme yapılmaz.
@@ -21,7 +22,7 @@ const HistoryView = memo(({
   latestWeight = 0,
 }) => {
   return (
-    <div className="p-4 space-y-4 pb-24 h-full overflow-y-auto hide-scrollbar bg-black">
+    <div className="p-4 space-y-4 pb-nav h-full overflow-y-auto hide-scrollbar bg-black">
       <div className="flex bg-zinc-900 p-1 rounded-2xl border border-zinc-800">
         <button
           onClick={() => setHistoryTab('workouts')}
@@ -195,30 +196,40 @@ const HistoryView = memo(({
           {nutritionHistory.length === 0 ? (
             <div className="text-center py-12 text-zinc-600 text-xs font-mono">Henüz beslenme kaydı yok</div>
           ) : (
-            nutritionHistory.map(n => (
-              <div key={n.id} className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 space-y-2">
-                <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
-                  <div className="flex items-center space-x-2">
-                    <Beef size={14} className="text-cyan-400" />
-                    <span className="text-xs font-bold text-zinc-200 font-mono">{n.date}</span>
+            nutritionHistory.map(n => {
+              // Toplamlar öğünlerden hesaplanır. Eskiden kayıttaki üst düzey
+              // caloriesIn/protein/carbs/fats alanları okunuyordu ama bu alanlar
+              // hiçbir zaman doldurulmuyordu; veri girilmiş günler bile 0 görünüyordu.
+              const t = dailyTotals(n);
+              const isDaily = n.entryMode === 'daily';
+              return (
+                <div key={n.id} className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 space-y-2">
+                  <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
+                    <div className="flex items-center space-x-2 min-w-0">
+                      <Beef size={14} className="text-cyan-400 shrink-0" />
+                      <span className="text-xs font-bold text-zinc-200 font-mono">{n.date}</span>
+                      <span className="text-[9px] font-mono text-zinc-600 uppercase shrink-0">
+                        {isDaily ? 'günlük toplam' : `${(n.meals || []).length} öğün`}
+                      </span>
+                    </div>
+                    <div className="flex items-center shrink-0">
+                      <button onClick={() => handleEditNutrition?.(n)} title="Bu kaydı düzenle" aria-label="Bu kaydı düzenle" className="text-zinc-500 active:text-cyan-400 p-2">
+                        <Pencil size={14} />
+                      </button>
+                      <button onClick={() => setDeleteConfirm({ isOpen: true, type: 'nutrition', id: n.id })} title="Sil" aria-label="Sil" className="text-zinc-600 active:text-red-500 p-2">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center shrink-0">
-                    <button onClick={() => handleEditNutrition?.(n)} title="Bu kaydı düzenle" className="text-zinc-500 active:text-cyan-400 p-2">
-                      <Pencil size={14} />
-                    </button>
-                    <button onClick={() => setDeleteConfirm({ isOpen: true, type: 'nutrition', id: n.id })} title="Sil" className="text-zinc-600 active:text-red-500 p-2">
-                      <Trash2 size={14} />
-                    </button>
+                  <div className="grid grid-cols-4 gap-2 text-[10px] font-mono text-zinc-300 pt-1">
+                    <div>Kalori: <strong className="text-cyan-400">{Math.round(t.calories)}</strong></div>
+                    <div>Protein: <strong className="text-emerald-400">{Math.round(t.protein)}g</strong></div>
+                    <div>Karb: <strong className="text-amber-400">{Math.round(t.carbs)}g</strong></div>
+                    <div>Yağ: <strong className="text-purple-400">{Math.round(t.fats)}g</strong></div>
                   </div>
                 </div>
-                <div className="grid grid-cols-4 gap-2 text-[10px] font-mono text-zinc-300 pt-1">
-                  <div>Kalori: <strong className="text-cyan-400">{n.caloriesIn} kcal</strong></div>
-                  <div>Protein: <strong className="text-emerald-400">{n.protein}g</strong></div>
-                  <div>Karb: <strong className="text-amber-400">{n.carbs}g</strong></div>
-                  <div>Yağ: <strong className="text-purple-400">{n.fats}g</strong></div>
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       )}

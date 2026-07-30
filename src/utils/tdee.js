@@ -1,9 +1,9 @@
 // Saf hesap modülü — bilerek bağımsız tutuldu ki node ile doğrudan test edilebilsin.
-const parseNumber = (val) => {
-  if (val === '' || val === null || val === undefined) return 0;
-  const n = Number(String(val).replace(',', '.'));
-  return Number.isNaN(n) ? 0 : n;
-};
+// Yalnızca aynı katmandaki saf modüllerden import eder.
+// Uzantılar açık yazılır: node bu modülü doğrudan çalıştırabilsin
+// (Vite uzantısız import'u çözer, node çözmez).
+import { parseNumber } from './number.js';
+import { dailyTotals } from './nutritionStats.js';
 
 // 1 kg vücut ağırlığı değişimi ≈ 7700 kcal. Bu katsayı saf yağ dokusu için
 // geçerlidir; kısa dönemde su/glikojen dalgalanması sonucu bozar, bu yüzden
@@ -89,12 +89,14 @@ export const computeAdaptiveTDEE = (metricsHistory = [], nutritionHistory = []) 
   }
 
   // Alım verisi yalnızca kilo penceresi içinden alınır.
+  //
+  // Kalori öğünlerden toplanır. Kayıttaki üst düzey `caloriesIn` alanı hiçbir
+  // zaman doldurulmuyordu; buradan okununca her gün 0 çıkıyor ve hiçbir kayıt
+  // filtreyi geçemediği için gerçek TDEE hep "yetersiz veri" diyordu.
   const intakes = (nutritionHistory || [])
-    .filter(n => {
-      const d = dayNumber(n.date);
-      return d >= firstDay && d <= lastDay && parseNumber(n.caloriesIn) > 0;
-    })
-    .map(n => parseNumber(n.caloriesIn));
+    .map(n => ({ day: dayNumber(n.date), calories: dailyTotals(n).calories }))
+    .filter(n => n.day >= firstDay && n.day <= lastDay && n.calories > 0)
+    .map(n => n.calories);
 
   if (intakes.length < MIN_INTAKE_DAYS) {
     return { insufficient: true, reason: `Bu aralıkta en az ${MIN_INTAKE_DAYS} günlük beslenme kaydı gerekiyor (${intakes.length} var).` };

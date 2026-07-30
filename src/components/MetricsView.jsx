@@ -3,6 +3,7 @@ import { User, Scale, Ruler, Info, Save, ArrowRightLeft, Calendar, Droplet, Hist
 import { BODY_METRICS, FAT_METHOD_LABELS } from '../utils/constants';
 import { parseNumber, clampNumber, INPUT_LIMITS } from '../utils/helpers';
 import MeasurementGuide from './MeasurementGuide';
+import GoalsCard from './GoalsCard';
 
 // Kaliper ölçüm noktaları. 3 bölge yöntemi cinsiyete göre farklı noktalar kullanır,
 // 7 bölge yönteminde hepsi girilir.
@@ -47,6 +48,10 @@ const MetricsView = memo(({
   setIsComparisonOpen,
   latestMetrics,
   isExistingRecord,
+  settings = {},
+  setSettings,
+  goalValues = {},
+  weeklyKg = 0,
 }) => {
   const form = currentMetricsForm;
 
@@ -245,6 +250,16 @@ const MetricsView = memo(({
           <p className="text-zinc-300 leading-relaxed text-[10px] font-mono">{computedComp.trainingAdvice}</p>
         </div>
       </Section>
+
+      {/* Hedefler hesaplanan kompozisyonun hemen altında: karşılaştırılan
+          değerler (yağ oranı, yağsız kütle, FFMI) tam üstte duruyor. */}
+      <GoalsCard
+        settings={settings}
+        setSettings={setSettings}
+        current={goalValues.current}
+        earliest={goalValues.earliest}
+        weeklyKg={weeklyKg}
+      />
 
       {/* --- ÇEVRE ÖLÇÜLERİ --- */}
       <Section icon={<Ruler size={13} />}
