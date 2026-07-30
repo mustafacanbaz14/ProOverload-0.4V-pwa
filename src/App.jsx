@@ -10,7 +10,8 @@ import {
 import { DEFAULT_EXERCISES, MUSCLE_GROUPS, getVolumeLandmarks, ACWR_MIN_DAYS } from './utils/constants';
 import { migrateCustomExercises } from './utils/migrations';
 import { computeAdaptiveTDEE } from './utils/tdee';
-import { totalCardioCalories } from './utils/cardio';
+import { totalCardioCalories, dayWorkoutCalories } from './utils/cardio';
+import { computeWeekPlan } from './utils/weekPlan';
 import { safeSetItem, safeSetRawItem, createErrorThrottle } from './utils/persist';
 // Sürüm tek kaynaktan okunur: package.json. Ekranda gösterilen sürüm ile
 // yedek dosyasına yazılan sürümün birbirinden sapması böyle engellenir.
@@ -44,6 +45,7 @@ import ExerciseEditorModal from './components/ExerciseEditorModal';
 import ExerciseLibraryModal from './components/ExerciseLibraryModal';
 import TemplateBuilderModal from './components/TemplateBuilderModal';
 import CardioModal from './components/CardioModal';
+import EnergyDetailModal from './components/EnergyDetailModal';
 import WeeklyPlanModal from './components/WeeklyPlanModal';
 
 export default function App() {
@@ -78,6 +80,7 @@ export default function App() {
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [isCardioOpen, setIsCardioOpen] = useState(false);
+  const [isEnergyDetailOpen, setIsEnergyDetailOpen] = useState(false);
   const [isWeekPlanOpen, setIsWeekPlanOpen] = useState(false);
   // Kütüphaneden "yeni hareket" ile gelindiğinde kapanışta oraya dönülür.
   const [pickerReturnsToLibrary, setPickerReturnsToLibrary] = useState(false);
@@ -1045,6 +1048,21 @@ export default function App() {
     return rec ? parseNumber(rec.weight) : 0;
   }, [sortedMetrics]);
 
+  // Modal her gün için ayrı ayrı soruyor; kilo ve antrenman listesi sabit
+  // olduğu için tek bir fonksiyon yeterli.
+  const dayCaloriesFor = useCallback(
+    (dateStr) => dayWorkoutCalories(workouts, dateStr, latestWeight),
+    [workouts, latestWeight]);
+
+  // Haftalık programın teorik harcaması için plan günleri.
+  const weekPlanDays = useMemo(() => computeWeekPlan(settings.weekPlan || {}, templates, {
+    customExercises,
+    restSeconds: settings.restSeconds,
+    experienceLevel: settings.experienceLevel,
+    weightKg: latestWeight,
+  }).days, [settings.weekPlan, settings.restSeconds, settings.experienceLevel,
+    templates, customExercises, latestWeight]);
+
   // Aktif antrenman varsa oraya yazılır; yoksa bugünün kardiyo kaydına eklenir
   // (yoksa oluşturulur), böylece basketbol/koşu için seans başlatmak gerekmez.
   const handleAddCardio = useCallback((entry) => {
@@ -1215,6 +1233,7 @@ export default function App() {
               workouts={workouts}
               latestWeight={latestWeight}
               maintenanceCalories={maintenanceCalories}
+              onOpenEnergyDetail={() => setIsEnergyDetailOpen(true)}
             />
           )}
 
@@ -1419,6 +1438,19 @@ export default function App() {
           restSeconds={settings.restSeconds}
           experienceLevel={settings.experienceLevel}
           weightKg={latestWeight}
+        />
+
+        {/* KALORİ DETAYI */}
+        <EnergyDetailModal
+          isOpen={isEnergyDetailOpen}
+          onClose={() => setIsEnergyDetailOpen(false)}
+          nutritionHistory={sortedNutrition}
+          todayForm={currentNutritionForm}
+          maintenance={maintenanceCalories}
+          computedComp={computedComp}
+          dayCalories={dayCaloriesFor}
+          planDays={weekPlanDays}
+          plannedCardioKcal={weeklyCardioKcal}
         />
 
         {/* KARDİYO */}

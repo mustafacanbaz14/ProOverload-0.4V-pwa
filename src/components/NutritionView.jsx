@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { Beef, Plus, Save, Trash2, Calendar, Search, TrendingUp, Activity, Flame } from 'lucide-react';
+import { Beef, Plus, Save, Trash2, Calendar, Search, TrendingUp, Activity, BarChart3 } from 'lucide-react';
 import { parseNumber, clampNumber, INPUT_LIMITS } from '../utils/helpers';
 import { dailyTotals } from '../utils/nutritionStats';
 import { dayWorkoutCalories } from '../utils/cardio';
@@ -21,6 +21,7 @@ const NutritionView = memo(({
   workouts = [],
   latestWeight = 0,
   maintenanceCalories = 0,
+  onOpenEnergyDetail,
 }) => {
   const safeMeals = Array.isArray(currentNutritionForm.meals) ? currentNutritionForm.meals : [];
   const isDaily = currentNutritionForm.entryMode === 'daily';
@@ -261,6 +262,16 @@ const NutritionView = memo(({
         manualValue={currentNutritionForm.activeCaloriesOut}
         onChangeManual={(v) => setCurrentNutritionForm(prev => ({ ...prev, activeCaloriesOut: v }))}
       />
+
+      <button
+        onClick={() => onOpenEnergyDetail?.()}
+        className="w-full bg-zinc-900 active:bg-zinc-800 border border-zinc-800 text-zinc-200 font-bold py-3 px-4 rounded-2xl flex justify-center items-center uppercase tracking-wide text-[11px] transition-colors"
+      >
+        <BarChart3 size={14} className="mr-2 text-red-400" /> Kalori Detayı
+        <span className="ml-2 text-[9px] font-mono text-zinc-500 normal-case tracking-normal">
+          gün gün · hafta hafta
+        </span>
+      </button>
 
       {/* Giriş modu: öğün öğün mü, günün toplamı mı */}
       <div className="flex bg-zinc-900 p-1 rounded-2xl border border-zinc-800">

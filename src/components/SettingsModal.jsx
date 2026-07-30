@@ -15,7 +15,15 @@ const Toggle = ({ label, hint, checked, onChange }) => (
       onClick={(e) => { e.preventDefault(); onChange(!checked); }}
       className={`w-11 h-6 rounded-full relative transition-colors shrink-0 ${checked ? 'bg-cyan-600' : 'bg-zinc-700'}`}
     >
-      <span className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'}`} />
+      {/* Hata: `left` hiç yazılmadığı için nokta statik konumundan başlıyordu.
+          Buton ortalı olduğundan bu ~22px'e denk geliyor, üstüne binen translate
+          de noktayı rayın dışına taşırıyordu; kapalıyken de sola inmiyordu.
+          Konum artık doğrudan `left` ile veriliyor:
+          ray 44px − nokta 16px − 4px boşluk = kapalı 4px, açık 24px. */}
+      <span
+        style={{ left: checked ? 24 : 4 }}
+        className="w-4 h-4 rounded-full bg-white absolute top-1 transition-all duration-200"
+      />
     </button>
   </label>
 );
