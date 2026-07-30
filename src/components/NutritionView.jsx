@@ -285,8 +285,13 @@ const NutritionView = memo(({
                       max={5000}
                       value={currentNutritionForm.activeCaloriesOut ?? ''}
                       onChange={(e) => setCurrentNutritionForm(prev => ({
+                        ...prev, activeCaloriesOut: e.target.value,
+                      }))}
+                      // Sınırlama odaktan çıkışta: yazarken uygulanınca ara
+                      // değerler üst sınıra çarpıyor.
+                      onBlur={(e) => setCurrentNutritionForm(prev => ({
                         ...prev,
-                        activeCaloriesOut: clampNumber(e.target.value, 0, 5000),
+                        activeCaloriesOut: e.target.value === '' ? '' : clampNumber(e.target.value, 0, 5000),
                       }))}
                       placeholder="0"
                       className="w-20 bg-zinc-950 border border-zinc-800 rounded-lg py-1.5 text-center font-mono text-red-400 text-[11px] outline-none focus:border-red-500"

@@ -2,6 +2,7 @@ import React, { memo } from 'react';
 import { X, Settings, Download, Upload, Smartphone, HeartPulse, Database, Dumbbell, Beef } from 'lucide-react';
 import { exportAppleHealthXML, exportGoogleFitJSON } from '../utils/healthSync';
 import { EXPERIENCE_LEVELS } from '../utils/constants';
+import { ratesForGoal } from '../utils/goals';
 
 const Toggle = ({ label, hint, checked, onChange }) => (
   <label className="flex items-center justify-between gap-3 p-3 bg-zinc-950 rounded-xl border border-zinc-800 cursor-pointer">
@@ -43,6 +44,12 @@ const SettingsModal = memo(({
   if (!isOpen) return null;
 
   const set = (patch) => setSettings(s => ({ ...s, ...patch }));
+
+  // Hız seçenekleri döneme bağlı; koruma döneminde hız kavramı yok.
+  const paceOptions = ratesForGoal(settings.nutritionGoal);
+  const activePace = paceOptions.find(r => r.key === settings.paceRate)
+    || paceOptions.find(r => r.default)
+    || null;
 
   const downloadBlob = (content, type, filename) => {
     const blob = new Blob([content], { type });
@@ -148,13 +155,13 @@ const SettingsModal = memo(({
                 <input
                   type="number" inputMode="numeric" value={settings.repRangeMin}
                   onChange={(e) => set({ repRangeMin: Math.max(1, Number(e.target.value) || 1) })}
-                  className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg py-2 text-center font-mono text-cyan-400 text-xs outline-none"
+                  className="flex-1 min-w-0 bg-zinc-900 border border-zinc-800 rounded-lg py-2 text-center font-mono text-cyan-400 text-xs outline-none"
                 />
                 <span className="text-zinc-600">—</span>
                 <input
                   type="number" inputMode="numeric" value={settings.repRangeMax}
                   onChange={(e) => set({ repRangeMax: Math.max(1, Number(e.target.value) || 1) })}
-                  className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg py-2 text-center font-mono text-cyan-400 text-xs outline-none"
+                  className="flex-1 min-w-0 bg-zinc-900 border border-zinc-800 rounded-lg py-2 text-center font-mono text-cyan-400 text-xs outline-none"
                 />
               </div>
             </div>
@@ -207,6 +214,43 @@ const SettingsModal = memo(({
                 ))}
               </div>
             </div>
+
+            {/* Hız seçimi yalnızca kesme/büyüme dönemlerinde anlamlı. */}
+            {paceOptions.length > 0 && (
+              <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800">
+                <span className="text-zinc-200 text-[11px] font-bold block">
+                  Haftalık {settings.nutritionGoal === 'cut' ? 'Kayıp' : 'Alım'} Hızı
+                </span>
+                <span className="text-zinc-500 text-[10px] font-mono block mt-0.5 mb-2 leading-snug">
+                  Vücut ağırlığının yüzdesi olarak. Mutlak kg yerine yüzde kullanılır;
+                  haftada 0.5 kg 60 kiloda agresif, 110 kiloda yavaştır.
+                </span>
+                <div className={`grid gap-2 ${paceOptions.length === 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
+                  {paceOptions.map(r => {
+                    const active = (settings.paceRate || activePace?.key) === r.key;
+                    return (
+                      <button
+                        key={r.key}
+                        onClick={() => set({ paceRate: r.key })}
+                        className={`py-2 rounded-lg text-[10px] font-bold uppercase border transition-colors ${active ? 'bg-orange-900/30 border-orange-600 text-orange-400' : 'bg-zinc-900 border-zinc-800 text-zinc-500'}`}
+                      >
+                        {r.label}
+                        <span className="block text-[8px] font-mono normal-case tracking-normal opacity-70">
+                          %{r.weeklyPct}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {activePace && (
+                  <p className="text-[9px] font-mono text-zinc-600 mt-2 leading-relaxed">{activePace.hint}</p>
+                )}
+                <p className="text-[9px] font-mono text-zinc-600 mt-1.5 leading-relaxed border-t border-zinc-900 pt-1.5">
+                  Seçtiğin hız, yağ oranına göre belirlenen güvenli sınırı aşamaz —
+                  aşarsa otomatik kırpılır ve analiz ekranında bunu görürsün.
+                </p>
+              </div>
+            )}
 
             <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800">
               <span className="text-zinc-200 text-[11px] font-bold block">Protein Çarpanı</span>

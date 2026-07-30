@@ -162,6 +162,7 @@ const AnalyticsView = memo(({
     const recommended = recommendedCalories(maintenance, settings.nutritionGoal, {
       weightKg: latestWeight,
       bodyFatPct: parseNumber(computedComp?.activeBF),
+      rate: settings.paceRate,
     });
     const targetCalories = recommended?.target || maintenance;
 
@@ -502,18 +503,32 @@ const AnalyticsView = memo(({
                       </p>
                     )}
 
-                    {nutritionAnalysis.recommended && (
-                      <p className="text-[9px] font-mono text-zinc-500 leading-relaxed pt-1 border-t border-zinc-800/60">
-                        <strong className="text-zinc-300">{nutritionAnalysis.recommended.label}</strong> dönemi
-                        için önerilen alım:{' '}
-                        <strong className="text-cyan-400">{nutritionAnalysis.recommended.target} kcal/gün</strong>
-                        {nutritionAnalysis.recommended.offset !== 0 && (
-                          <> (korunum {nutritionAnalysis.maintenance} kcal
-                            {nutritionAnalysis.recommended.offset > 0 ? ' + ' : ' − '}
-                            {Math.abs(nutritionAnalysis.recommended.offset)})</>
-                        )}.
-                      </p>
-                    )}
+                    {nutritionAnalysis.recommended && (() => {
+                      const r = nutritionAnalysis.recommended;
+                      return (
+                        <div className="pt-1 border-t border-zinc-800/60 space-y-1">
+                          <p className="text-[9px] font-mono text-zinc-500 leading-relaxed">
+                            <strong className="text-zinc-300">{r.label}</strong>
+                            {r.rateLabel && <> · <strong className="text-zinc-300">{r.rateLabel}</strong> hız (haftada %{r.weeklyPct})</>}
+                            {' '}için önerilen alım:{' '}
+                            <strong className="text-cyan-400">{r.target} kcal/gün</strong>
+                            {r.offset !== 0 && (
+                              <> (korunum {nutritionAnalysis.maintenance} kcal
+                                {r.offset > 0 ? ' + ' : ' − '}{Math.abs(r.offset)})</>
+                            )}.
+                          </p>
+                          {r.cappedBySafety && (
+                            <p className="text-[9px] font-mono text-amber-500/90 leading-relaxed">
+                              Seçtiğin hız yağ oranına göre güvenli sınırı (haftada %{r.safeLimitPct})
+                              aştığı için otomatik kırpıldı. Daha hızlısını istiyorsan önce yağ oranını düşürmen gerekir.
+                            </p>
+                          )}
+                          <p className="text-[9px] font-mono text-zinc-600 leading-relaxed">
+                            Hızı Ayarlar &gt; Beslenme Hedefleri&apos;nden değiştirebilirsin.
+                          </p>
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })()}

@@ -1,8 +1,9 @@
 import React, { memo } from 'react';
 import { Trash2, Calendar, Scale, Beef, Pencil, Copy, BookmarkPlus, HeartPulse } from 'lucide-react';
 import { calcTonnage, calcEffectiveSets, isWorkingSet } from '../utils/helpers';
-import { findActivity, cardioEntryCalories, totalCardioCalories } from '../utils/cardio';
+import { findActivity, cardioEntryCalories, totalCardioCalories, dayWorkoutCalories } from '../utils/cardio';
 import { dailyTotals } from '../utils/nutritionStats';
+import { parseNumber, clampNumber } from '../utils/helpers';
 
 // Listeler App tarafından tarihe göre azalan sırada verilir (en yeni en üstte).
 // Burada tekrar sıralama veya ters çevirme yapılmaz.
@@ -20,6 +21,8 @@ const HistoryView = memo(({
   handleEditNutrition,
   handleSaveAsTemplate,
   latestWeight = 0,
+  maintenanceCalories = 0,
+  onUpdateNutrition,
 }) => {
   return (
     <div className="p-4 space-y-4 pb-nav h-full overflow-y-auto hide-scrollbar bg-black">
@@ -227,6 +230,78 @@ const HistoryView = memo(({
                     <div>Karb: <strong className="text-amber-400">{Math.round(t.carbs)}g</strong></div>
                     <div>Yağ: <strong className="text-purple-400">{Math.round(t.fats)}g</strong></div>
                   </div>
+
+                  {/* O günün enerji dengesi. Yakım antrenman kayıtlarından
+                      otomatik gelir; elle eklenen kısım burada düzenlenebilir. */}
+                  {(() => {
+                    const auto = dayWorkoutCalories(workouts, n.date, latestWeight);
+                    const manual = parseNumber(n.activeCaloriesOut);
+                    const burned = auto.total + manual;
+                    const balance = maintenanceCalories > 0
+                      ? Math.round(t.calories - burned - maintenanceCalories)
+                      : null;
+                    const weeklyKg = balance !== null
+                      ? Math.round((balance * 7 / 7700) * 100) / 100
+                      : null;
+                    const tone = balance === null ? 'text-zinc-500'
+                      : balance < -100 ? 'text-cyan-400'
+                        : balance > 100 ? 'text-amber-400'
+                          : 'text-emerald-400';
+                    const etiket = balance === null ? '—'
+                      : balance < -100 ? 'Açık'
+                        : balance > 100 ? 'Fazla'
+                          : 'Korunum';
+                    return (
+                      <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 space-y-1.5">
+                        <div className="flex justify-between items-center text-[10px] font-mono">
+                          <span className="text-zinc-500 uppercase tracking-wider text-[9px] font-bold">Enerji Dengesi</span>
+                          {balance !== null && (
+                            <span className={`font-bold ${tone}`}>
+                              {balance > 0 ? '+' : ''}{balance} kcal · {etiket}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex justify-between text-[10px] font-mono text-zinc-500">
+                          <span>Yakılan (antrenman + kardiyo)</span>
+                          <span className="text-zinc-300">{auto.total} kcal</span>
+                        </div>
+
+                        <div className="flex justify-between items-center text-[10px] font-mono text-zinc-500">
+                          <span>Elle eklenen</span>
+                          <span className="flex items-center gap-1.5">
+                            <input
+                              type="number"
+                              inputMode="numeric"
+                              min={0}
+                              max={5000}
+                              value={n.activeCaloriesOut ?? ''}
+                              onChange={(e) => onUpdateNutrition?.(n.id, { activeCaloriesOut: e.target.value })}
+                              onBlur={(e) => onUpdateNutrition?.(n.id, {
+                                activeCaloriesOut: e.target.value === '' ? '' : clampNumber(e.target.value, 0, 5000),
+                              })}
+                              placeholder="0"
+                              className="w-16 bg-zinc-900 border border-zinc-800 rounded-lg py-1 text-center font-mono text-red-400 text-[10px] outline-none focus:border-red-500"
+                            />
+                            <span className="text-zinc-600">kcal</span>
+                          </span>
+                        </div>
+
+                        {balance !== null ? (
+                          <p className="text-[9px] font-mono text-zinc-600 leading-relaxed">
+                            {Math.round(t.calories)} alındı − {burned} yakıldı, korunum {maintenanceCalories} kcal.
+                            {weeklyKg !== 0 && (
+                              <> Bu tempo sürseydi haftada {weeklyKg > 0 ? '+' : ''}{weeklyKg} kg.</>
+                            )}
+                          </p>
+                        ) : (
+                          <p className="text-[9px] font-mono text-zinc-600 leading-relaxed">
+                            Denge için korunum kalorisi gerekiyor — Vücut sekmesinden ölçüm gir.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })

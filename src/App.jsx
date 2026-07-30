@@ -998,6 +998,25 @@ export default function App() {
     showToast('Kayıt silindi.');
   };
 
+  // Korunum kalorisi: gerçek TDEE varsa o, yoksa BMR tahmini. Geçmiş enerji
+  // dengesi de bu değere göre hesaplanır.
+  const maintenanceCalories = useMemo(() => {
+    if (adaptiveTDEE?.tdee > 0) return Math.round(adaptiveTDEE.tdee);
+    return Math.round(parseNumber(computedComp?.bmr) * 1.5) || 0;
+  }, [adaptiveTDEE, computedComp]);
+
+  // Geçmiş bir beslenme kaydının tek alanını günceller (yakılan kalori gibi).
+  // Kaydın tamamını forma yüklemeye gerek kalmıyor.
+  const handleUpdateNutritionField = useCallback((id, patch) => {
+    setNutritionHistory(prev => prev.map(n => n.id === id ? { ...n, ...patch } : n));
+    // Düzenlenen gün açıkta duran form ile aynıysa form da güncellenmeli,
+    // yoksa kaydet düğmesi eski değeri geri yazar.
+    setCurrentNutritionForm(prev => {
+      const target = prev && nutritionHistory.find(n => n.id === id);
+      return target && target.date === prev.date ? { ...prev, ...patch } : prev;
+    });
+  }, [nutritionHistory]);
+
   const handleNutritionDateChange = (date) => {
     const existing = nutritionHistory.find(n => n.date === date);
     if (existing) setCurrentNutritionForm(mergeNutrition(existing));
@@ -1110,9 +1129,14 @@ export default function App() {
             <div className="p-1.5 bg-cyan-950/50 border border-cyan-800/50 rounded-xl">
               <Activity size={16} className="text-cyan-400 animate-pulse" />
             </div>
-            <h1 className="text-sm font-black tracking-widest uppercase bg-gradient-to-r from-cyan-400 via-emerald-400 to-cyan-500 bg-clip-text text-transparent">
-              Hypertrophy<span className="text-cyan-400 font-light ml-0.5">LAB</span>
-            </h1>
+            <div className="min-w-0">
+              <h1 className="text-sm font-black tracking-widest uppercase bg-gradient-to-r from-cyan-400 via-emerald-400 to-cyan-500 bg-clip-text text-transparent">
+                Hypertrophy<span className="text-cyan-400 font-light ml-0.5">LAB</span>
+              </h1>
+              <span className="text-[8px] font-mono text-zinc-600 uppercase tracking-[0.2em] block -mt-0.5">
+                by Afacan Tech
+              </span>
+            </div>
             <span className="text-[9px] font-mono text-zinc-600 self-center">v{pkg.version}</span>
           </div>
           <button onClick={() => setIsSettingsModalOpen(true)} className="px-4 py-3.5 text-zinc-400 hover:text-cyan-400 active:scale-95 transition-all">
@@ -1231,6 +1255,8 @@ export default function App() {
               handleEditNutrition={handleEditNutrition}
               handleSaveAsTemplate={handleSaveAsTemplate}
               latestWeight={latestWeight}
+              maintenanceCalories={maintenanceCalories}
+              onUpdateNutrition={handleUpdateNutritionField}
             />
           )}
 

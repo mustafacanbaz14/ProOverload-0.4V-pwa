@@ -70,7 +70,10 @@ const CardioModal = memo(({ isOpen, onClose, onSave, weightKg, existing = [], on
                 min={INPUT_LIMITS.minutes.min}
                 max={INPUT_LIMITS.minutes.max}
                 value={minutes}
-                onChange={(e) => setMinutes(clampNumber(e.target.value, INPUT_LIMITS.minutes.min, INPUT_LIMITS.minutes.max) || 0)}
+                onChange={(e) => setMinutes(e.target.value)}
+                // Sınırlama odaktan çıkışta: yazarken uygulanınca "700" yazmaya
+                // çalışan kullanıcı ara değerde üst sınıra çarpıyor.
+                onBlur={(e) => setMinutes(clampNumber(e.target.value, INPUT_LIMITS.minutes.min, INPUT_LIMITS.minutes.max) || 0)}
                 className="w-20 bg-zinc-950 border border-zinc-800 rounded-lg py-2 text-center font-mono text-cyan-400 text-sm outline-none focus:border-cyan-500"
               />
               <span className="text-[11px] font-mono text-zinc-500">dk</span>
@@ -81,7 +84,7 @@ const CardioModal = memo(({ isOpen, onClose, onSave, weightKg, existing = [], on
               <button
                 key={m}
                 onClick={() => setMinutes(m)}
-                className={`py-2 rounded-lg text-[10px] font-bold border transition-colors ${minutes === m ? 'bg-cyan-900/30 border-cyan-600 text-cyan-400' : 'bg-zinc-950 border-zinc-800 text-zinc-500'}`}
+                className={`py-2 rounded-lg text-[10px] font-bold border transition-colors ${Number(minutes) === m ? 'bg-cyan-900/30 border-cyan-600 text-cyan-400' : 'bg-zinc-950 border-zinc-800 text-zinc-500'}`}
               >
                 {m}
               </button>

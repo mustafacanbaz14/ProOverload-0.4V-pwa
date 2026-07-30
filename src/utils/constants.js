@@ -27,7 +27,10 @@ export const DEFAULT_SETTINGS = {
   goalWeight: '',
   goalBodyFat: '',
   goalFFM: '',
-  goalFFMI: ''
+  goalFFMI: '',
+  // Haftalık kayıp/alım hızı tercihi (goals.js CUT_RATES / BULK_RATES anahtarı).
+  // Boş = döneme göre varsayılan ("Ölçülü") kullanılır.
+  paceRate: ''
 };
 
 export const DELETE_LABELS = {
@@ -97,7 +100,40 @@ export const DEFAULT_EXERCISES = [
   // Karın & Bel
   "Machine Crunch", "Toes to Bar", "Dragon Flag", "Pallof Press", "Dead Bug",
   "Hollow Body Hold", "V-Ups", "Bicycle Crunch", "Weighted Plank",
-  "Reverse Hyperextension", "Jefferson Curl", "Superman Hold", "Bird Dog"
+  "Reverse Hyperextension", "Jefferson Curl", "Superman Hold", "Bird Dog",
+
+  // --- v0.9 eklemeleri ---
+  // Göğüs
+  "Cable Fly (High to Low)", "Hex Press", "Plate Squeeze Press", "Wide Grip Bench Press",
+  "Spoto Press", "Larsen Press", "Machine Incline Press", "Banded Push-ups",
+  // Sırt
+  "Rope Face Pull", "Chest Supported Dumbbell Row", "Barbell Shrug Behind Back",
+  "Wide Grip Seated Row", "Close Grip Lat Pulldown", "Machine High Row",
+  "Machine Low Row", "Renegade Row", "Dumbbell Pullover", "Archer Pull-up",
+  "Scapular Pull-up", "Cable Lat Prayer",
+  // Omuz
+  "Machine Reverse Fly", "Cable Upright Row", "Dumbbell Upright Row",
+  "Seated Lateral Raise", "Incline Lateral Raise", "Cuban Press", "Powell Raise",
+  "Landmine Lateral Raise",
+  // Kol
+  "Incline Cable Curl", "Machine Bicep Curl", "Rope Hammer Curl", "Waiter Curl",
+  "Overhead Cable Curl", "Reverse Grip Pushdown", "Single Arm Pushdown",
+  "French Press", "Lying Dumbbell Extension", "Tate Press",
+  // Önkol
+  "Cable Wrist Curl", "Hammer Wrist Rotation", "Towel Hang",
+  // Bacak
+  "Front Foot Elevated Split Squat", "Heels Elevated Squat",
+  "Cyclist Squat", "Barbell Step-up", "Lateral Lunge", "Deficit Reverse Lunge",
+  "Seated Hip Abduction", "Copenhagen Adduction", "Banded Lateral Walk",
+  "Single Leg Leg Extension", "Kneeling Leg Curl", "Slider Leg Curl",
+  // Kalça
+  "Barbell Glute Bridge", "Cable Hip Abduction", "Step Down",
+  // Baldır
+  "Donkey Calf Raise", "Hack Squat Calf Raise", "Seated Single Leg Calf Raise",
+  // Karın & Bel
+  "Cable Side Bend", "Suitcase Carry", "Hanging Oblique Raise", "Copenhagen Plank",
+  "Ab Crunch Machine", "Stir the Pot", "Standing Cable Crunch", "L-Sit Hold",
+  "Weighted Decline Sit-up", "Landmine Rotation"
 ].sort();
 
 // 16 kas grubu. Ayrım hipertrofi hacim takibinin gerektirdiği çözünürlüğe göre:
@@ -176,10 +212,14 @@ export const LEGACY_MUSCLE_MAP = {
 //   - "close grip bench" göğüs kurallarından ÖNCE olmalı (triseps baskın)
 //   - genel /curl/ "incline" kuralından ÖNCE olmalı ("Incline Dumbbell Curl")
 export const EXERCISE_RULES = [
+  // Copenhagen adduktor hareketidir; adında "plank" geçtiği için aşağıdaki
+  // genel /plank/ kuralından ÖNCE yakalanmak zorunda.
+  [/copenhagen/, 'Legs', { 'Kalça': 1, 'Karın': 0.5 }],
+
   // --- KARIN & BEL ---
   [/ab wheel|rollout/, 'Core', { 'Karın': 1, 'Bel': 0.25 }],
   [/woodchop|cable twist/, 'Core', { 'Karın': 1 }],
-  [/hanging (leg|knee) raise|toes to bar|captain'?s chair|sit-?up|crunch|dead bug|pallof|russian twist|plank|hollow/, 'Core', { 'Karın': 1 }],
+  [/hanging (leg|knee|oblique) raise|toes to bar|captain'?s chair|sit-?up|crunch|dead bug|pallof|russian twist|plank|hollow|side bend|l-?sit|stir the pot|landmine (rotation|twist)/, 'Core', { 'Karın': 1 }],
   [/back extension|hyper-?extension|reverse hyper/, 'Core', { 'Bel': 1, 'Kalça': 0.5, 'Hamstring': 0.5 }],
   // "Jefferson Curl" adında curl geçer ama omurga hareketidir; biseps kuralından
   // çok önce yakalanmak zorunda.
@@ -199,7 +239,7 @@ export const EXERCISE_RULES = [
   [/pull through/, 'Legs', { 'Kalça': 1, 'Hamstring': 0.5 }],
   // Abduksiyon gluteus medius/minimus, adduksiyon adduktor magnus çalıştırır.
   // Ayrı bir adduktor grubu yok; ikisi de kalça bütçesine yazılır.
-  [/hip abduction|abductor machine|hip adduction|adductor machine|clamshell/, 'Legs', { 'Kalça': 1 }],
+  [/hip abduction|abductor machine|hip adduction|adductor machine|clamshell|banded (lateral|side) walk|monster walk/, 'Legs', { 'Kalça': 1 }],
   [/hip thrust|glute bridge|glute kickback|frog pump|glute/, 'Legs', { 'Kalça': 1, 'Hamstring': 0.25 }],
 
   // --- HAMSTRING BASKIN (genel /curl/ kuralından önce olmalı) ---
@@ -218,14 +258,14 @@ export const EXERCISE_RULES = [
   [/leg extension/, 'Legs', { 'Quadriceps': 1 }],
   [/hack squat|leg press/, 'Legs', { 'Quadriceps': 1, 'Kalça': 0.5 }],
   [/front squat|zercher/, 'Legs', { 'Quadriceps': 1, 'Kalça': 0.5, 'Bel': 0.5, 'Karın': 0.25 }],
-  [/bulgarian|split squat|lunge|step-?up/, 'Legs', { 'Quadriceps': 1, 'Kalça': 0.5, 'Hamstring': 0.25 }],
+  [/bulgarian|split squat|lunge|step-?up|step[- ]down/, 'Legs', { 'Quadriceps': 1, 'Kalça': 0.5, 'Hamstring': 0.25 }],
   [/squat/, 'Legs', { 'Quadriceps': 1, 'Kalça': 0.5, 'Hamstring': 0.25, 'Bel': 0.25 }],
 
   // --- OMUZ İZOLASYON (üç baş ayrı) ---
   [/face pull/, 'Pull', { 'Arka Omuz': 1, 'Trapez': 0.5, 'Orta Sırt': 0.25 }],
   // "Reverse Cable Fly" gibi araya kelime giren adlar da yakalanmalı.
   // "Bent Over Lateral Raise" arka deltoiddir; yan omuz kuralından önce gelmeli.
-  [/reverse pec|rear delt|reverse \w* ?fly|bent[- ]over (lateral|dumbbell) raise/, 'Pull', { 'Arka Omuz': 1, 'Orta Sırt': 0.25 }],
+  [/reverse pec|rear delt|reverse \w* ?fly|bent[- ]over (lateral|dumbbell) raise|powell raise/, 'Pull', { 'Arka Omuz': 1, 'Orta Sırt': 0.25 }],
   [/y-?raise/, 'Pull', { 'Arka Omuz': 1, 'Trapez': 0.5 }],
   [/lateral raise|side raise/, 'Push', { 'Yan Omuz': 1 }],
   [/front raise/, 'Push', { 'Ön Omuz': 1 }],
@@ -235,6 +275,9 @@ export const EXERCISE_RULES = [
   // --- OMUZ BİLEŞKE ---
   // Dikey baslarda yük ön deltoiddedir; yan baş yalnızca kısmi katkı alır.
   [/landmine press/, 'Push', { 'Ön Omuz': 1, 'Göğüs': 0.5, 'Triseps': 0.5 }],
+  // Cuban press dış rotasyon + bas birleşimi; rotator manşet ve arka baş
+  // baskın. Genel /press/ yakalayıcısına düşerse göğüs sanılırdı.
+  [/cuban press/, 'Push', { 'Arka Omuz': 1, 'Yan Omuz': 0.5, 'Ön Omuz': 0.5, 'Trapez': 0.25 }],
   // Ense arkası baste omuz dış rotasyonda olduğu için yan baş payı belirgin artar.
   [/behind the neck press|bradford press/, 'Push', { 'Ön Omuz': 1, 'Yan Omuz': 0.5, 'Triseps': 0.5, 'Trapez': 0.25 }],
   [/overhead press|\bohp\b|shoulder press|arnold press|military press|push press|\bz press\b|viking press/, 'Push', { 'Ön Omuz': 1, 'Triseps': 0.5, 'Yan Omuz': 0.25, 'Trapez': 0.25 }],
@@ -246,11 +289,12 @@ export const EXERCISE_RULES = [
   // "Bench Dip" genel /dips?/ kuralından, "JM Press" genel /press/ kuralından
   // önce yakalanmalı — ikisi de triseps hareketidir.
   [/bench dip|jm press/, 'Push', { 'Triseps': 1, 'Göğüs': 0.25 }],
-  [/tricep|skull crusher|pushdown|kickback|overhead extension/, 'Push', { 'Triseps': 1 }],
+  // "Lying Leg Curl" yukarıda yakalandığı için buradaki lying...extension güvenli.
+  [/tricep|skull crusher|pushdown|kickback|overhead extension|lying \w+ extension|french press|tate press/, 'Push', { 'Triseps': 1 }],
   // Önkol izolasyonu genel /curl/ kuralından önce yakalanmalı.
   // Dikkat: burada çıplak /grip/ KULLANILAMAZ — "Seated Row (Wide Grip)",
   // "Neutral Grip Pulldown" gibi hareketleri önkol sanardı.
-  [/wrist curl|reverse wrist|wrist roller|grip trainer|plate pinch|dead hang|barbell hold/, 'Pull', { 'Önkol': 1 }],
+  [/wrist curl|reverse wrist|wrist roller|grip trainer|plate pinch|(dead|towel) hang|barbell hold|wrist rotation/, 'Pull', { 'Önkol': 1 }],
   [/reverse curl/, 'Pull', { 'Önkol': 1, 'Biseps': 0.5 }],
   [/hammer/, 'Pull', { 'Biseps': 1, 'Önkol': 0.5 }],
   // Bacak curl'leri yukarıda yakalandığı için buradaki genel /curl/ güvenlidir.
@@ -260,7 +304,7 @@ export const EXERCISE_RULES = [
 
   // --- SIRT ---
   // Dikey çekiş kanat baskın, yatay çekiş orta sırt baskın.
-  [/straight arm pulldown|pullover/, 'Pull', { 'Kanat': 1 }],
+  [/straight arm pulldown|pullover|lat prayer/, 'Pull', { 'Kanat': 1 }],
   [/pull-?up|chin-?up|lat pulldown|pulldown/, 'Pull', { 'Kanat': 1, 'Biseps': 0.5, 'Orta Sırt': 0.25, 'Önkol': 0.25 }],
   // Serbest ağırlıkla öne eğik çekişlerde bel izometrik olarak belirgin yüklenir.
   [/pendlay|barbell row|t-?bar row|meadows/, 'Pull', { 'Orta Sırt': 1, 'Kanat': 0.5, 'Biseps': 0.5, 'Bel': 0.5, 'Arka Omuz': 0.25, 'Önkol': 0.25 }],

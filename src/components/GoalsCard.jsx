@@ -16,6 +16,19 @@ const GoalsCard = memo(({
   earliest = {},
   weeklyKg = 0,
 }) => {
+  // Sınırlama YAZARKEN değil odaktan çıkışta uygulanır. Her tuşta sınıra
+  // çekmek girişi kullanılamaz hale getiriyordu: min 30 olan alana "78"
+  // yazmaya çalışınca "7" anında 30'a çekiliyor, sonraki tuşla "308" olup
+  // üst sınıra (300) çarpıyordu. MetricsView aynı kalıbı zaten kullanıyor.
+  const setGoal = (key, value) => setSettings(prev => ({ ...prev, [key]: value }));
+
+  const clampOnBlur = (field) => (e) => {
+    const raw = e.target.value;
+    // Boş bırakmak hedefi kaldırmak demek; sıfıra çevirmek yanlış olurdu.
+    if (raw === '') return setGoal(field.key, '');
+    setGoal(field.key, clampNumber(raw, field.min, field.max));
+  };
+
   const rows = GOAL_FIELDS.map(f => {
     const progress = goalProgress(earliest[f.key], current[f.key], settings[f.key]);
     return { ...f, progress, hasTarget: parseNumber(settings[f.key]) > 0 };
@@ -52,10 +65,8 @@ const GoalsCard = memo(({
                     min={row.min}
                     max={row.max}
                     value={settings[row.key] ?? ''}
-                    onChange={(e) => setSettings(prev => ({
-                      ...prev,
-                      [row.key]: clampNumber(e.target.value, row.min, row.max),
-                    }))}
+                    onChange={(e) => setGoal(row.key, e.target.value)}
+                    onBlur={clampOnBlur(row)}
                     placeholder="—"
                     className="w-20 bg-zinc-950 border border-zinc-800 rounded-lg py-1.5 text-center font-mono text-emerald-400 text-[11px] outline-none focus:border-emerald-500"
                   />

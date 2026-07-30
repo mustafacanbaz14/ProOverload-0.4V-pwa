@@ -164,6 +164,31 @@ export const energyBalanceAdvice = (intake, maintenance, {
 };
 
 /**
+ * Haftalık kayıp hızı seçenekleri — vücut ağırlığının yüzdesi olarak.
+ *
+ * Mutlak kg yerine yüzde: haftada 0.5 kg, 60 kg'lık biri için agresif, 110
+ * kg'lık biri için yavaştır. Seçilen hız yağ oranına göre belirlenen güvenli
+ * sınırı aşamaz — `recommendedCalories` gerekirse kırpar.
+ */
+export const CUT_RATES = [
+  { key: 'slow', label: 'Yavaş', weeklyPct: 0.25, hint: 'Kas korumada en güvenli. Yağ oranı zaten düşükse ideal.' },
+  { key: 'moderate', label: 'Ölçülü', weeklyPct: 0.5, hint: 'Çoğu kişi için en iyi denge. Önerilen başlangıç.', default: true },
+  { key: 'fast', label: 'Hızlı', weeklyPct: 0.75, hint: 'Yağ oranı yüksekken uygun. Protein ve ağırlık çalışması şart.' },
+  { key: 'aggressive', label: 'Agresif', weeklyPct: 1.0, hint: 'Yalnızca yüksek yağ oranında ve kısa dönem. Kas kaybı riski artar.' },
+];
+
+/** Haftalık alım hızı seçenekleri — fazlanın yağa gitme oranı hızla artar. */
+export const BULK_RATES = [
+  { key: 'lean', label: 'Temiz', weeklyPct: 0.125, hint: 'Yağ kazanımı en az. İleri seviye için uygun.' },
+  { key: 'moderate', label: 'Ölçülü', weeklyPct: 0.25, hint: 'Kas/yağ oranında en iyi denge. Önerilen başlangıç.', default: true },
+  { key: 'fast', label: 'Hızlı', weeklyPct: 0.5, hint: 'Yeni başlayanda işe yarar; ileri seviyede çoğu yağ olur.' },
+];
+
+/** Seçilen döneme göre uygun hız listesi. */
+export const ratesForGoal = (nutritionGoal) =>
+  nutritionGoal === 'cut' ? CUT_RATES : nutritionGoal === 'bulk' ? BULK_RATES : [];
+
+/**
  * Döneme göre önerilen günlük alım.
  *
  * Korunum kalorisini hedef aralığı olarak kullanmak, bilinçli açıkta olan biri
@@ -176,29 +201,51 @@ export const energyBalanceAdvice = (intake, maintenance, {
 export const recommendedCalories = (maintenance, nutritionGoal, {
   weightKg = 0,
   bodyFatPct = 0,
+  rate = null,
 } = {}) => {
   const tdee = parseNumber(maintenance);
   const weight = parseNumber(weightKg);
   if (!(tdee > 0)) return null;
 
   if (nutritionGoal === 'maintenance' || !weight) {
-    return { target: Math.round(tdee), offset: 0, label: 'Korunum' };
+    return { target: Math.round(tdee), offset: 0, label: 'Korunum', weeklyPct: 0 };
   }
 
   const perDay = (weeklyPct) => Math.round((weeklyPct / 100) * weight * KCAL_PER_KG / 7);
+  const isCut = nutritionGoal === 'cut';
+  const options = isCut ? CUT_RATES : BULK_RATES;
+  const chosen = options.find(o => o.key === rate) || options.find(o => o.default) || options[1];
 
-  if (nutritionGoal === 'cut') {
+  if (isCut) {
     const advice = energyBalanceAdvice(tdee, tdee, { weightKg: weight, bodyFatPct });
-    const desired = perDay(0.6);
-    // Güvenli sınırı aşmasın: yağ oranı düşükse önerilen açık da daralır.
-    const deficit = advice?.maxSafeDeficit > 0
+    const desired = perDay(chosen.weeklyPct);
+    // Güvenli sınırı aşmasın: yağ oranı düşükse seçilen hız da kırpılır.
+    const capped = advice?.maxSafeDeficit > 0
       ? Math.min(desired, advice.maxSafeDeficit)
       : desired;
-    return { target: Math.round(tdee - deficit), offset: -deficit, label: 'Yağ Yakım' };
+    return {
+      target: Math.round(tdee - capped),
+      offset: -capped,
+      label: 'Yağ Yakım',
+      rateKey: chosen.key,
+      rateLabel: chosen.label,
+      weeklyPct: chosen.weeklyPct,
+      cappedBySafety: capped < desired,
+      safeLimitPct: advice?.maxSafeLossPct ?? null,
+    };
   }
 
-  const surplus = perDay(0.3);
-  return { target: Math.round(tdee + surplus), offset: surplus, label: 'Büyüme' };
+  const surplus = perDay(chosen.weeklyPct);
+  return {
+    target: Math.round(tdee + surplus),
+    offset: surplus,
+    label: 'Büyüme',
+    rateKey: chosen.key,
+    rateLabel: chosen.label,
+    weeklyPct: chosen.weeklyPct,
+    cappedBySafety: false,
+    safeLimitPct: null,
+  };
 };
 
 /**
