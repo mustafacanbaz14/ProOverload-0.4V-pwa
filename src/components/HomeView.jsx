@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { AlertCircle, Activity, Target, Zap, BookmarkPlus, Trash2, Trophy, Clock, Layers, ChevronRight, Dumbbell, CalendarPlus, HeartPulse, Flame, CalendarRange, Pencil } from 'lucide-react';
+import { AlertCircle, Activity, Target, Zap, BookmarkPlus, Trash2, Trophy, Clock, Layers, ChevronRight, ChevronDown, Dumbbell, CalendarPlus, HeartPulse, Flame, CalendarRange, Pencil } from 'lucide-react';
 import { MUSCLE_SECTIONS, getVolumeLandmarks, volumeStatusOf, VOLUME_STATUS, acwrStatusOf, ACWR_STATUS } from '../utils/constants';
 import { previewTemplateVolume, estimateDuration } from '../utils/templates';
 import MuscleHeatmap from './MuscleHeatmap';
@@ -23,6 +23,8 @@ const HomeView = memo(({
   onOpenCardio,
   onOpenWeekPlan,
   weeklyCardioKcal = 0,
+  showMuscleVolume = false,
+  onToggleMuscleVolume,
 }) => {
   return (
     <div className="p-4 space-y-5 pb-24 h-full overflow-y-auto hide-scrollbar bg-black">
@@ -109,10 +111,45 @@ const HomeView = memo(({
       </div>
 
       <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
-        <div className="flex justify-between items-center px-4 py-3 border-b border-zinc-800 bg-zinc-950/60">
+        {/* 16 satırlık liste ana sayfayı çok uzatıyor; varsayılan olarak kapalı
+            gelir. Kapalıyken bile kaç kasın eşik altında/üstünde olduğu görünür,
+            böylece açmadan da durum anlaşılır. */}
+        <button
+          onClick={() => onToggleMuscleVolume?.()}
+          aria-expanded={showMuscleVolume}
+          className="w-full flex justify-between items-center px-4 py-3 bg-zinc-950/60 active:bg-zinc-900 transition-colors text-left"
+        >
           <h3 className="text-[11px] font-bold text-zinc-200 uppercase tracking-wider flex items-center">
             <Target size={13} className="mr-2 text-cyan-400" /> Haftalık Kas Hacmi
           </h3>
+          <span className="flex items-center gap-2 shrink-0">
+            {!showMuscleVolume && (() => {
+              const stats = MUSCLE_SECTIONS.flatMap(s => s.muscles).reduce((acc, muscle) => {
+                const key = volumeStatusOf(dashboardStats.muscleVolume[muscle] || 0, muscle, experienceLevel);
+                acc[key] = (acc[key] || 0) + 1;
+                return acc;
+              }, {});
+              const under = (stats.none || 0) + (stats.under || 0);
+              const over = stats.over || 0;
+              return (
+                <span className="text-[9px] font-mono text-zinc-500">
+                  {under > 0 && <span className="text-cyan-400">{under} eksik</span>}
+                  {under > 0 && over > 0 && ' · '}
+                  {over > 0 && <span className="text-orange-400">{over} tavan üstü</span>}
+                  {under === 0 && over === 0 && <span className="text-emerald-400">hepsi verimli</span>}
+                </span>
+              );
+            })()}
+            <ChevronDown
+              size={15}
+              className={`text-zinc-500 transition-transform duration-200 ${showMuscleVolume ? 'rotate-180' : ''}`}
+            />
+          </span>
+        </button>
+
+        {showMuscleVolume && (
+        <>
+        <div className="px-4 py-2 border-y border-zinc-800 bg-zinc-950/40">
           <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">MEV / MAV / MRV</span>
         </div>
 
@@ -153,6 +190,8 @@ const HomeView = memo(({
             </div>
           ))}
         </div>
+        </>
+        )}
       </div>
 
       <button onClick={() => handleStartRequest()} className="w-full bg-cyan-600 active:bg-cyan-700 text-white font-bold py-4 px-4 rounded-2xl flex justify-center items-center uppercase tracking-wide text-sm shadow-lg shadow-cyan-900/20 transition-all">

@@ -1,6 +1,7 @@
 import React, { memo } from 'react';
 import { Beef, Plus, Save, Trash2, Calendar, Search, TrendingUp, Activity } from 'lucide-react';
 import { parseNumber, clampNumber, INPUT_LIMITS } from '../utils/helpers';
+import { dailyTotals } from '../utils/nutritionStats';
 
 const NutritionView = memo(({
   currentNutritionForm,
@@ -62,12 +63,9 @@ const NutritionView = memo(({
     });
   };
 
-  const totals = safeMeals.reduce((acc, m) => ({
-    calories: acc.calories + parseNumber(m.calories),
-    protein: acc.protein + parseNumber(m.protein),
-    carbs: acc.carbs + parseNumber(m.carbs),
-    fats: acc.fats + parseNumber(m.fats)
-  }), { calories: 0, protein: 0, carbs: 0, fats: 0 });
+  // Günlük toplam ve ortalamalar tek bir yerden hesaplanır; analiz sekmesi de
+  // aynı fonksiyonları kullanıyor, böylece iki ekran farklı sayı gösteremez.
+  const totals = dailyTotals(currentNutritionForm);
 
   const ffm = parseNumber(computedComp?.ffm) || 60;
   const targetProteinMultiplier = settings.nutritionGoal === 'bulk'
@@ -75,29 +73,24 @@ const NutritionView = memo(({
     : (settings.proteinPerFfmCut || 2.6);
   const targetProtein = Math.round(ffm * targetProteinMultiplier);
 
-  // Son 7 günün ortalamasını hesapla
   const recent7Days = (nutritionHistory || []).slice(0, 7);
-  const avgStats = recent7Days.length > 0 ? recent7Days.reduce((acc, n) => {
-    const safeM = Array.isArray(n.meals) ? n.meals : [];
-    const dayCals = safeM.reduce((s, m) => s + parseNumber(m.calories), 0);
-    const dayProt = safeM.reduce((s, m) => s + parseNumber(m.protein), 0);
-    const dayCarbs = safeM.reduce((s, m) => s + parseNumber(m.carbs), 0);
-    const dayFats = safeM.reduce((s, m) => s + parseNumber(m.fats), 0);
-
+  const weeklyAvg = (() => {
+    if (recent7Days.length === 0) return null;
+    // Önce toplanır, sonra bir kez bölünür: her günü ayrı yuvarlamak hata biriktirir.
+    const sum = recent7Days.map(dailyTotals).reduce((acc, d) => ({
+      calories: acc.calories + d.calories,
+      protein: acc.protein + d.protein,
+      carbs: acc.carbs + d.carbs,
+      fats: acc.fats + d.fats,
+    }), { calories: 0, protein: 0, carbs: 0, fats: 0 });
+    const n = recent7Days.length;
     return {
-      calories: acc.calories + dayCals,
-      protein: acc.protein + dayProt,
-      carbs: acc.carbs + dayCarbs,
-      fats: acc.fats + dayFats,
+      calories: Math.round(sum.calories / n),
+      protein: Math.round(sum.protein / n),
+      carbs: Math.round(sum.carbs / n),
+      fats: Math.round(sum.fats / n),
     };
-  }, { calories: 0, protein: 0, carbs: 0, fats: 0 }) : null;
-
-  const weeklyAvg = avgStats ? {
-    calories: Math.round(avgStats.calories / recent7Days.length),
-    protein: Math.round(avgStats.protein / recent7Days.length),
-    carbs: Math.round(avgStats.carbs / recent7Days.length),
-    fats: Math.round(avgStats.fats / recent7Days.length),
-  } : null;
+  })();
 
   return (
     <div className="p-4 space-y-4 pb-24 h-full overflow-y-auto hide-scrollbar bg-black">

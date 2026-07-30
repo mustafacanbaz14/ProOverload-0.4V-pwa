@@ -1108,6 +1108,8 @@ export default function App() {
               onOpenCardio={() => setIsCardioOpen(true)}
               onOpenWeekPlan={() => setIsWeekPlanOpen(true)}
               weeklyCardioKcal={weeklyCardioKcal}
+              showMuscleVolume={settings.showMuscleVolume}
+              onToggleMuscleVolume={() => setSettings(prev => ({ ...prev, showMuscleVolume: !prev.showMuscleVolume }))}
             />
           )}
 
@@ -1167,6 +1169,10 @@ export default function App() {
               exercisePerformCounts={exercisePerformCounts}
               hidden1RMExercises={settings.hidden1RMExercises}
               onToggleHidden1RM={handleToggleHidden1RM}
+              nutritionHistory={sortedNutrition}
+              settings={settings}
+              computedComp={computedComp}
+              adaptiveTDEE={adaptiveTDEE}
             />
           )}
 

@@ -18,7 +18,9 @@ export const DEFAULT_SETTINGS = {
   // 1RM analiz listesinin kendi gizleme listesi — antrenman seçimindekinden ayrı.
   hidden1RMExercises: [],
   // Haftalık program: gün anahtarı -> şablon kimliği (null = dinlenme günü).
-  weekPlan: {}
+  weekPlan: {},
+  // Ana sayfadaki 16 satırlık kas hacmi listesi varsayılan olarak kapalı.
+  showMuscleVolume: false
 };
 
 export const DELETE_LABELS = {
