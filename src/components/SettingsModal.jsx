@@ -1,8 +1,9 @@
 import React, { memo } from 'react';
-import { X, Settings, Download, Upload, Smartphone, HeartPulse, Database, Dumbbell, Beef } from 'lucide-react';
+import { X, Settings, Download, Upload, Smartphone, HeartPulse, Database, Dumbbell, Beef, Sun, Moon, Footprints } from 'lucide-react';
 import { exportAppleHealthXML, exportGoogleFitJSON } from '../utils/healthSync';
 import { EXPERIENCE_LEVELS } from '../utils/constants';
 import { ratesForGoal } from '../utils/goals';
+import { ACTIVITY_LEVELS } from '../utils/energyModel';
 
 const Toggle = ({ label, hint, checked, onChange }) => (
   <label className="flex items-center justify-between gap-3 p-3 bg-zinc-950 rounded-xl border border-zinc-800 cursor-pointer">
@@ -117,6 +118,131 @@ const SettingsModal = memo(({
               <Smartphone size={14} /> Metin ile Cihaz Aktarımı
             </button>
           </div>
+
+          {/* --- GÖRÜNÜM --- */}
+          <Group icon={<Sun size={12} className="text-amber-400" />} title="Görünüm">
+            <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800">
+              <span className="text-zinc-200 text-[11px] font-bold block mb-2">Tema</span>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { key: 'dark', label: 'Karanlık', icon: Moon },
+                  { key: 'light', label: 'Aydınlık', icon: Sun },
+                ].map(t => {
+                  const Icon = t.icon;
+                  const aktif = (settings.theme || 'dark') === t.key;
+                  return (
+                    <button
+                      key={t.key}
+                      onClick={() => set({ theme: t.key })}
+                      className={`py-2.5 rounded-lg text-[10px] font-bold uppercase border transition-colors flex items-center justify-center gap-1.5 ${aktif ? 'bg-cyan-900/30 border-cyan-600 text-cyan-400' : 'bg-zinc-900 border-zinc-800 text-zinc-500'}`}
+                    >
+                      <Icon size={12} /> {t.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[9px] font-mono text-zinc-600 mt-2 leading-relaxed">
+                Seçtiğin tema kaydedilir ve uygulamayı her açtığında geçerli olur.
+              </p>
+            </div>
+          </Group>
+
+          {/* --- VÜCUT & HESAPLAMA --- */}
+          <Group icon={<Beef size={12} className="text-cyan-400" />} title="Vücut & Hesaplama">
+            <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800">
+              <span className="text-zinc-200 text-[11px] font-bold block">BMI Değerlendirmesi</span>
+              <span className="text-zinc-500 text-[10px] font-mono block mt-0.5 mb-2 leading-snug">
+                Klasik BMI kası yağdan ayırt edemez; kaslı biri fazla kilolu çıkar.
+              </span>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { key: 'standard', label: 'Klasik' },
+                  { key: 'athletic', label: 'Sporcu' },
+                ].map(m => (
+                  <button
+                    key={m.key}
+                    onClick={() => set({ bmiMode: m.key })}
+                    className={`py-2 rounded-lg text-[10px] font-bold uppercase border transition-colors ${(settings.bmiMode || 'athletic') === m.key ? 'bg-cyan-900/30 border-cyan-600 text-cyan-400' : 'bg-zinc-900 border-zinc-800 text-zinc-500'}`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[9px] font-mono text-zinc-600 mt-2 leading-relaxed">
+                {(settings.bmiMode || 'athletic') === 'athletic'
+                  ? 'Yağ oranın sağlıklı bandın içindeyse yüksek BMI kas olarak yorumlanır; FFMI arttıkça üst sınırlar yukarı kaydırılır.'
+                  : 'Dünya Sağlık Örgütü aralıkları (18.5 / 25 / 30) olduğu gibi kullanılır.'}
+              </p>
+            </div>
+
+            <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800">
+              <span className="text-zinc-200 text-[11px] font-bold block">Günlük Hareket (NEAT)</span>
+              <span className="text-zinc-500 text-[10px] font-mono block mt-0.5 mb-2 leading-snug">
+                Antrenman dışı hareketlilik. Otomatik yöntem gerçek harcamandan
+                bazal, sindirim ve ortalama antrenman payını düşerek bulur.
+              </span>
+              <div className="grid grid-cols-4 gap-1.5 mb-2">
+                {[
+                  { key: 'auto', label: 'Oto' },
+                  { key: 'level', label: 'Seviye' },
+                  { key: 'steps', label: 'Adım' },
+                  { key: 'manual', label: 'Elle' },
+                ].map(m => (
+                  <button
+                    key={m.key}
+                    onClick={() => set({ neatMode: m.key })}
+                    className={`py-2 rounded-lg text-[9px] font-bold uppercase border transition-colors ${(settings.neatMode || 'auto') === m.key ? 'bg-cyan-900/30 border-cyan-600 text-cyan-400' : 'bg-zinc-900 border-zinc-800 text-zinc-500'}`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+
+              {settings.neatMode === 'level' && (
+                <div className="space-y-1.5">
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {ACTIVITY_LEVELS.map(l => (
+                      <button
+                        key={l.key}
+                        onClick={() => set({ activityLevel: l.key })}
+                        className={`py-2 rounded-lg text-[9px] font-bold uppercase border transition-colors ${(settings.activityLevel || 'light') === l.key ? 'bg-cyan-900/30 border-cyan-600 text-cyan-400' : 'bg-zinc-900 border-zinc-800 text-zinc-500'}`}
+                      >
+                        {l.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[9px] font-mono text-zinc-600 leading-relaxed">
+                    {(ACTIVITY_LEVELS.find(l => l.key === (settings.activityLevel || 'light')) || ACTIVITY_LEVELS[1]).hint}
+                  </p>
+                </div>
+              )}
+
+              {settings.neatMode === 'steps' && (
+                <p className="text-[9px] font-mono text-zinc-600 leading-relaxed flex items-start gap-1.5">
+                  <Footprints size={11} className="text-cyan-400 shrink-0 mt-0.5" />
+                  Adım sayısını Beslenme sekmesinde gün gün girersin. Yakım vücut
+                  ağırlığınla ölçeklenir (yaklaşık 0.0005 kcal/adım/kg).
+                </p>
+              )}
+
+              {settings.neatMode === 'manual' && (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-mono text-zinc-500">Günlük sabit</span>
+                  <span className="flex items-center gap-1.5">
+                    <input
+                      type="number" inputMode="numeric" min={0} max={3000}
+                      value={settings.neatManual ?? ''}
+                      onChange={(e) => set({ neatManual: e.target.value })}
+                      onBlur={(e) => set({ neatManual: e.target.value === '' ? '' : Math.min(3000, Math.max(0, Number(e.target.value) || 0)) })}
+                      placeholder="0"
+                      className="w-20 bg-zinc-900 border border-zinc-800 rounded-lg py-1.5 text-center font-mono text-cyan-400 text-[11px] outline-none focus:border-cyan-500"
+                    />
+                    <span className="text-[10px] font-mono text-zinc-600">kcal</span>
+                  </span>
+                </div>
+              )}
+            </div>
+          </Group>
 
           {/* --- ANTRENMAN --- */}
           <Group icon={<Dumbbell size={12} className="text-cyan-400" />} title="Antrenman">

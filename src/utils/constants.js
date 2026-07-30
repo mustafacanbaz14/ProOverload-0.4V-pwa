@@ -30,7 +30,17 @@ export const DEFAULT_SETTINGS = {
   goalFFMI: '',
   // Haftalık kayıp/alım hızı tercihi (goals.js CUT_RATES / BULK_RATES anahtarı).
   // Boş = döneme göre varsayılan ("Ölçülü") kullanılır.
-  paceRate: ''
+  paceRate: '',
+  // Günlük hareket (NEAT) hesabı: 'auto' artık yöntemi, 'level' aktivite
+  // seviyesi çarpanı, 'steps' adım sayısı, 'manual' doğrudan kcal.
+  neatMode: 'auto',
+  activityLevel: 'light',
+  neatManual: '',
+  // BMI gösterimi: 'standard' klasik aralıklar, 'athletic' kas kütlesini
+  // hesaba katan aralıklar.
+  bmiMode: 'athletic',
+  // Görünüm teması: 'dark' | 'light'
+  theme: 'dark'
 };
 
 export const DELETE_LABELS = {

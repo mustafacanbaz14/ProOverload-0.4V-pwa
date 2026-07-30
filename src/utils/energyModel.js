@@ -14,9 +14,17 @@ import { dailyTotals } from './nutritionStats.js';
  *   EPOC  — antrenman sonrası yükselmiş metabolizma (toparlanma etkisi)
  *   NEAT  — geri kalan günlük hareketlilik (yürüme, ayakta durma, iş)
  *
- * NEAT bilerek ARTIK olarak hesaplanıyor: gerçek TDEE kilo trendinden ölçülen
+ * NEAT varsayılan olarak ARTIK hesaplanır: gerçek TDEE kilo trendinden ölçülen
  * tek güvenilir toplam, diğer bileşenler formülle tahmin ediliyor. Belirsizliği
- * uydurma bir NEAT katsayısına değil, artığa yüklemek daha dürüst.
+ * uydurma bir katsayıya değil artığa yüklemek daha dürüst.
+ *
+ * Kritik incelik: ölçülen TDEE, o dönemin ORTALAMA egzersizini de içerir. Bu
+ * yüzden artıktan ortalama günlük egzersiz düşülür (`avgDailyExercise`).
+ * Düşülmezse NEAT antrenman kalorisini içine emer, dinlenme gününde bile şişkin
+ * görünür ve günün egzersizi üstüne eklendiğinde aynı enerji iki kez sayılır.
+ *
+ * Kullanıcı isterse artık yerine aktivite seviyesi, adım sayısı ya da doğrudan
+ * kcal girebilir (`neatMode`).
  */
 
 // Makro başına termik etki oranları (yaygın kabul gören aralıkların ortası).
@@ -46,15 +54,35 @@ export const thermicEffect = (macros = {}) => {
   };
 };
 
+/** Günlük hareket (NEAT) için aktivite seviyesi seçenekleri — BMR'ın katı. */
+export const ACTIVITY_LEVELS = [
+  { key: 'sedentary', label: 'Masa Başı', factor: 0.15, hint: 'Gün boyu oturarak; az yürüyüş' },
+  { key: 'light', label: 'Hafif', factor: 0.25, hint: 'Ofis + günlük yürüyüşler', default: true },
+  { key: 'moderate', label: 'Hareketli', factor: 0.40, hint: 'Ayakta çalışma, sık yürüyüş' },
+  { key: 'high', label: 'Fiziksel İş', factor: 0.60, hint: 'Bedensel iş, gün boyu ayakta' },
+];
+
+/** Adım başına yakım vücut ağırlığıyla ölçeklenir (~0.0005 kcal/adım/kg). */
+export const caloriesFromSteps = (steps, weightKg) => {
+  const s = parseNumber(steps);
+  const w = parseNumber(weightKg);
+  if (!(s > 0) || !(w > 0)) return 0;
+  return Math.round(s * 0.0005 * w);
+};
+
 /**
  * Bir günün harcama dökümü.
  *
- * @param opts.maintenance  gerçek TDEE (kilo trendinden). Yoksa BMR'den tahmin.
- * @param opts.bmr          bazal metabolizma
- * @param opts.macros       o günün makroları (TEF için)
- * @param opts.lifting      ağırlık antrenmanı kalorisi
- * @param opts.cardio       kardiyo kalorisi
- * @param opts.manual       kullanıcının elle eklediği yakım
+ * @param opts.maintenance      gerçek TDEE (kilo trendinden). Yoksa BMR'den tahmin.
+ * @param opts.bmr              bazal metabolizma
+ * @param opts.macros           o günün makroları (TEF için)
+ * @param opts.lifting/cardio/manual  o günün egzersiz kalorileri
+ * @param opts.avgDailyExercise TDEE penceresindeki ORTALAMA günlük egzersiz
+ * @param opts.neatMode         'auto' | 'level' | 'steps' | 'manual'
+ * @param opts.activityLevel    'level' modunda seviye anahtarı
+ * @param opts.steps            'steps' modunda günlük adım
+ * @param opts.neatManual       'manual' modunda doğrudan kcal
+ * @param opts.weightKg         adım hesabı için
  */
 export const dayEnergyBreakdown = ({
   maintenance = 0,
@@ -63,6 +91,12 @@ export const dayEnergyBreakdown = ({
   lifting = 0,
   cardio = 0,
   manual = 0,
+  avgDailyExercise = 0,
+  neatMode = 'auto',
+  activityLevel = 'light',
+  steps = 0,
+  neatManual = 0,
+  weightKg = 0,
 } = {}) => {
   const maint = parseNumber(maintenance);
   const base = parseNumber(bmr);
@@ -74,13 +108,33 @@ export const dayEnergyBreakdown = ({
   const epoc = Math.round(eatLifting * EPOC_LIFTING + eatCardio * EPOC_CARDIO);
   const eat = eatLifting + eatCardio + eatManual;
 
-  // NEAT artık: korunum kalorisi bilinmiyorsa hesaplanamaz.
-  // Korunum zaten ortalama bir günün TEF ve NEAT'ini içerir; egzersiz onun
-  // üstüne biner. Bu yüzden NEAT = korunum − BMR − TEF olarak çıkarılır.
-  const neat = maint > 0 ? Math.max(0, Math.round(maint - base - tef.total)) : null;
+  // NEAT (günlük hareket).
+  //
+  // ÖNEMLİ: Ölçülen TDEE, kilo trendinden geldiği için o dönemin ORTALAMA
+  // egzersizini zaten içerir. Artığı hesaplarken bunu düşmezsek NEAT, ortalama
+  // antrenman kalorisini de içine alır ve dinlenme gününde bile şişkin görünür;
+  // ayrıca günün egzersizi üstüne eklenince aynı enerji iki kez sayılırdı.
+  let neat = null;
+  let neatSource = neatMode;
 
-  const total = maint > 0
-    ? Math.round(maint + eat + epoc)
+  if (neatMode === 'manual' && parseNumber(neatManual) > 0) {
+    neat = Math.round(parseNumber(neatManual));
+  } else if (neatMode === 'steps' && parseNumber(steps) > 0) {
+    neat = caloriesFromSteps(steps, weightKg);
+  } else if (neatMode === 'level' && base > 0) {
+    const lvl = ACTIVITY_LEVELS.find(l => l.key === activityLevel) || ACTIVITY_LEVELS[1];
+    neat = Math.round(base * lvl.factor);
+  } else if (maint > 0 && base > 0) {
+    neat = Math.max(0, Math.round(maint - base - tef.total - parseNumber(avgDailyExercise)));
+    neatSource = 'auto';
+  } else {
+    neatSource = null;
+  }
+
+  // Gün toplamı bileşenlerden kurulur; korunum kalorisinin üstüne egzersiz
+  // eklemek (eski yöntem) egzersizi iki kez sayıyordu.
+  const total = neat !== null
+    ? Math.round(base + neat + tef.total + eat + epoc)
     : Math.round(base + tef.total + eat + epoc);
 
   const parts = [
@@ -97,6 +151,7 @@ export const dayEnergyBreakdown = ({
     ready: total > 0,
     bmr: base,
     neat,
+    neatSource,
     tef,
     lifting: eatLifting,
     cardio: eatCardio,
@@ -106,6 +161,8 @@ export const dayEnergyBreakdown = ({
     total,
     parts,
     isRestDay: eat === 0,
+    // Ölçülen TDEE ile karşılaştırma: bu gün ortalamanın altında mı üstünde mi.
+    vsMaintenance: maint > 0 ? Math.round(total - maint) : null,
   };
 };
 
@@ -121,6 +178,7 @@ export const buildEnergySeries = (nutritionHistory = [], {
   bmr = 0,
   dayCalories,          // (dateStr) => { lifting, cardio, total }
   days = 30,
+  neatOpts = {},        // dayEnergyBreakdown'a geçirilen NEAT ayarları
 } = {}) => {
   const cutoff = new Date();
   cutoff.setHours(0, 0, 0, 0);
@@ -138,6 +196,9 @@ export const buildEnergySeries = (nutritionHistory = [], {
         lifting: w.lifting,
         cardio: w.cardio,
         manual: n.activeCaloriesOut,
+        // Gün bazlı adım girilmişse o günün kaydından okunur.
+        steps: n.steps,
+        ...neatOpts,
       });
       return {
         date: n.date,
@@ -151,6 +212,28 @@ export const buildEnergySeries = (nutritionHistory = [], {
     })
     .filter(d => d.intake > 0 || d.out > 0)
     .sort((a, b) => new Date(b.date) - new Date(a.date));
+};
+
+/**
+ * TDEE penceresindeki ortalama günlük egzersiz kalorisi.
+ *
+ * Ölçülen TDEE bu enerjiyi zaten içerdiği için NEAT artığından düşülmesi
+ * gerekir; yoksa antrenman kalorisi hem NEAT'in içinde hem ayrı kalem olarak
+ * iki kez sayılır.
+ */
+export const averageDailyExercise = (dayCalories, days = 28) => {
+  if (!dayCalories || days <= 0) return 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dayMs = 24 * 60 * 60 * 1000;
+
+  let toplam = 0;
+  for (let i = 0; i < days; i += 1) {
+    const d = new Date(today.getTime() - i * dayMs);
+    const c = dayCalories(d.toISOString().split('T')[0]);
+    toplam += parseNumber(c?.total);
+  }
+  return Math.round(toplam / days);
 };
 
 /** Seriyi haftalara toplar (pazartesi başlangıçlı). */

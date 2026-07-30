@@ -12,6 +12,7 @@ import { migrateCustomExercises } from './utils/migrations';
 import { computeAdaptiveTDEE } from './utils/tdee';
 import { totalCardioCalories, dayWorkoutCalories } from './utils/cardio';
 import { computeWeekPlan } from './utils/weekPlan';
+import { averageDailyExercise } from './utils/energyModel';
 import { safeSetItem, safeSetRawItem, createErrorThrottle } from './utils/persist';
 // Sürüm tek kaynaktan okunur: package.json. Ekranda gösterilen sürüm ile
 // yedek dosyasına yazılan sürümün birbirinden sapması böyle engellenir.
@@ -148,6 +149,11 @@ export default function App() {
   useEffect(() => { persist('metrics', metricsHistory); }, [metricsHistory, persist]);
   useEffect(() => { persist('nutrition', nutritionHistory); }, [nutritionHistory, persist]);
   useEffect(() => { persist('settings', settings); }, [settings, persist]);
+
+  // Tema kök elemana yazılır; CSS değişkenleri oradan devralınıyor.
+  useEffect(() => {
+    document.documentElement.dataset.theme = settings.theme === 'light' ? 'light' : 'dark';
+  }, [settings.theme]);
 
   // Dinlenme sayacı
   useEffect(() => {
@@ -1054,6 +1060,20 @@ export default function App() {
     (dateStr) => dayWorkoutCalories(workouts, dateStr, latestWeight),
     [workouts, latestWeight]);
 
+  // Olculen TDEE o donemin ORTALAMA egzersizini zaten iceriyor; NEAT artigindan
+  // dusulmezse antrenman kalorisi iki kez sayilir.
+  const avgDailyExercise = useMemo(
+    () => averageDailyExercise(dayCaloriesFor, 28), [dayCaloriesFor]);
+
+  const neatOpts = useMemo(() => ({
+    avgDailyExercise,
+    neatMode: settings.neatMode || 'auto',
+    activityLevel: settings.activityLevel || 'light',
+    neatManual: settings.neatManual,
+    weightKg: latestWeight,
+  }), [avgDailyExercise, settings.neatMode, settings.activityLevel,
+    settings.neatManual, latestWeight]);
+
   // Haftalık programın teorik harcaması için plan günleri.
   const weekPlanDays = useMemo(() => computeWeekPlan(settings.weekPlan || {}, templates, {
     customExercises,
@@ -1449,6 +1469,7 @@ export default function App() {
           maintenance={maintenanceCalories}
           computedComp={computedComp}
           dayCalories={dayCaloriesFor}
+          neatOpts={neatOpts}
           planDays={weekPlanDays}
           plannedCardioKcal={weeklyCardioKcal}
         />

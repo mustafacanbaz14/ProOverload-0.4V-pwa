@@ -1,5 +1,5 @@
 import React, { useState, useMemo, memo } from 'react';
-import { X, Flame, CalendarDays, Table2, Sparkles, Scale, Moon, Dumbbell } from 'lucide-react';
+import { X, Flame, CalendarDays, Table2, Sparkles, Scale, Moon, Dumbbell, ChevronDown } from 'lucide-react';
 import { buildEnergySeries, groupByWeek, dayEnergyBreakdown, theoreticalWeek } from '../utils/energyModel';
 import { dailyTotals } from '../utils/nutritionStats';
 import { parseNumber } from '../utils/helpers';
@@ -30,15 +30,18 @@ const EnergyDetailModal = memo(({
   maintenance = 0,
   computedComp,
   dayCalories,
+  neatOpts = {},
   planDays = [],
   plannedCardioKcal = 0,
 }) => {
   const [tab, setTab] = useState('today');
+  // Tabloda açılan gün — geçmiş günün dökümünü satır altında gösterir.
+  const [openDay, setOpenDay] = useState(null);
   const bmr = parseNumber(computedComp?.bmr);
 
   const series = useMemo(
-    () => buildEnergySeries(nutritionHistory, { maintenance, bmr, dayCalories, days: 60 }),
-    [nutritionHistory, maintenance, bmr, dayCalories]);
+    () => buildEnergySeries(nutritionHistory, { maintenance, bmr, dayCalories, days: 60, neatOpts }),
+    [nutritionHistory, maintenance, bmr, dayCalories, neatOpts]);
 
   const weeks = useMemo(() => groupByWeek(series), [series]);
 
@@ -49,8 +52,10 @@ const EnergyDetailModal = memo(({
       maintenance, bmr,
       macros: dailyTotals(todayForm),
       lifting: w.lifting, cardio: w.cardio, manual: todayForm.activeCaloriesOut,
+      steps: todayForm.steps,
+      ...neatOpts,
     });
-  }, [todayForm, maintenance, bmr, dayCalories]);
+  }, [todayForm, maintenance, bmr, dayCalories, neatOpts]);
 
   const plan = useMemo(
     () => theoreticalWeek(planDays, { maintenance, plannedCardioKcal }),
@@ -194,26 +199,62 @@ const EnergyDetailModal = memo(({
                   </thead>
                   <tbody>
                     {series.map(d => (
-                      <tr key={d.date} className="border-b border-zinc-800/60">
-                        <td className="text-left px-3 py-2 whitespace-nowrap">
-                          <span className="text-zinc-300">{dateShort(d.date)}</span>
-                          {d.isRestDay
-                            ? <Moon size={9} className="inline ml-1 text-zinc-600" />
-                            : <Dumbbell size={9} className="inline ml-1 text-emerald-500" />}
-                        </td>
-                        <td className="text-right px-2 py-2 text-cyan-400">{d.intake}</td>
-                        <td className="text-right px-2 py-2 text-red-400">{d.out}</td>
-                        <td className={`text-right px-3 py-2 font-bold ${d.balance < 0 ? 'text-cyan-400' : d.balance > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
-                          {kcal(d.balance)}
-                        </td>
-                      </tr>
+                      <React.Fragment key={d.date}>
+                        <tr
+                          onClick={() => setOpenDay(openDay === d.date ? null : d.date)}
+                          className="border-b border-zinc-800/60 cursor-pointer active:bg-zinc-800/40"
+                        >
+                          <td className="text-left px-3 py-2 whitespace-nowrap">
+                            <ChevronDown
+                              size={10}
+                              className={`inline mr-1 text-zinc-600 transition-transform ${openDay === d.date ? 'rotate-180' : ''}`}
+                            />
+                            <span className="text-zinc-300">{dateShort(d.date)}</span>
+                            {d.isRestDay
+                              ? <Moon size={9} className="inline ml-1 text-zinc-600" />
+                              : <Dumbbell size={9} className="inline ml-1 text-emerald-500" />}
+                          </td>
+                          <td className="text-right px-2 py-2 text-cyan-400">{d.intake}</td>
+                          <td className="text-right px-2 py-2 text-red-400">{d.out}</td>
+                          <td className={`text-right px-3 py-2 font-bold ${d.balance < 0 ? 'text-cyan-400' : d.balance > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                            {kcal(d.balance)}
+                          </td>
+                        </tr>
+                        {openDay === d.date && (
+                          <tr className="border-b border-zinc-800/60 bg-zinc-950/60">
+                            <td colSpan={4} className="px-3 py-2.5">
+                              <div className="space-y-1.5">
+                                <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest block">
+                                  Harcama dökümü
+                                </span>
+                                {d.breakdown.parts.map(p => (
+                                  <div key={p.key} className="flex justify-between items-center">
+                                    <span className="flex items-center gap-1.5">
+                                      <span className={`w-1.5 h-1.5 rounded-full ${p.color}`} />
+                                      <span className="text-zinc-400">{p.label}</span>
+                                    </span>
+                                    <span className="text-zinc-300">{p.value} kcal</span>
+                                  </div>
+                                ))}
+                                <div className="flex justify-between pt-1.5 border-t border-zinc-800">
+                                  <span className="text-zinc-500">Makrolar</span>
+                                  <span className="text-zinc-400">
+                                    P {Math.round(d.macros.protein)} · K {Math.round(d.macros.carbs)} · Y {Math.round(d.macros.fats)}
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     ))}
                   </tbody>
                 </table>
               </div>
               <p className="text-[9px] font-mono text-zinc-600 px-3 py-2 border-t border-zinc-800 leading-relaxed">
-                Ay ikonu dinlenme, halter antrenman günü. Yakılan sütunu bazal +
-                günlük hareket + sindirim + egzersiz toplamıdır.
+                Satıra dokununca o günün dökümü açılır. Ay ikonu dinlenme, halter
+                antrenman günü. Yakılan sütunu bazal + günlük hareket + sindirim +
+                egzersiz toplamıdır.
               </p>
             </div>
           )

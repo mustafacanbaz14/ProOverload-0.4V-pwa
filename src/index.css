@@ -8,6 +8,59 @@
   }
 }
 
+/*
+ * AÇIK TEMA
+ *
+ * Arayüzün tamamı zinc tonları üzerine kurulu ve Tailwind v4 renkleri
+ * `var(--color-*)` olarak yayıyor (saydamlıklı varyantlar dahil, color-mix
+ * sayesinde). Bu yüzden yüzlerce sınıfı tek tek değiştirmek yerine ölçeği
+ * burada ters çevirmek yetiyor: koyu tonlar açık, açık tonlar koyu oluyor.
+ *
+ * Vurgu renkleri (cyan/emerald/amber/red) beyaz zeminde 400 tonunda yeterli
+ * kontrast vermediği için açık temada bir-iki ton koyulaştırılıyor.
+ */
+:root[data-theme='light'] {
+  --color-black: oklch(98% 0 0);
+  --color-white: oklch(21% .006 285.885);
+
+  --color-zinc-950: oklch(98.5% 0 0);
+  --color-zinc-900: oklch(96.7% .001 286.375);
+  --color-zinc-800: oklch(92% .004 286.32);
+  --color-zinc-700: oklch(87% .006 286.286);
+  --color-zinc-600: oklch(70.5% .015 286.067);
+  --color-zinc-500: oklch(55.2% .016 285.938);
+  --color-zinc-400: oklch(44.2% .017 285.786);
+  --color-zinc-300: oklch(37% .013 285.805);
+  --color-zinc-200: oklch(27.4% .006 286.033);
+  --color-zinc-100: oklch(21% .006 285.885);
+  --color-zinc-50: oklch(14.1% .005 285.823);
+
+  --color-cyan-400: oklch(52% .105 223.128);
+  --color-emerald-400: oklch(50.8% .118 165.612);
+  --color-emerald-500: oklch(50.8% .118 165.612);
+  --color-amber-400: oklch(55.5% .123 66.2);
+  --color-orange-400: oklch(55% .15 49.769);
+  --color-red-400: oklch(50.5% .188 27.325);
+  --color-red-500: oklch(50.5% .188 27.325);
+  --color-blue-400: oklch(50% .14 254.624);
+  --color-purple-400: oklch(49.6% .18 293.541);
+  --color-yellow-400: oklch(55% .12 85);
+
+  /* Uyarı kutularının içindeki açık tonlar (200/300) beyaz zeminde okunmuyor;
+     kutu arka planı da aynı ölçekten geldiği için ikisi birbirine yaklaşıyordu. */
+  --color-orange-300: oklch(47% .14 49.769);
+  --color-orange-200: oklch(42% .12 49.769);
+  --color-cyan-300: oklch(45% .1 223.128);
+  --color-cyan-200: oklch(40% .09 223.128);
+  --color-emerald-300: oklch(45% .11 165.612);
+  --color-emerald-200: oklch(40% .1 165.612);
+  --color-amber-300: oklch(47% .11 66.2);
+  --color-amber-200: oklch(42% .1 66.2);
+  --color-red-300: oklch(46% .17 27.325);
+  --color-red-200: oklch(41% .15 27.325);
+  --color-zinc-300: oklch(37% .013 285.805);
+}
+
 @layer utilities {
   .hide-scrollbar {
     -ms-overflow-style: none; /* IE and Edge */

@@ -4,6 +4,7 @@ import { BODY_METRICS, FAT_METHOD_LABELS } from '../utils/constants';
 import { parseNumber, clampNumber, INPUT_LIMITS } from '../utils/helpers';
 import MeasurementGuide from './MeasurementGuide';
 import GoalsCard from './GoalsCard';
+import { computeBMI, BMI_STATUS_COLOR } from '../utils/goals';
 
 // Kaliper ölçüm noktaları. 3 bölge yöntemi cinsiyete göre farklı noktalar kullanır,
 // 7 bölge yönteminde hepsi girilir.
@@ -237,6 +238,32 @@ const MetricsView = memo(({
             </div>
           ))}
         </div>
+
+        {(() => {
+          const bmi = computeBMI(form.weight, form.height, {
+            mode: settings.bmiMode || 'athletic',
+            bodyFatPct: parseNumber(computedComp.activeBF),
+            ffmi: parseNumber(computedComp.ffmi),
+            gender: form.gender,
+          });
+          if (!bmi) return null;
+          return (
+            <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 space-y-1.5">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider">
+                  BMI · {bmi.mode === 'athletic' ? 'Sporcu' : 'Klasik'}
+                </span>
+                <span className="flex items-baseline gap-1.5">
+                  <span className="text-base font-mono font-bold text-zinc-100">{bmi.bmi}</span>
+                  <span className={`text-[11px] font-bold ${BMI_STATUS_COLOR[bmi.key]}`}>{bmi.label}</span>
+                </span>
+              </div>
+              {bmi.note && (
+                <p className="text-[9px] font-mono text-zinc-600 leading-relaxed">{bmi.note}</p>
+              )}
+            </div>
+          );
+        })()}
 
         <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 space-y-1.5 text-[10px] font-mono text-zinc-300">
           <div className="flex justify-between"><span>Genetik potansiyel</span> <strong className="text-cyan-400">%{computedComp.potentialAchieved} (max FFMI {computedComp.maxPotentialFFMI})</strong></div>

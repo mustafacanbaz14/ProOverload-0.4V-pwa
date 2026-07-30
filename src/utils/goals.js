@@ -18,6 +18,102 @@ export const GOAL_FIELDS = [
 ];
 
 /**
+ * BMI ve aralık değerlendirmesi.
+ *
+ * Klasik BMI kası yağdan ayırt edemez: 90 kg, %10 yağ oranındaki bir sporcu
+ * 27.8 BMI ile "fazla kilolu" çıkar. Bu yüzden iki mod var:
+ *
+ *   standard — klasik DSÖ aralıkları (18.5 / 25 / 30)
+ *   athletic — yağ oranı ve FFMI dikkate alınarak kaydırılmış aralıklar
+ *
+ * Sporcu modunda mantık şu: BMI'ı yükselten şey kas ise bu bir risk değil.
+ * Yağ oranı sağlıklı bandın içindeyken üst sınır, kişinin yağsız kütlesinin
+ * gerektirdiği kadar yukarı kaydırılır.
+ */
+export const BMI_BANDS = {
+  standard: [
+    { max: 18.5, key: 'under', label: 'Zayıf' },
+    { max: 25, key: 'normal', label: 'Normal' },
+    { max: 30, key: 'over', label: 'Fazla Kilolu' },
+    { max: Infinity, key: 'obese', label: 'Obez' },
+  ],
+};
+
+export const BMI_STATUS_COLOR = {
+  under: 'text-blue-400',
+  normal: 'text-emerald-400',
+  over: 'text-amber-400',
+  obese: 'text-red-400',
+  athletic: 'text-cyan-400',
+};
+
+export const computeBMI = (weightKg, heightCm, {
+  mode = 'athletic',
+  bodyFatPct = 0,
+  ffmi = 0,
+  gender = 'male',
+} = {}) => {
+  const w = parseNumber(weightKg);
+  const h = parseNumber(heightCm) / 100;
+  if (!(w > 0) || !(h > 0)) return null;
+
+  const bmi = Math.round((w / (h * h)) * 10) / 10;
+  const bf = parseNumber(bodyFatPct);
+  const ffmiVal = parseNumber(ffmi);
+
+  const bandOf = (bands) => bands.find(b => bmi < b.max) || bands[bands.length - 1];
+
+  if (mode !== 'athletic') {
+    const band = bandOf(BMI_BANDS.standard);
+    return { bmi, mode: 'standard', key: band.key, label: band.label, note: null, shifted: 0 };
+  }
+
+  // Sağlıklı yağ oranı üst sınırı: erkekte %20, kadında %30. Bunun altındaysa
+  // BMI'ı yükselten ağırlık büyük ölçüde kastır.
+  const saglikliYagUst = gender === 'female' ? 30 : 20;
+  const yagVerisiVar = bf > 0;
+
+  // Kaydırma miktarı yağsız kütlenin ne kadar gelişmiş olduğuna bağlı.
+  // FFMI 20 üzeri her birim için üst sınır ~1 puan yukarı çekilir; 25 BMI'lık
+  // klasik sınır kas kütlesi arttıkça anlamını yitiriyor.
+  const kaydirma = ffmiVal > 20 ? Math.min(5, Math.round((ffmiVal - 20) * 10) / 10) : 0;
+
+  if (yagVerisiVar && bf <= saglikliYagUst && bmi >= 25) {
+    return {
+      bmi,
+      mode: 'athletic',
+      key: 'athletic',
+      label: 'Atletik',
+      shifted: kaydirma,
+      note: `Yağ oranın %${bf} — sağlıklı bandın (%${saglikliYagUst} altı) içinde. `
+        + `BMI'ı yükselten ağırlık kas kütlesi, bu yüzden klasik "fazla kilolu" `
+        + `değerlendirmesi senin için geçerli değil.`,
+    };
+  }
+
+  const bands = [
+    { max: 18.5, key: 'under', label: 'Zayıf' },
+    { max: 25 + kaydirma, key: 'normal', label: 'Normal' },
+    { max: 30 + kaydirma, key: 'over', label: 'Fazla Kilolu' },
+    { max: Infinity, key: 'obese', label: 'Obez' },
+  ];
+  const band = bandOf(bands);
+
+  return {
+    bmi,
+    mode: 'athletic',
+    key: band.key,
+    label: band.label,
+    shifted: kaydirma,
+    note: !yagVerisiVar
+      ? 'Yağ oranı girilmediği için klasik aralıklar kullanıldı. Ölçüm girersen kas kütlen hesaba katılır.'
+      : kaydirma > 0
+        ? `FFMI ${ffmiVal} olduğu için üst sınırlar ${kaydirma} puan yukarı kaydırıldı.`
+        : null,
+  };
+};
+
+/**
  * Hedef alanlarını birbirinden türetir.
  *
  * Dört değer boy sabitken matematiksel olarak bağlı:

@@ -139,6 +139,8 @@ export const mergeNutrition = (data) => ({
   // sayılmış olabilir). Eski kayıtlarda alan yok, öğün moduna düşerler.
   entryMode: data?.entryMode === 'daily' ? 'daily' : 'meals',
   activeCaloriesOut: data?.activeCaloriesOut || '', bmrAtTheTime: data?.bmrAtTheTime || 0,
+  // Adım sayısı: NEAT 'steps' modunda günlük hareket buradan hesaplanır.
+  steps: data?.steps || '',
   caloriesIn: data?.caloriesIn || 0, protein: data?.protein || 0, carbs: data?.carbs || 0, fats: data?.fats || 0,
   meals: Array.isArray(data?.meals) && data.meals.length > 0 ? data.meals : [{ id: generateId(), name: '1. Öğün', calories: '', protein: '', carbs: '', fats: '' }]
 });
