@@ -40,7 +40,11 @@ export const DEFAULT_SETTINGS = {
   // hesaba katan aralıklar.
   bmiMode: 'athletic',
   // Görünüm teması: 'dark' | 'light'
-  theme: 'dark'
+  theme: 'dark',
+  // Yazı büyüklüğü çarpanı (kök font-size). 1 = varsayılan.
+  fontScale: 1,
+  // NEAT için kullanıcı çarpanı: otomatik/seviye hesabını ölçekler.
+  neatMultiplier: 1
 };
 
 export const DELETE_LABELS = {

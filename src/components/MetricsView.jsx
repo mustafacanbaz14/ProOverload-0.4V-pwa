@@ -53,6 +53,7 @@ const MetricsView = memo(({
   setSettings,
   goalValues = {},
   weeklyKg = 0,
+  onDateChange,
 }) => {
   const form = currentMetricsForm;
 
@@ -125,13 +126,13 @@ const MetricsView = memo(({
         <input
           type="date"
           value={form.date || ''}
-          onChange={(e) => updateField('date', e.target.value)}
+          onChange={(e) => (onDateChange ? onDateChange(e.target.value) : updateField('date', e.target.value))}
           className={inputClass}
         />
         <p className="text-[10px] font-mono text-zinc-500 leading-relaxed">
           {isExistingRecord
             ? 'Bu tarihte kayıt var — kaydettiğinde üzerine yazılır.'
-            : 'Bu tarihte kayıt yok — kaydettiğinde yeni kayıt oluşur.'}
+            : 'Bu tarihte kayıt yok. Alanlar son ölçümünden dolduruldu; değişenleri güncelleyip kaydet.'}
         </p>
       </Section>
 

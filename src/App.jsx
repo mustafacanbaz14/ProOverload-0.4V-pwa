@@ -155,6 +155,11 @@ export default function App() {
     document.documentElement.dataset.theme = settings.theme === 'light' ? 'light' : 'dark';
   }, [settings.theme]);
 
+  // Punto: kök font-size çarpanı, tüm ölçekler buradan türüyor.
+  useEffect(() => {
+    document.documentElement.style.setProperty('--font-scale', String(settings.fontScale || 1));
+  }, [settings.fontScale]);
+
   // Dinlenme sayacı
   useEffect(() => {
     if (!rest) return;
@@ -692,6 +697,20 @@ export default function App() {
   };
 
   // Geçmişteki bir ölçümü ölçüm sayfasında düzenlemeye açar.
+  // Ölçüm tarihi değişince: o tarihte kayıt varsa yüklenir, yoksa en son
+  // ölçümün değerleri yeni tarihle önden doldurulur. Vücut ölçüleri günden güne
+  // çok değişmediği için her seferinde elle "son ölçümden doldur" demek
+  // gereksiz bir adımdı.
+  const handleMetricsDateChange = useCallback((date) => {
+    const mevcut = metricsHistory.find(m => m.date === date);
+    if (mevcut) return setCurrentMetricsForm(mergeMetrics(mevcut));
+
+    const sonuncu = sortByDateDesc(metricsHistory)[0];
+    setCurrentMetricsForm(prev => sonuncu
+      ? { ...mergeMetrics(sonuncu), id: generateId(), date }
+      : { ...prev, date });
+  }, [metricsHistory]);
+
   const handleEditMetric = useCallback((metric) => {
     setCurrentMetricsForm(mergeMetrics(metric));
     setView('profile');
@@ -1071,8 +1090,9 @@ export default function App() {
     activityLevel: settings.activityLevel || 'light',
     neatManual: settings.neatManual,
     weightKg: latestWeight,
+    neatMultiplier: settings.neatMultiplier,
   }), [avgDailyExercise, settings.neatMode, settings.activityLevel,
-    settings.neatManual, latestWeight]);
+    settings.neatManual, latestWeight, settings.neatMultiplier]);
 
   // Haftalık programın teorik harcaması için plan günleri.
   const weekPlanDays = useMemo(() => computeWeekPlan(settings.weekPlan || {}, templates, {
@@ -1219,6 +1239,7 @@ export default function App() {
               isMeasurementGuideOpen={isMeasurementGuideOpen}
               setIsComparisonOpen={setIsComparisonOpen}
               latestMetrics={sortedMetrics[0] || null}
+              onDateChange={handleMetricsDateChange}
               isExistingRecord={metricsHistory.some(m => m.date === currentMetricsForm.date)}
               settings={settings}
               setSettings={setSettings}

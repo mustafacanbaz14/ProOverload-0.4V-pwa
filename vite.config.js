@@ -9,6 +9,9 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Kayıt main.jsx'te elle yapılıyor (yeni sürümde otomatik yenileme için);
+      // eklenti de enjekte ederse çift kayıt olurdu.
+      injectRegister: null,
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png'],
       workbox: {
         // Barkod tarayıcı (zxing) ~450 KB ve zaten çevrimiçi ürün sorgusuyla

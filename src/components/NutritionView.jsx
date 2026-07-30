@@ -261,6 +261,9 @@ const NutritionView = memo(({
         goalLabel={recommended?.label}
         manualValue={currentNutritionForm.activeCaloriesOut}
         onChangeManual={(v) => setCurrentNutritionForm(prev => ({ ...prev, activeCaloriesOut: v }))}
+        stepsMode={settings.neatMode === 'steps'}
+        stepsValue={currentNutritionForm.steps}
+        onChangeSteps={(v) => setCurrentNutritionForm(prev => ({ ...prev, steps: v }))}
       />
 
       <button

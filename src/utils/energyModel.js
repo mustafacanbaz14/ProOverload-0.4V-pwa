@@ -62,6 +62,20 @@ export const ACTIVITY_LEVELS = [
   { key: 'high', label: 'Fiziksel İş', factor: 0.60, hint: 'Bedensel iş, gün boyu ayakta' },
 ];
 
+/**
+ * Kardiyo kalorisinin kaç adıma denk geldiği.
+ *
+ * Adım sayacı koşu/yürüyüşü de sayar; kardiyo ayrıca kalem olarak eklendiğinde
+ * aynı hareket iki kez sayılır. Bu fonksiyon kardiyonun "adım karşılığını"
+ * verir, adım tabanlı NEAT'ten düşülür.
+ */
+export const stepsCoveredByCardio = (cardioKcal, weightKg) => {
+  const k = parseNumber(cardioKcal);
+  const w = parseNumber(weightKg);
+  if (!(k > 0) || !(w > 0)) return 0;
+  return Math.round(k / (0.0005 * w));
+};
+
 /** Adım başına yakım vücut ağırlığıyla ölçeklenir (~0.0005 kcal/adım/kg). */
 export const caloriesFromSteps = (steps, weightKg) => {
   const s = parseNumber(steps);
@@ -97,6 +111,7 @@ export const dayEnergyBreakdown = ({
   steps = 0,
   neatManual = 0,
   weightKg = 0,
+  neatMultiplier = 1,
 } = {}) => {
   const maint = parseNumber(maintenance);
   const base = parseNumber(bmr);
@@ -120,7 +135,11 @@ export const dayEnergyBreakdown = ({
   if (neatMode === 'manual' && parseNumber(neatManual) > 0) {
     neat = Math.round(parseNumber(neatManual));
   } else if (neatMode === 'steps' && parseNumber(steps) > 0) {
-    neat = caloriesFromSteps(steps, weightKg);
+    // Koşu/yürüyüş kardiyosu adım sayacına da yazılıyor; ikisini toplamak aynı
+    // adımları iki kez saymak olur. Kardiyonun kapsadığı adım payı düşülür.
+    const kardiyoAdim = stepsCoveredByCardio(eatCardio, weightKg);
+    const netAdim = Math.max(0, parseNumber(steps) - kardiyoAdim);
+    neat = caloriesFromSteps(netAdim, weightKg);
   } else if (neatMode === 'level' && base > 0) {
     const lvl = ACTIVITY_LEVELS.find(l => l.key === activityLevel) || ACTIVITY_LEVELS[1];
     neat = Math.round(base * lvl.factor);
@@ -130,6 +149,10 @@ export const dayEnergyBreakdown = ({
   } else {
     neatSource = null;
   }
+
+  // Kullanıcı çarpanı: kendi gözlemine göre hesabı ölçekleyebilir.
+  const carpan = parseNumber(neatMultiplier) || 1;
+  if (neat !== null && carpan !== 1) neat = Math.round(neat * carpan);
 
   // Gün toplamı bileşenlerden kurulur; korunum kalorisinin üstüne egzersiz
   // eklemek (eski yöntem) egzersizi iki kez sayıyordu.

@@ -10,7 +10,8 @@ import { clampNumber } from '../utils/helpers';
  * haftalık iki ölçek birlikte gösterilir çünkü tek gün gürültülü, karar
  * haftalık toplamdan verilir.
  */
-const CalorieBalanceCard = memo(({ data, dateLabel, manualValue, onChangeManual, goalLabel }) => {
+const CalorieBalanceCard = memo(({ data, dateLabel, manualValue, onChangeManual, goalLabel,
+  stepsValue, onChangeSteps, stepsMode }) => {
   if (!data?.ready) {
     return (
       <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4">
@@ -135,8 +136,25 @@ const CalorieBalanceCard = memo(({ data, dateLabel, manualValue, onChangeManual,
               <span className="text-red-400">{data.burned} kcal</span>
             </div>
           </div>
+          {stepsMode && (
+            <div className="flex justify-between items-center text-[10px] font-mono text-zinc-500 pt-1.5 border-t border-zinc-800">
+              <span>Günlük adım</span>
+              <span className="flex items-center gap-1.5">
+                <input
+                  type="number" inputMode="numeric" min={0} max={100000}
+                  value={stepsValue ?? ''}
+                  onChange={(e) => onChangeSteps?.(e.target.value)}
+                  onBlur={(e) => onChangeSteps?.(e.target.value === '' ? '' : clampNumber(e.target.value, 0, 100000))}
+                  placeholder="0"
+                  className="w-20 bg-zinc-900 border border-zinc-800 rounded-lg py-1 text-center font-mono text-cyan-400 text-[10px] outline-none focus:border-cyan-500"
+                />
+                <span className="text-zinc-600">adım</span>
+              </span>
+            </div>
+          )}
           <p className="text-[9px] font-mono text-zinc-600 leading-relaxed">
             Adım sayısı, yürüyüş gibi gün içi hareketliliği elle ekleyebilirsin.
+            {stepsMode && ' Koşu/yürüyüş kardiyosu girdiysen o adımlar düşülür, iki kez sayılmaz.'}
           </p>
         </div>
 

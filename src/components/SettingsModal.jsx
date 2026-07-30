@@ -145,6 +145,29 @@ const SettingsModal = memo(({
                 Seçtiğin tema kaydedilir ve uygulamayı her açtığında geçerli olur.
               </p>
             </div>
+
+            <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800">
+              <span className="text-zinc-200 text-[11px] font-bold block mb-2">Yazı Boyutu</span>
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { v: 0.9, l: 'Küçük' },
+                  { v: 1, l: 'Normal' },
+                  { v: 1.15, l: 'Büyük' },
+                  { v: 1.3, l: 'En Büyük' },
+                ].map(o => (
+                  <button
+                    key={o.v}
+                    onClick={() => set({ fontScale: o.v })}
+                    className={`py-2 rounded-lg text-[10px] font-bold uppercase border transition-colors ${(settings.fontScale || 1) === o.v ? 'bg-cyan-900/30 border-cyan-600 text-cyan-400' : 'bg-zinc-900 border-zinc-800 text-zinc-500'}`}
+                  >
+                    {o.l}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[9px] font-mono text-zinc-600 mt-2 leading-relaxed">
+                Tüm uygulamadaki yazılar bu orana göre ölçeklenir.
+              </p>
+            </div>
           </Group>
 
           {/* --- VÜCUT & HESAPLAMA --- */}
@@ -223,6 +246,25 @@ const SettingsModal = memo(({
                   Adım sayısını Beslenme sekmesinde gün gün girersin. Yakım vücut
                   ağırlığınla ölçeklenir (yaklaşık 0.0005 kcal/adım/kg).
                 </p>
+              )}
+
+              {/* Çarpan otomatik ve seviye hesabını ölçekler; kullanıcı kendi
+                  gözlemine göre "bana bu az/çok geliyor" diyebilsin. */}
+              {(settings.neatMode === 'auto' || settings.neatMode === 'level' || !settings.neatMode) && (
+                <div className="flex items-center justify-between gap-2 pt-2 mt-1 border-t border-zinc-900">
+                  <span className="text-[10px] font-mono text-zinc-500">Çarpan</span>
+                  <span className="flex items-center gap-1.5">
+                    {[0.8, 0.9, 1, 1.1, 1.25].map(v => (
+                      <button
+                        key={v}
+                        onClick={() => set({ neatMultiplier: v })}
+                        className={`px-2 py-1 rounded-lg text-[9px] font-bold border transition-colors ${(settings.neatMultiplier || 1) === v ? 'bg-cyan-900/30 border-cyan-600 text-cyan-400' : 'bg-zinc-900 border-zinc-800 text-zinc-500'}`}
+                      >
+                        {v}×
+                      </button>
+                    ))}
+                  </span>
+                </div>
               )}
 
               {settings.neatMode === 'manual' && (

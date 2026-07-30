@@ -27,6 +27,26 @@ export const CARDIO_ACTIVITIES = [
   { key: 'volleyball', label: 'Voleybol', met: 4.0, group: 'Spor', hint: 'Salon, amatör' },
   { key: 'padel', label: 'Padel / Squash', met: 7.3, group: 'Spor', hint: 'Sürekli ralli' },
   { key: 'hike', label: 'Doğa Yürüyüşü', met: 6.0, group: 'Spor', hint: 'Engebeli arazi' },
+  { key: 'basketball_half', label: 'Basketbol (Yarı Saha)', met: 4.5, group: 'Spor', hint: 'Şut atma, hafif tempo' },
+  { key: 'pilates', label: 'Pilates', met: 3.0, group: 'Spor', hint: 'Mat çalışması' },
+  { key: 'yoga', label: 'Yoga', met: 3.0, group: 'Spor', hint: 'Hatha/akış temposu' },
+  { key: 'climbing', label: 'Tırmanış', met: 8.0, group: 'Spor', hint: 'Boulder / duvar' },
+  { key: 'skiing', label: 'Kayak / Snowboard', met: 6.8, group: 'Spor', hint: 'Pist, orta tempo' },
+  { key: 'dance', label: 'Dans', met: 5.5, group: 'Spor', hint: 'Sosyal dans temposu' },
+  { key: 'stationary_bike', label: 'Sabit Bisiklet (Hafif)', met: 5.0, group: 'Makine', hint: 'Düşük direnç' },
+  { key: 'treadmill_walk', label: 'Bantta Yürüyüş', met: 4.3, group: 'Makine', hint: 'Düz, 5-6 km/s' },
+  { key: 'ski_erg', label: 'Ski Ergo', met: 7.0, group: 'Makine', hint: 'Orta şiddet' },
+  { key: 'assault_bike', label: 'Assault Bike', met: 10.0, group: 'Yüksek Şiddet', hint: 'Kollu bisiklet, yüksek şiddet' },
+  { key: 'burpee', label: 'Burpee / Vücut Ağırlığı', met: 8.0, group: 'Yüksek Şiddet', hint: 'Sürekli tempo' },
+  { key: 'sled', label: 'Kızak İtme / Çekme', met: 9.5, group: 'Yüksek Şiddet', hint: 'Ağır kızak, aralıklı' },
+  { key: 'housework', label: 'Ev İşi', met: 3.3, group: 'Günlük', hint: 'Temizlik, toparlama' },
+  { key: 'gardening', label: 'Bahçe İşi', met: 3.8, group: 'Günlük', hint: 'Kazma, budama' },
+  { key: 'shopping_walk', label: 'Alışveriş / Şehir Yürüyüşü', met: 3.5, group: 'Günlük', hint: 'Duraklamalı yürüyüş' },
+  { key: 'stairs_daily', label: 'Merdiven Çıkma (Günlük)', met: 5.0, group: 'Günlük', hint: 'Bina merdiveni' },
+  // Cinsel aktivite: Compendium'da 1.8-2.8 MET aralığında ölçülmüştür ve
+  // ortalama süre kısadır. Popüler kaynaklardaki yüksek rakamlar ölçüme
+  // dayanmıyor; burada bilerek gerçekçi değer kullanılıyor.
+  { key: 'sex', label: 'Cinsel Aktivite', met: 2.8, group: 'Günlük', hint: 'Ölçümlere göre 1.8-2.8 MET; abartılı tahminlerden kaçınıldı' },
 ];
 
 // Ağırlık antrenmanı: Compendium'da şiddetli çaba 5.0, orta çaba 3.5 MET.
