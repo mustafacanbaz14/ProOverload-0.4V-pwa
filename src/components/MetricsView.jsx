@@ -259,6 +259,7 @@ const MetricsView = memo(({
         current={goalValues.current}
         earliest={goalValues.earliest}
         weeklyKg={weeklyKg}
+        heightCm={form.height}
       />
 
       {/* --- ÇEVRE ÖLÇÜLERİ --- */}

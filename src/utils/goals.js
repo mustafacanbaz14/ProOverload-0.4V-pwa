@@ -18,6 +18,87 @@ export const GOAL_FIELDS = [
 ];
 
 /**
+ * Hedef alanlarını birbirinden türetir.
+ *
+ * Dört değer boy sabitken matematiksel olarak bağlı:
+ *   yağsız kütle = kilo × (1 − yağ%/100)
+ *   FFMI         = yağsız kütle / boy²
+ * Yani ikisini bilmek diğer ikisini belirler. Kullanıcı 90 kg ve FFMI 23
+ * yazınca kas kütlesi ve yağ oranı kendiliğinden çıkar.
+ *
+ * Yalnızca BOŞ alanlar doldurulur — kullanıcının yazdığı değer her zaman
+ * korunur. Üç veya dört alan birden girilip birbirini tutmuyorsa hesap
+ * değiştirilmez, tutarsızlık ayrıca bildirilir.
+ *
+ * @returns { values, derived: {alan: true}, inconsistent: bool, needsHeight: bool }
+ */
+export const deriveGoalSet = (stored = {}, heightCm = 0) => {
+  const h = parseNumber(heightCm) / 100;
+  const entered = {};
+  GOAL_FIELDS.forEach(f => {
+    const v = parseNumber(stored[f.key]);
+    if (v > 0) entered[f.key] = v;
+  });
+
+  const values = { ...entered };
+  const derived = {};
+
+  // Boy olmadan FFMI ilişkisi kurulamaz; kilo↔yağ↔kas üçlüsü yine de çalışır.
+  const h2 = h > 0 ? h * h : 0;
+
+  // Sabit noktaya kadar döndür: her tur bilinen ikiliden bir bilinmeyeni doldurur.
+  // Zincirleme türetmeyi (kilo+FFMI → kas → yağ) bu şekilde tek mantıkla çözüyoruz.
+  for (let pass = 0; pass < 4; pass += 1) {
+    const before = Object.keys(values).length;
+    // ffm bilerek okunmuyor: her adımda values.goalFFM'in GÜNCEL hâli gerekiyor
+    // (aynı turda doldurulmuş olabilir), tur başındaki kopyası değil.
+    const { goalWeight: w, goalBodyFat: bf, goalFFMI: ffmi } = values;
+
+    if (values.goalFFM === undefined) {
+      if (w > 0 && bf >= 0 && bf < 100) { values.goalFFM = w * (1 - bf / 100); derived.goalFFM = true; }
+      else if (ffmi > 0 && h2 > 0) { values.goalFFM = ffmi * h2; derived.goalFFM = true; }
+    }
+    if (values.goalFFMI === undefined && values.goalFFM > 0 && h2 > 0) {
+      values.goalFFMI = values.goalFFM / h2; derived.goalFFMI = true;
+    }
+    if (values.goalBodyFat === undefined && w > 0 && values.goalFFM > 0 && values.goalFFM <= w) {
+      values.goalBodyFat = (1 - values.goalFFM / w) * 100; derived.goalBodyFat = true;
+    }
+    if (values.goalWeight === undefined && values.goalFFM > 0 && bf >= 0 && bf < 100) {
+      values.goalWeight = values.goalFFM / (1 - bf / 100); derived.goalWeight = true;
+    }
+
+    if (Object.keys(values).length === before) break;
+  }
+
+  GOAL_FIELDS.forEach(f => {
+    if (values[f.key] !== undefined) values[f.key] = Math.round(values[f.key] * 10) / 10;
+  });
+
+  // Tutarlılık: yağsız kütleye birden fazla yoldan ulaşılabiliyorsa hepsi aynı
+  // sonucu vermeli. Kombinasyonları tek tek saymak yerine yolları hesaplayıp
+  // karşılaştırıyoruz — kilo+yağ+FFMI gibi üçlüler de böylece kapsanıyor.
+  const ffmPaths = [];
+  if (entered.goalFFM > 0) ffmPaths.push(entered.goalFFM);
+  if (entered.goalWeight > 0 && entered.goalBodyFat >= 0 && entered.goalBodyFat < 100) {
+    ffmPaths.push(entered.goalWeight * (1 - entered.goalBodyFat / 100));
+  }
+  if (entered.goalFFMI > 0 && h2 > 0) ffmPaths.push(entered.goalFFMI * h2);
+
+  // 0.6 kg yuvarlama payı: alanlar tek ondalık tutuyor.
+  const inconsistent = ffmPaths.length >= 2
+    && Math.max(...ffmPaths) - Math.min(...ffmPaths) > 0.6;
+
+  return {
+    values,
+    derived,
+    inconsistent,
+    // FFMI yalnızca boy bilinirse türetilebilir.
+    needsHeight: h2 === 0 && (entered.goalFFMI > 0 || Object.keys(entered).length > 0),
+  };
+};
+
+/**
  * Bir hedef için ilerleme.
  *
  * Başlangıç noktası, hedefin belirlendiği andaki değer değil, elimizdeki EN ESKİ
@@ -245,6 +326,80 @@ export const recommendedCalories = (maintenance, nutritionGoal, {
     weeklyPct: chosen.weeklyPct,
     cappedBySafety: false,
     safeLimitPct: null,
+  };
+};
+
+/**
+ * Kalori panosu — "bugün nerede duruyorum" sorusunun tek yerden cevabı.
+ *
+ * Ayrı ayrı yerlere dağılmış sayıları (alınan, yakılan, korunum, hedef, açık)
+ * tek bir tutarlı tabloda toplar ve günlük/haftalık iki ölçekte gösterir.
+ *
+ * @param opts.intake       bugün alınan kalori
+ * @param opts.burnedAuto   antrenman + kardiyodan otomatik yakım
+ * @param opts.burnedManual kullanıcının elle eklediği yakım
+ * @param opts.maintenance  korunum kalorisi (gerçek TDEE varsa o)
+ * @param opts.targetIntake döneme göre önerilen alım
+ * @param opts.weekIntakes  son 7 günün alım dizisi (haftalık gerçekleşen için)
+ * @param opts.weekBurned   son 7 günün toplam yakımı
+ */
+export const calorieDashboard = ({
+  intake = 0,
+  burnedAuto = 0,
+  burnedManual = 0,
+  maintenance = 0,
+  targetIntake = 0,
+  weekIntakes = [],
+  weekBurned = 0,
+} = {}) => {
+  const inKcal = parseNumber(intake);
+  const burned = parseNumber(burnedAuto) + parseNumber(burnedManual);
+  const maint = parseNumber(maintenance);
+  const target = parseNumber(targetIntake) || maint;
+
+  if (!(maint > 0)) return { ready: false };
+
+  // Günün dengesi: alınan − (korunum + egzersizle yakılan).
+  // Korunum zaten dinlenme + günlük yaşamı kapsıyor; egzersiz onun üstüne biner.
+  const totalOut = maint + burned;
+  const balance = Math.round(inKcal - totalOut);
+
+  // Hedeflenen denge: önerilen alım korunumun neresinde duruyor.
+  const targetBalance = Math.round(target + burned - totalOut);
+
+  // Hedefe göre bugün ne kadar sapıldı. Pozitif = hedeften fazla yenmiş.
+  const vsTarget = Math.round(inKcal - (target + burned));
+
+  // Haftalık gerçekleşen: yalnızca kayıt girilmiş günler sayılır, boş günü
+  // sıfır kalori kabul etmek haftalık açığı olduğundan büyük gösterirdi.
+  const loggedDays = weekIntakes.filter(v => parseNumber(v) > 0);
+  const weekIntakeTotal = loggedDays.reduce((s, v) => s + parseNumber(v), 0);
+  const weekOut = loggedDays.length * maint + parseNumber(weekBurned);
+  const weekBalance = loggedDays.length > 0
+    ? Math.round(weekIntakeTotal - weekOut)
+    : null;
+
+  return {
+    ready: true,
+    intake: Math.round(inKcal),
+    burned: Math.round(burned),
+    burnedAuto: Math.round(parseNumber(burnedAuto)),
+    burnedManual: Math.round(parseNumber(burnedManual)),
+    maintenance: Math.round(maint),
+    totalOut: Math.round(totalOut),
+    target: Math.round(target),
+    targetBalance,
+    balance,
+    vsTarget,
+    // Günlük dengenin haftalık karşılığı — "bu tempo sürerse" okuması.
+    projectedWeeklyKg: Math.round((balance * 7 / KCAL_PER_KG) * 100) / 100,
+    week: weekBalance === null ? null : {
+      days: loggedDays.length,
+      intake: Math.round(weekIntakeTotal),
+      out: Math.round(weekOut),
+      balance: weekBalance,
+      kg: Math.round((weekBalance / KCAL_PER_KG) * 100) / 100,
+    },
   };
 };
 

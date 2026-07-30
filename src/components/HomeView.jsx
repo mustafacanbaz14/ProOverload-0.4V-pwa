@@ -239,13 +239,35 @@ const HomeView = memo(({
         </span>
       </button>
 
-      {templates.length > 0 && (
-        <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
-          <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-950/60">
-            <h3 className="text-[11px] font-bold text-zinc-200 uppercase tracking-wider flex items-center">
-              <BookmarkPlus size={13} className="mr-2 text-cyan-400" /> Şablonlar
-            </h3>
+      {/* Bölüm liste boşken de görünür: eskiden tamamen gizleniyordu ve
+          kullanıcı şablon diye bir özellik olduğunu fark edemiyordu. */}
+      <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
+        <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-950/60">
+          <h3 className="text-[11px] font-bold text-zinc-200 uppercase tracking-wider flex items-center">
+            <BookmarkPlus size={13} className="mr-2 text-cyan-400" /> Şablonlar
+          </h3>
+        </div>
+
+        {templates.length === 0 ? (
+          <div className="p-5 text-center space-y-2.5">
+            <div className="w-10 h-10 rounded-full bg-zinc-950 border border-zinc-800 flex items-center justify-center mx-auto">
+              <BookmarkPlus size={16} className="text-zinc-600" />
+            </div>
+            <p className="text-[11px] font-bold text-zinc-300">Henüz şablon yok</p>
+            <p className="text-[10px] font-mono text-zinc-600 leading-relaxed">
+              Sık yaptığın antrenmanı şablona çevirirsen tek dokunuşla başlatırsın.
+              Antrenman bitince &quot;Şablon Yap&quot; ile kaydedebilir ya da baştan
+              bir program kurabilirsin.
+            </p>
+            <button
+              onClick={() => onOpenTemplateBuilder?.()}
+              className="text-[10px] font-bold uppercase tracking-wider text-cyan-400 bg-cyan-950/30 border border-cyan-900/50 active:bg-cyan-900/40 px-4 py-2 rounded-xl transition-colors"
+            >
+              Program Oluştur
+            </button>
           </div>
+        ) : (
+          <>
           <div className="divide-y divide-zinc-800">
             {templates.map(t => {
               // Kart üzerinde kısa önizleme: süre, set ve en çok yüklenen üç bölge.
@@ -271,8 +293,8 @@ const HomeView = memo(({
                     </button>
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button onClick={() => handleStartRequest(t)} className="bg-cyan-900/30 active:bg-cyan-900/60 text-cyan-400 border border-cyan-800 text-[10px] font-bold py-1.5 px-3 rounded-lg uppercase tracking-wider">Başlat</button>
-                      <button onClick={() => onEditTemplate?.(t)} title="Şablonu düzenle" className="text-zinc-600 active:text-cyan-400 p-1.5"><Pencil size={14} /></button>
-                      <button onClick={() => setDeleteConfirm({ isOpen: true, type: 'template', id: t.id })} className="text-zinc-600 active:text-red-500 p-1.5"><Trash2 size={14} /></button>
+                      <button onClick={() => onEditTemplate?.(t)} title="Şablonu düzenle" aria-label="Şablonu düzenle" className="text-zinc-600 active:text-cyan-400 p-1.5"><Pencil size={14} /></button>
+                      <button onClick={() => setDeleteConfirm({ isOpen: true, type: 'template', id: t.id })} title="Şablonu sil" aria-label="Şablonu sil" className="text-zinc-600 active:text-red-500 p-1.5"><Trash2 size={14} /></button>
                     </div>
                   </div>
 
@@ -289,8 +311,9 @@ const HomeView = memo(({
               );
             })}
           </div>
-        </div>
-      )}
+          </>
+        )}
+      </div>
     </div>
   );
 });

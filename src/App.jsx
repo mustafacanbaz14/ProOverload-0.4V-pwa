@@ -1214,6 +1214,7 @@ export default function App() {
               adaptiveTDEE={adaptiveTDEE}
               workouts={workouts}
               latestWeight={latestWeight}
+              maintenanceCalories={maintenanceCalories}
             />
           )}
 

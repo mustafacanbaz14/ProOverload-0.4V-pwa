@@ -1,10 +1,15 @@
 import React, { memo } from 'react';
-import { Target, Check, TrendingDown, TrendingUp } from 'lucide-react';
-import { GOAL_FIELDS, goalProgress, weeksToGoal } from '../utils/goals';
+import { Target, Check, TrendingDown, TrendingUp, Sparkles, AlertTriangle, RotateCcw } from 'lucide-react';
+import { GOAL_FIELDS, goalProgress, weeksToGoal, deriveGoalSet } from '../utils/goals';
 import { clampNumber, parseNumber } from '../utils/helpers';
 
 /**
  * Vücut kompozisyonu hedefleri: kilo, yağ oranı, yağsız kütle ve FFMI.
+ *
+ * Dört değer boy sabitken birbirine bağlı, bu yüzden ikisini girmek yetiyor;
+ * kalanı hesaplanıp "hesaplandı" etiketiyle gösteriliyor. Yalnızca kullanıcının
+ * yazdığı değerler kaydedilir — hesaplananlar her render'da yeniden türetilir,
+ * böylece bir hedefi değiştirince diğerleri eskimiş halde kalmaz.
  *
  * İlerleme yüzdesi en eski ölçümden hesaplanır — hedef sonradan konulduğu için
  * "hedefi koyduğum an" referans alınsa ilerleme hep %0 görünürdü.
@@ -15,7 +20,9 @@ const GoalsCard = memo(({
   current = {},
   earliest = {},
   weeklyKg = 0,
+  heightCm = 0,
 }) => {
+  const { values: goalValues, derived, inconsistent } = deriveGoalSet(settings, heightCm);
   // Sınırlama YAZARKEN değil odaktan çıkışta uygulanır. Her tuşta sınıra
   // çekmek girişi kullanılamaz hale getiriyordu: min 30 olan alana "78"
   // yazmaya çalışınca "7" anında 30'a çekiliyor, sonraki tuşla "308" olup
@@ -30,14 +37,28 @@ const GoalsCard = memo(({
   };
 
   const rows = GOAL_FIELDS.map(f => {
-    const progress = goalProgress(earliest[f.key], current[f.key], settings[f.key]);
-    return { ...f, progress, hasTarget: parseNumber(settings[f.key]) > 0 };
+    const target = goalValues[f.key];
+    return {
+      ...f,
+      target,
+      isDerived: Boolean(derived[f.key]),
+      hasTarget: parseNumber(target) > 0,
+      progress: goalProgress(earliest[f.key], current[f.key], target),
+    };
   });
+
+  const anyUserEntered = GOAL_FIELDS.some(f => parseNumber(settings[f.key]) > 0);
 
   const weightRow = rows.find(r => r.key === 'goalWeight');
   const eta = weightRow?.hasTarget && weeklyKg !== 0
-    ? weeksToGoal(current.goalWeight, settings.goalWeight, weeklyKg)
+    ? weeksToGoal(current.goalWeight, weightRow.target, weeklyKg)
     : null;
+
+  const clearAll = () => setSettings(prev => {
+    const next = { ...prev };
+    GOAL_FIELDS.forEach(f => { next[f.key] = ''; });
+    return next;
+  });
 
   return (
     <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
@@ -45,18 +66,52 @@ const GoalsCard = memo(({
         <h3 className="text-[11px] font-bold text-zinc-200 uppercase tracking-wider flex items-center">
           <Target size={13} className="mr-2 text-emerald-400" /> Hedefler
         </h3>
-        <span className="text-[10px] font-mono text-zinc-500">
-          {rows.filter(r => r.hasTarget).length}/{rows.length} belirlendi
+        <span className="flex items-center gap-2 shrink-0">
+          <span className="text-[10px] font-mono text-zinc-500">
+            {rows.filter(r => r.hasTarget).length}/{rows.length} belirlendi
+          </span>
+          {anyUserEntered && (
+            <button
+              onClick={clearAll}
+              title="Tüm hedefleri temizle"
+              aria-label="Tüm hedefleri temizle"
+              className="text-zinc-600 active:text-red-400 p-1 -mr-1"
+            >
+              <RotateCcw size={12} />
+            </button>
+          )}
         </span>
       </div>
 
       <div className="p-4 space-y-3.5">
+        <p className="text-[9px] font-mono text-zinc-600 leading-relaxed">
+          Dört değer birbirine bağlı. <strong className="text-zinc-400">İkisini gir</strong>,
+          kalan ikisi otomatik hesaplanır. Hesaplananın üstüne yazarsan seninki geçerli olur.
+        </p>
+
+        {inconsistent && (
+          <div className="bg-orange-950/20 border border-orange-900/40 rounded-xl p-2.5 flex items-start gap-2">
+            <AlertTriangle size={13} className="text-orange-400 shrink-0 mt-0.5" />
+            <p className="text-[9px] font-mono text-orange-200 leading-relaxed">
+              Girdiğin hedefler birbirini tutmuyor — bu kilo ve yağ oranıyla o kas kütlesi
+              mümkün değil. Birini boşaltırsan diğerlerinden doğru değeri hesaplarım.
+            </p>
+          </div>
+        )}
+
         {rows.map(row => {
           const p = row.progress;
           return (
             <div key={row.key} className="space-y-1.5">
               <div className="flex justify-between items-center gap-2">
-                <span className="text-[11px] font-bold text-zinc-200 min-w-0 truncate">{row.label}</span>
+                <span className="text-[11px] font-bold text-zinc-200 min-w-0 truncate flex items-center gap-1.5">
+                  {row.label}
+                  {row.isDerived && (
+                    <span className="text-[8px] font-mono text-cyan-500 uppercase tracking-wider flex items-center gap-0.5 shrink-0">
+                      <Sparkles size={8} /> hesaplandı
+                    </span>
+                  )}
+                </span>
                 <span className="flex items-center gap-1.5 shrink-0">
                   <input
                     type="number"
@@ -64,11 +119,19 @@ const GoalsCard = memo(({
                     step={row.step}
                     min={row.min}
                     max={row.max}
+                    // Hesaplanan değer input'a YAZILMAZ, placeholder olarak
+                    // gösterilir: kaydedilen yalnızca kullanıcının yazdığıdır.
+                    // Böylece bir hedefi değiştirince diğerleri kendiliğinden
+                    // yeniden hesaplanır, eski değerde donup kalmaz.
                     value={settings[row.key] ?? ''}
                     onChange={(e) => setGoal(row.key, e.target.value)}
                     onBlur={clampOnBlur(row)}
-                    placeholder="—"
-                    className="w-20 bg-zinc-950 border border-zinc-800 rounded-lg py-1.5 text-center font-mono text-emerald-400 text-[11px] outline-none focus:border-emerald-500"
+                    placeholder={row.isDerived ? String(row.target) : '—'}
+                    className={`w-20 bg-zinc-950 border rounded-lg py-1.5 text-center font-mono text-[11px] outline-none transition-colors ${
+                      row.isDerived
+                        ? 'border-cyan-900/50 text-emerald-400 placeholder:text-cyan-400'
+                        : 'border-zinc-800 text-emerald-400 focus:border-emerald-500'
+                    }`}
                   />
                   {row.unit && <span className="text-[10px] font-mono text-zinc-600 w-4">{row.unit}</span>}
                 </span>
