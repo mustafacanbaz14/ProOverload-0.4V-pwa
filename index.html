@@ -7,6 +7,7 @@
     <!-- PWA Basic Meta Tags -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover" />
     <meta name="description" content="ProOverload Advanced Workout and Nutrition Tracker" />
+    <meta id="theme-color" name="theme-color" content="#09090b" />
     
     <!-- Apple Mobile/iOS PWA Specific Meta Tags -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -21,10 +22,6 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
-    <!--
-      Servis worker kaydı vite-plugin-pwa tarafından otomatik enjekte edilir
-      (registerSW.js). Burada elle ikinci bir kayıt yapmak autoUpdate akışını
-      baypas ettiği için kaldırıldı.
-    -->
+    <!-- Servis worker src/main.jsx içinde tek kez kaydedilir. -->
   </body>
 </html>

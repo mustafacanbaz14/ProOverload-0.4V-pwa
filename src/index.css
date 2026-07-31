@@ -12,6 +12,15 @@
   }
 }
 
+/* Tailwind'in text-[Npx] sınıfları rem olmadığı için kök font-size ayarından
+   etkilenmez. Uygulamadaki yoğun bilgi etiketleri de punto tercihini izlesin. */
+[class~="text-[8px]"]  { font-size: calc(8px * var(--font-scale, 1)); }
+[class~="text-[9px]"]  { font-size: calc(9px * var(--font-scale, 1)); }
+[class~="text-[10px]"] { font-size: calc(10px * var(--font-scale, 1)); }
+[class~="text-[11px]"] { font-size: calc(11px * var(--font-scale, 1)); }
+[class~="text-[12px]"] { font-size: calc(12px * var(--font-scale, 1)); }
+[class~="text-[13px]"] { font-size: calc(13px * var(--font-scale, 1)); }
+
 /*
  * AÇIK TEMA
  *
@@ -63,6 +72,11 @@
   --color-red-300: oklch(46% .17 27.325);
   --color-red-200: oklch(41% .15 27.325);
   --color-zinc-300: oklch(37% .013 285.805);
+}
+
+:root[data-theme='light'] .glass-card {
+  background: color-mix(in oklab, white 88%, transparent);
+  border-color: color-mix(in oklab, var(--color-zinc-500) 28%, transparent);
 }
 
 @layer utilities {

@@ -7,6 +7,7 @@ import { calorieDashboard, recommendedCalories } from '../utils/goals';
 import CalorieBalanceCard from './CalorieBalanceCard';
 import { formatDay, weekdayName } from '../utils/dates';
 import { dayMindCalories } from '../utils/wellness';
+import { dayEnergyBreakdown } from '../utils/energyModel';
 
 const NutritionView = memo(({
   currentNutritionForm,
@@ -24,6 +25,7 @@ const NutritionView = memo(({
   latestWeight = 0,
   wellness = [],
   maintenanceCalories = 0,
+  neatOpts = {},
   onOpenEnergyDetail,
 }) => {
   const safeMeals = Array.isArray(currentNutritionForm.meals) ? currentNutritionForm.meals : [];
@@ -83,7 +85,9 @@ const NutritionView = memo(({
     : (settings.proteinPerFfmCut || 2.6);
   const targetProtein = Math.round(ffm * targetProteinMultiplier);
 
-  const recent7Days = (nutritionHistory || []).slice(0, 7);
+  const recent7Days = [...(nutritionHistory || [])]
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .slice(0, 7);
 
   // Kalori panosu: günün yakımı antrenman kayıtlarından otomatik gelir,
   // kullanıcının elle eklediği üstüne biner. Haftalık ölçek için son 7 günün
@@ -94,20 +98,40 @@ const NutritionView = memo(({
     rate: settings.paceRate,
   });
 
+  const energyFor = (record) => {
+    const dayTotals = dailyTotals(record);
+    const workout = dayWorkoutCalories(workouts, record.date, latestWeight);
+    const recovery = dayMindCalories(wellness, record.date, latestWeight);
+    return dayEnergyBreakdown({
+      maintenance: maintenanceCalories,
+      bmr: parseNumber(computedComp?.bmr),
+      macros: dayTotals,
+      lifting: workout.lifting,
+      cardio: workout.cardio,
+      recovery,
+      manual: record.activeCaloriesOut,
+      steps: record.steps,
+      ...neatOpts,
+    });
+  };
+
+  const currentEnergy = energyFor(currentNutritionForm);
+  const automaticExercise = currentEnergy.lifting + currentEnergy.cardio + currentEnergy.recovery;
+  const weekEnergyDays = recent7Days.map(record => ({
+    intake: dailyTotals(record).calories,
+    out: energyFor(record).total,
+  }));
+
   const calorieData = calorieDashboard({
     intake: totals.calories,
     // Meditasyon/esneme de yakıma dahil: küçük ama Toparlanma ekranında
     // gösterilen sayıyla panonun tutması gerekiyor.
-    burnedAuto: dayWorkoutCalories(workouts, currentNutritionForm.date, latestWeight).total
-      + dayMindCalories(wellness, currentNutritionForm.date, latestWeight),
+    burnedAuto: automaticExercise,
     burnedManual: currentNutritionForm.activeCaloriesOut,
     maintenance: maintenanceCalories,
     targetIntake: recommended?.target,
-    weekIntakes: recent7Days.map(n => dailyTotals(n).calories),
-    weekBurned: recent7Days.reduce((sum, n) =>
-      sum + dayWorkoutCalories(workouts, n.date, latestWeight).total
-      + dayMindCalories(wellness, n.date, latestWeight)
-      + parseNumber(n.activeCaloriesOut), 0),
+    totalOut: currentEnergy.total,
+    weekDays: weekEnergyDays,
   });
   const weeklyAvg = (() => {
     if (recent7Days.length === 0) return null;

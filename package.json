@@ -1,11 +1,12 @@
 {
   "name": "prooverload-tracker",
   "private": true,
-  "version": "1.5.0",
+  "version": "1.6.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "verify": "node scripts/verify-muscles.mjs",
+    "verify": "node scripts/verify-muscles.mjs && node scripts/verify-core.mjs",
+    "verify:core": "node scripts/verify-core.mjs",
     "build": "npm run verify && vite build",
     "lint": "eslint .",
     "preview": "vite preview"

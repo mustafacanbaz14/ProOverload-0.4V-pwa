@@ -193,10 +193,10 @@ const HistoryView = memo(({
                     <span className="text-xs font-bold text-zinc-200 font-mono">{formatDay(m.date, 'medium', { year: true })}</span>
                   </div>
                   <div className="flex items-center shrink-0">
-                    <button onClick={() => handleEditMetric?.(m)} title="Bu ölçümü düzenle" className="text-zinc-500 active:text-cyan-400 p-2">
+                    <button onClick={() => handleEditMetric?.(m)} title="Bu ölçümü düzenle" aria-label="Bu ölçümü düzenle" className="text-zinc-500 active:text-cyan-400 p-2">
                       <Pencil size={14} />
                     </button>
-                    <button onClick={() => setDeleteConfirm({ isOpen: true, type: 'metric', id: m.id })} title="Sil" className="text-zinc-600 active:text-red-500 p-2">
+                    <button onClick={() => setDeleteConfirm({ isOpen: true, type: 'metric', id: m.id })} title="Sil" aria-label="Ölçümü sil" className="text-zinc-600 active:text-red-500 p-2">
                       <Trash2 size={14} />
                     </button>
                   </div>

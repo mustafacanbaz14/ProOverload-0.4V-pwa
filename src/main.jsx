@@ -3,6 +3,17 @@ import { createRoot } from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
 import './index.css'
 import App from './App.jsx'
+import { STORAGE_VERSION } from './utils/constants.js'
+import { deferAppUpdate } from './pwaUpdate.js'
+
+const hasActiveWorkout = () => {
+  try {
+    const raw = localStorage.getItem(`po_active_workout${STORAGE_VERSION}`)
+    return Boolean(raw && raw !== 'null')
+  } catch {
+    return false
+  }
+}
 
 /*
  * Otomatik güncelleme.
@@ -19,7 +30,8 @@ import App from './App.jsx'
 const updateSW = registerSW({
   immediate: true,
   onNeedRefresh() {
-    updateSW(true); // skipWaiting + reload
+    if (hasActiveWorkout()) deferAppUpdate(() => updateSW(true))
+    else updateSW(true) // skipWaiting + reload
   },
   onRegisteredSW(_url, registration) {
     if (!registration) return;

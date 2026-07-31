@@ -53,8 +53,8 @@ const CalorieBalanceCard = memo(({ data, dateLabel, manualValue, onChangeManual,
         {/* Asıl soru "bugün ne kadar daha yiyebilirim". Önce o cevaplanıyor,
             yorum ve döküm altta kalıyor. */}
         {(() => {
-          const kalan = data.target + data.burned - data.intake;
-          const hedefToplam = data.target + data.burned;
+          const kalan = data.adjustedTarget - data.intake;
+          const hedefToplam = data.adjustedTarget;
           const oran = hedefToplam > 0 ? Math.min(100, (data.intake / hedefToplam) * 100) : 0;
           const asti = kalan < 0;
           const renkKalan = asti ? 'text-amber-400' : 'text-emerald-400';
@@ -76,12 +76,12 @@ const CalorieBalanceCard = memo(({ data, dateLabel, manualValue, onChangeManual,
                 />
               </div>
 
-              {/* Denklem: sayıların nereden geldiği tek satırda görünüyor. */}
+              {/* Hedef yalnızca bugünün ortalama harcamadan farkı kadar ayarlanır. */}
               <div className="grid grid-cols-4 gap-1 text-center">
                 {[
                   { l: 'Hedef', v: data.target, c: 'text-emerald-400' },
-                  { l: '− Alınan', v: data.intake, c: 'text-cyan-400' },
-                  { l: '+ Yakılan', v: data.burned, c: 'text-red-400' },
+                  { l: 'Gün Farkı', v: `${data.activityAdjustment >= 0 ? '+' : ''}${data.activityAdjustment}`, c: 'text-red-400' },
+                  { l: 'Alınan', v: data.intake, c: 'text-cyan-400' },
                   { l: '= Kalan', v: kalan, c: renkKalan },
                 ].map(x => (
                   <div key={x.l}>
@@ -103,8 +103,8 @@ const CalorieBalanceCard = memo(({ data, dateLabel, manualValue, onChangeManual,
             </span>
           </div>
           <p className="text-[10px] font-mono text-zinc-500 leading-relaxed">
-            Korunumun {data.maintenance} kcal; egzersizle birlikte bugün
-            {' '}{data.totalOut} harcadın.
+            Ortalama korunumun {data.maintenance} kcal; bugünkü toplam
+            {' '}{data.totalOut} kcal harcaman aynı enerji motorundan hesaplandı.
             {data.projectedWeeklyKg !== 0 && (
               <> Bu tempo sürerse haftada{' '}
                 <strong className={renk}>
@@ -150,7 +150,7 @@ const CalorieBalanceCard = memo(({ data, dateLabel, manualValue, onChangeManual,
               </span>
             </div>
             <div className="flex justify-between text-zinc-400 pt-1.5 border-t border-zinc-800 font-bold">
-              <span>Toplam</span>
+              <span>Ek aktivite toplamı</span>
               <span className="text-red-400">{data.burned} kcal</span>
             </div>
           </div>

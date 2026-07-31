@@ -29,8 +29,10 @@ export const createQRDataString = (backupData) => {
       templates: backupData.templates || [],
       customExercises: backupData.customExercises || [],
       customFoods: backupData.customFoods || [],
+      recentFoods: backupData.recentFoods || [],
       metricsHistory: backupData.metricsHistory || [],
       nutritionHistory: backupData.nutritionHistory || [],
+      wellness: backupData.wellness || [],
       settings: backupData.settings || {},
     });
   } catch {

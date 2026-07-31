@@ -12,9 +12,16 @@ import { migrateCustomExercises } from './utils/migrations';
 import { computeAdaptiveTDEE } from './utils/tdee';
 import { totalCardioCalories, dayWorkoutCalories } from './utils/cardio';
 import { computeWeekPlan, findPlan } from './utils/weekPlan';
-import { averageDailyExercise } from './utils/energyModel';
+import { removeTemplateFromPlans } from './utils/planMigration';
+import { buildPersonalVolumeGuidance } from './utils/personalization';
+import { averageDailyExercise, dayEnergyBreakdown } from './utils/energyModel';
+import { recommendedCalories } from './utils/goals';
+import { dailyTotals } from './utils/nutritionStats';
 import { DEFAULT_READINESS, READINESS_FIELDS, computeReadiness, readinessTrend } from './utils/readiness';
-import { safeSetItem, safeSetRawItem, createErrorThrottle } from './utils/persist';
+import { safeSetRawItem } from './utils/persist';
+import { useAppPersistence } from './hooks/useAppPersistence';
+import { useDisplayPreferences } from './hooks/useDisplayPreferences';
+import { useDeferredPwaUpdate } from './hooks/useDeferredPwaUpdate';
 // Sürüm tek kaynaktan okunur: package.json. Ekranda gösterilen sürüm ile
 // yedek dosyasına yazılan sürümün birbirinden sapması böyle engellenir.
 import pkg from '../package.json';
@@ -24,7 +31,7 @@ import {
   generateId, getLocalDateString, getMondayOfCurrentWeek, detectMuscleGroup,
   foldForSearch, parseNumber, mergeMetrics, mergeNutrition,
   isWorkingSet, calcEffectiveSets, buildPersonalRecords, loadPersistedState,
-  computeComposition, sortByDateDesc, storageKey, suggestNextTarget, mergeSettings,
+  computeComposition, sortByDateDesc, suggestNextTarget, mergeSettings,
   mergeWorkout, mergeTemplate, isWarmupSet, estimate1RM
 } from './utils/helpers';
 
@@ -52,8 +59,8 @@ import ToolsModal from './components/ToolsModal';
 import WellnessModal from './components/WellnessModal';
 import PRCelebration from './components/PRCelebration';
 import WeeklyPlanModal from './components/WeeklyPlanModal';
-import { formatDay } from './utils/dates';
-import { emptyWellnessDay, dayMindCalories, computeSleepScore } from './utils/wellness';
+import { formatDay, formatDayRelative } from './utils/dates';
+import { emptyWellnessDay, mergeWellnessDay, dayMindCalories, computeSleepScore } from './utils/wellness';
 
 export default function App() {
   const [initial] = useState(loadPersistedState);
@@ -141,39 +148,12 @@ export default function App() {
     setTimeout(() => setToast(null), type === 'error' ? 6000 : 3000);
   }, []);
 
-  // Kayıt hatalarını tek toasta indirger: sekiz effect aynı kota hatasına
-  // takıldığında kullanıcı sekiz uyarı görmemeli.
-  const notifyPersistError = useMemo(
-    () => createErrorThrottle((message) => showToast(message, 'error')),
-    [showToast]);
-
-  const persist = useCallback(
-    (name, value) => safeSetItem(storageKey(name), value, notifyPersistError),
-    [notifyPersistError]);
-
-  // Kayıtları kalıcı belleğe kaydetme. Yazma başarısız olursa (kota dolu veya
-  // depolama kapalı) kullanıcı uyarılır — sessizce yutulursa veri kaybını fark
-  // etmeden antrenman girmeye devam eder.
-  useEffect(() => { persist('workouts', workouts); }, [workouts, persist]);
-  useEffect(() => { persist('templates', templates); }, [templates, persist]);
-  useEffect(() => { persist('custom_exercises', customExercises); }, [customExercises, persist]);
-  useEffect(() => { persist('custom_foods', customFoods); }, [customFoods, persist]);
-  useEffect(() => { persist('recent_foods', recentFoods); }, [recentFoods, persist]);
-  useEffect(() => { persist('active_workout', activeWorkout); }, [activeWorkout, persist]);
-  useEffect(() => { persist('metrics', metricsHistory); }, [metricsHistory, persist]);
-  useEffect(() => { persist('nutrition', nutritionHistory); }, [nutritionHistory, persist]);
-  useEffect(() => { persist('wellness', wellness); }, [wellness, persist]);
-  useEffect(() => { persist('settings', settings); }, [settings, persist]);
-
-  // Tema kök elemana yazılır; CSS değişkenleri oradan devralınıyor.
-  useEffect(() => {
-    document.documentElement.dataset.theme = settings.theme === 'light' ? 'light' : 'dark';
-  }, [settings.theme]);
-
-  // Punto: kök font-size çarpanı, tüm ölçekler buradan türüyor.
-  useEffect(() => {
-    document.documentElement.style.setProperty('--font-scale', String(settings.fontScale || 1));
-  }, [settings.fontScale]);
+  useAppPersistence({
+    workouts, templates, customExercises, customFoods, recentFoods,
+    activeWorkout, metricsHistory, nutritionHistory, wellness, settings,
+  }, showToast);
+  useDisplayPreferences(settings);
+  useDeferredPwaUpdate(activeWorkout, showToast);
 
   // Dinlenme sayacı
   useEffect(() => {
@@ -571,14 +551,16 @@ export default function App() {
   // Sıralı liste üzerinden gezilir: sırasız bir dizide ilk eşleşme en eski seans olur
   // ve "geçen antrenman" bilgisi ile progresyon önerisi yanlış çıkardı.
   const getRecentExerciseData = useCallback((exerciseName) => {
+    const history = [];
     for (const w of sortedWorkouts) {
       if (w.id === activeWorkout?.id) continue;
       const ex = (w.exercises || []).find(e => e.name === exerciseName);
       if (ex && Array.isArray(ex.sets) && ex.sets.some(s => isWorkingSet(s) && parseNumber(s.reps) > 0)) {
-        return { date: w.date, sets: ex.sets.filter(isWorkingSet) };
+        history.push({ date: w.date, sets: ex.sets.filter(isWorkingSet) });
+        if (history.length >= 3) break;
       }
     }
-    return null;
+    return history.length > 0 ? { ...history[0], history } : null;
   }, [sortedWorkouts, activeWorkout?.id]);
 
   // iOS Lock Screen entegrasyonu
@@ -615,7 +597,10 @@ export default function App() {
       const secondsLeft = currentRest ? Math.max(0, Math.ceil((currentRest.endsAt - Date.now()) / 1000)) : 0;
 
       const { muscle } = active ? detectMuscleGroup(active.name, customExercises) : {};
-      const target = history ? suggestNextTarget(history.sets, settings, muscle) : null;
+      const target = history ? suggestNextTarget(history.sets, settings, muscle, {
+        history: history.history,
+        readiness: workout.readiness,
+      }) : null;
       const partner = active?.supersetId
         ? exercises.find(e => e.supersetId === active.supersetId && e.id !== active.id)
         : null;
@@ -1013,9 +998,11 @@ export default function App() {
 
   const handleExportData = () => {
     const backup = {
+      schemaVersion: 2,
       version: pkg.version,
       exportedAt: new Date().toISOString(),
-      workouts, templates, customExercises, customFoods, metricsHistory, nutritionHistory, wellness, settings
+      workouts, templates, customExercises, customFoods, recentFoods,
+      metricsHistory, nutritionHistory, wellness, settings
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -1073,8 +1060,16 @@ export default function App() {
         return [...byName.values()];
       });
     }
+    if (Array.isArray(data.recentFoods)) {
+      setRecentFoods(data.recentFoods.filter(f => f && typeof f.name === 'string').slice(0, 8));
+    }
     if (Array.isArray(data.metricsHistory || data.m)) setMetricsHistory((data.metricsHistory || data.m).map(mergeMetrics));
     if (Array.isArray(data.nutritionHistory || data.n)) setNutritionHistory((data.nutritionHistory || data.n).map(mergeNutrition));
+    if (Array.isArray(data.wellness)) {
+      setWellness(data.wellness
+        .map(day => mergeWellnessDay(day, generateId))
+        .filter(day => day.date));
+    }
     // Eski yedekler eksik/bozuk ayar taşıyabilir; aynı birleştirme kuralından geçirilir.
     if (data.settings || data.s) setSettings(prev => mergeSettings({ ...prev, ...(data.settings || data.s) }));
     showToast('Veriler başarıyla yüklendi.');
@@ -1090,10 +1085,13 @@ export default function App() {
       // var olmayan bir kimliği gösterip boş kalırdı.
       setSettings(prev => {
         const plan = prev.weekPlan || {};
-        if (!Object.values(plan).includes(id)) return prev;
         const next = {};
         Object.entries(plan).forEach(([k, v]) => { next[k] = v === id ? null : v; });
-        return { ...prev, weekPlan: next };
+        return {
+          ...prev,
+          weekPlan: next,
+          weekPlans: removeTemplateFromPlans(prev.weekPlans, id),
+        };
       });
       setDeleteConfirm({ isOpen: false, type: null, id: null });
       showToast('Şablon silindi.');
@@ -1271,6 +1269,92 @@ export default function App() {
   // Hazır oluşluk eğilimi: tek gün gürültülü, karar son kayıtların
   // ortalamasından verilir. Üst üste düşük skor deload sinyali.
   const readiness = useMemo(() => readinessTrend(workouts, 10), [workouts]);
+  const personalVolume = useMemo(
+    () => buildPersonalVolumeGuidance(workouts, customExercises, settings.experienceLevel),
+    [workouts, customExercises, settings.experienceLevel]);
+
+  const todayCoach = useMemo(() => {
+    const date = getLocalDateString();
+    const keyByDay = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+    const dayKey = keyByDay[new Date().getDay()];
+    const planDay = weekPlanDays.find(day => day.key === dayKey);
+    const workoutTemplate = planDay?.workouts?.[0]?.template || null;
+    const planTime = planDay?.workouts?.[0]?.time || '';
+
+    const nutrition = nutritionHistory.find(day => day.date === date)
+      || (currentNutritionForm.date === date ? currentNutritionForm : mergeNutrition({ date }));
+    const macros = dailyTotals(nutrition);
+    const exercise = dayCaloriesFor(date);
+    const energy = dayEnergyBreakdown({
+      maintenance: maintenanceCalories,
+      bmr: parseNumber(computedComp?.bmr),
+      macros,
+      lifting: exercise.lifting,
+      cardio: exercise.cardio,
+      recovery: exercise.mind,
+      manual: nutrition.activeCaloriesOut,
+      steps: nutrition.steps,
+      ...neatOpts,
+    });
+    const recommendation = recommendedCalories(maintenanceCalories, settings.nutritionGoal, {
+      weightKg: latestWeight,
+      bodyFatPct: parseNumber(computedComp?.activeBF),
+      rate: settings.paceRate,
+    });
+    const adjustedTarget = recommendation
+      ? Math.max(0, recommendation.target + energy.total - maintenanceCalories)
+      : 0;
+    const remaining = Math.round(adjustedTarget - macros.calories);
+
+    const todaySleep = wellness.find(day => day.date === date)?.sleep;
+    const previousSleep = wellness
+      .filter(day => day.date < date && day.sleep)
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .map(day => day.sleep);
+    const sleep = todaySleep ? computeSleepScore(todaySleep, previousSleep) : null;
+    const recoveryConcern = Boolean(readiness?.deloadOnerisi || (sleep && sleep.score < 55));
+
+    const headline = recoveryConcern
+      ? 'Bugün performanstan önce toparlanmayı koru.'
+      : workoutTemplate
+        ? `${workoutTemplate.name} için planın hazır.`
+        : planDay?.cardios?.length
+          ? 'Bugün kardiyo odaklı bir gün planladın.'
+          : 'Planında açık gün — serbest çalışabilir veya dinlenebilirsin.';
+    const detail = recoveryConcern
+      ? 'Yoğunluğu düşür, teknik kalitesini koru ve eklem ağrısı varsa zorlayan hareketi değiştir.'
+      : workoutTemplate
+        ? `${planDay.sets} teorik set · yaklaşık ${planDay.minutes} dk · ${planDay.totalKcal} kcal.`
+        : 'Hazır oluşluğun iyiyse eksik kas gruplarına kısa bir seans ekleyebilirsin.';
+
+    return {
+      dateLabel: formatDayRelative(date, 'medium'),
+      status: recoveryConcern ? 'Toparlan' : workoutTemplate ? 'Plan Hazır' : 'Esnek Gün',
+      tone: recoveryConcern
+        ? 'text-amber-300 border-amber-900/50 bg-amber-950/30'
+        : workoutTemplate
+          ? 'text-emerald-300 border-emerald-900/50 bg-emerald-950/30'
+          : 'text-cyan-300 border-cyan-900/50 bg-cyan-950/30',
+      headline,
+      detail,
+      sleepLabel: sleep ? `${sleep.score}/100` : 'Veri yok',
+      sleepTone: sleep ? sleep.zone.text : 'text-zinc-500',
+      readinessLabel: readiness ? `${readiness.ortalama}/100` : 'Veri yok',
+      readinessTone: readiness?.zone?.text || 'text-zinc-500',
+      calorieLabel: adjustedTarget > 0
+        ? macros.calories > 0
+          ? `${Math.abs(remaining)} ${remaining >= 0 ? 'kaldı' : 'fazla'}`
+          : `hedef ${Math.round(adjustedTarget)}`
+        : 'Veri yok',
+      calorieTone: remaining < 0 ? 'text-amber-400' : 'text-emerald-400',
+      planLabel: workoutTemplate?.name || (planDay?.cardios?.length ? 'Kardiyo günü' : 'Off / serbest gün'),
+      planTime,
+      cardioLabel: planDay?.cardios?.map(cardio => `${cardio.activity.label} ${cardio.minutes} dk`).join(' · ') || '',
+      workoutTemplate,
+    };
+  }, [weekPlanDays, nutritionHistory, currentNutritionForm, dayCaloriesFor,
+    maintenanceCalories, computedComp, neatOpts, settings.nutritionGoal,
+    settings.paceRate, latestWeight, wellness, readiness]);
 
   const needsBackup = useMemo(() => {
     if (!lastBackupDate) return true;
@@ -1312,7 +1396,7 @@ export default function App() {
             </div>
             <span className="text-[9px] font-mono text-zinc-600 self-center">v{pkg.version}</span>
           </div>
-          <button onClick={() => setIsSettingsModalOpen(true)} className="px-4 py-3.5 text-zinc-400 hover:text-cyan-400 active:scale-95 transition-all">
+          <button onClick={() => setIsSettingsModalOpen(true)} aria-label="Ayarları aç" className="px-4 py-3.5 text-zinc-400 hover:text-cyan-400 active:scale-95 transition-all">
             <Settings size={18} />
           </button>
         </header>
@@ -1336,6 +1420,10 @@ export default function App() {
               onOpenTemplateBuilder={() => setIsBuilderOpen(true)}
               onOpenTools={() => setIsToolsOpen(true)}
               readiness={readiness}
+              personalVolume={personalVolume}
+              todayCoach={todayCoach}
+              onOpenEnergy={() => setIsEnergyDetailOpen(true)}
+              onOpenWellness={() => { setWellnessTab('sleep'); setIsWellnessOpen(true); }}
               weeklyCardioKcal={weeklyCardioKcal}
               showMuscleVolume={settings.showMuscleVolume}
               onToggleMuscleVolume={() => setSettings(prev => ({ ...prev, showMuscleVolume: !prev.showMuscleVolume }))}
@@ -1388,6 +1476,7 @@ export default function App() {
               latestWeight={latestWeight}
               wellness={wellness}
               maintenanceCalories={maintenanceCalories}
+              neatOpts={neatOpts}
               onOpenEnergyDetail={() => setIsEnergyDetailOpen(true)}
             />
           )}
@@ -1489,7 +1578,7 @@ export default function App() {
         <QRCodeModal
           isOpen={isQRModalOpen}
           onClose={() => setIsQRModalOpen(false)}
-          fullData={{ workouts, templates, customExercises, customFoods, metricsHistory, nutritionHistory, wellness, settings }}
+          fullData={{ schemaVersion: 2, version: pkg.version, workouts, templates, customExercises, customFoods, recentFoods, metricsHistory, nutritionHistory, wellness, settings }}
           onImportData={handleImportData}
         />
 
@@ -1696,7 +1785,7 @@ export default function App() {
               <h3 className="text-sm font-bold text-zinc-100 mb-2 uppercase tracking-wide border-b border-zinc-800 pb-3 flex items-center">
                 <BrainCircuit size={16} className="mr-2 text-cyan-500" /> Hazırbulunuşluk
               </h3>
-              <p className="text-[11px] text-zinc-400 mb-4 mt-2 leading-tight">Yüklenme şiddetini ve sakatlık riskini hesaplayabilmemiz için bugünkü mental ve fiziksel toparlanmanızı puanlayın.</p>
+              <p className="text-[11px] text-zinc-400 mb-4 mt-2 leading-tight">Bugünkü yüklenme kararını toparlanma verilerinle desteklemek için mental ve fiziksel durumunu puanla.</p>
 
               {preWorkoutModal.sleepScore !== null && preWorkoutModal.sleepScore !== undefined && (
                 <p className="text-[10px] font-mono text-cyan-400 bg-cyan-950/20 border border-cyan-900/40 rounded-xl px-3 py-2 mb-4 leading-relaxed">
@@ -1741,6 +1830,11 @@ export default function App() {
                       <div className={`h-1.5 rounded-full transition-all duration-500 ${h.zone.bar}`} style={{ width: `${h.score}%` }} />
                     </div>
                     <p className="text-[10px] font-mono text-zinc-300 leading-relaxed">{h.zone.advice}</p>
+                    {h.safetyReason && (
+                      <p className="text-[9px] font-bold font-mono text-red-300 leading-relaxed mt-1.5 pt-1.5 border-t border-red-900/40">
+                        Güvenlik sınırı: {h.safetyReason}
+                      </p>
+                    )}
                     {h.warnings.map(w => (
                       <p key={w.key} className="text-[9px] font-mono text-amber-300 leading-relaxed mt-1.5 pt-1.5 border-t border-zinc-800/60">
                         {w.text}

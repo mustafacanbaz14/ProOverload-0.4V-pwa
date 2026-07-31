@@ -3,6 +3,7 @@ import { AlertCircle, Activity, Target, Zap, BookmarkPlus, Trash2, Clock, Layers
 import { MUSCLE_SECTIONS, getVolumeLandmarks, volumeStatusOf, VOLUME_STATUS, acwrStatusOf, ACWR_STATUS, ACWR_HINT } from '../utils/constants';
 import { previewTemplateVolume, estimateDuration } from '../utils/templates';
 import MuscleHeatmap from './MuscleHeatmap';
+import TodayCoachCard from './TodayCoachCard';
 
 const HomeView = memo(({
   needsBackup,
@@ -20,9 +21,13 @@ const HomeView = memo(({
   onOpenTemplateBuilder,
   onOpenTools,
   readiness,
+  personalVolume = {},
   weeklyCardioKcal = 0,
   showMuscleVolume = false,
   onToggleMuscleVolume,
+  todayCoach,
+  onOpenEnergy,
+  onOpenWellness,
 }) => {
   return (
     <div className="p-4 space-y-5 pb-nav h-full overflow-y-auto hide-scrollbar bg-black">
@@ -37,6 +42,13 @@ const HomeView = memo(({
           <button onClick={() => setIsSettingsModalOpen(true)} className="text-[10px] bg-orange-500/20 text-orange-400 px-3 py-2 rounded-xl font-bold uppercase tracking-wider hover:bg-orange-500/30 transition-colors">Aç</button>
         </div>
       )}
+
+      <TodayCoachCard
+        data={todayCoach}
+        onStart={handleStartRequest}
+        onOpenEnergy={onOpenEnergy}
+        onOpenWellness={onOpenWellness}
+      />
 
       {/* Hazır oluşluk eğilimi — üst üste düşük skor hacimden bağımsız bir
           deload sinyali; hacim tavanı aşılmasa da toparlanamama gösterir. */}
@@ -193,6 +205,7 @@ const HomeView = memo(({
                 const landmark = getVolumeLandmarks(muscle, experienceLevel);
                 const percentage = Math.min(100, Math.round((vol / landmark.mav) * 100));
                 const status = VOLUME_STATUS[volumeStatusOf(vol, muscle, experienceLevel)];
+                const personal = personalVolume[muscle];
 
                 return (
                   <button
@@ -210,6 +223,12 @@ const HomeView = memo(({
                         <span className="text-zinc-600"> (MEV {landmark.mev})</span>
                       </span>
                     </div>
+                    {personal && (
+                      <div className="flex justify-between gap-2 text-[9px] font-mono">
+                        <span className="text-purple-400">Kişisel öneri {personal.low}–{personal.high} set</span>
+                        <span className="text-zinc-600">{personal.confidence === 'high' ? 'yüksek' : 'orta'} güven</span>
+                      </div>
+                    )}
                     <div className="w-full bg-zinc-950 rounded-full h-1.5 border border-zinc-800">
                       <div className={`h-1.5 rounded-full transition-all duration-500 ${status.bar}`} style={{ width: `${percentage}%` }} />
                     </div>

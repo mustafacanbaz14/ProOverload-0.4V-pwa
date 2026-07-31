@@ -47,7 +47,7 @@ const WellnessModal = memo(({
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .map(r => r.sleep), [records, date]);
 
-  const uyku = gun?.sleep || {};
+  const uyku = useMemo(() => gun?.sleep || {}, [gun]);
   const skor = useMemo(
     () => computeSleepScore(uyku, oncekiGeceler),
     [uyku, oncekiGeceler]);

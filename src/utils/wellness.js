@@ -313,3 +313,35 @@ export const emptyWellnessDay = (date, id) => ({
   sleep: { bedTime: '', wakeTime: '', latency: '', awakenings: '', awakeMinutes: '', refreshed: 6, note: '' },
   mind: [],
 });
+
+/**
+ * Yedekten veya eski localStorage kaydından gelen toparlanma gününü güvenli
+ * şekle getirir. Eksik alanlar tamamlanır; geçersiz bir kayıt tüm ekranı
+ * bozmak yerine boş gün biçimine düşer.
+ */
+export const mergeWellnessDay = (data = {}, idFactory = () => `wellness-${Date.now()}`) => {
+  const base = emptyWellnessDay(
+    typeof data?.date === 'string' ? data.date : '',
+    data?.id || idFactory(),
+  );
+  const sleep = data?.sleep && typeof data.sleep === 'object' ? data.sleep : {};
+  const mind = Array.isArray(data?.mind)
+    ? data.mind
+      .filter(entry => entry && typeof entry === 'object')
+      .map(entry => ({
+        id: entry.id || idFactory(),
+        kind: typeof entry.kind === 'string' ? entry.kind : 'meditation',
+        minutes: Math.max(0, parseNumber(entry.minutes)),
+        note: typeof entry.note === 'string' ? entry.note : '',
+      }))
+    : [];
+
+  return {
+    ...base,
+    ...data,
+    id: data?.id || base.id,
+    date: base.date,
+    sleep: { ...base.sleep, ...sleep },
+    mind,
+  };
+};

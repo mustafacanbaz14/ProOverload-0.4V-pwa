@@ -25,6 +25,8 @@ const Navbar = memo(({ view, setView }) => {
             <button
               key={item.key}
               onClick={() => setView(item.key)}
+              aria-label={`${item.label} sekmesi`}
+              aria-current={isActive ? 'page' : undefined}
               className={`relative flex flex-col items-center justify-center w-1/5 h-full transition-all duration-200 ${
                 isActive ? `${item.activeColor} scale-105 font-bold` : 'text-zinc-500 hover:text-zinc-300'
               }`}

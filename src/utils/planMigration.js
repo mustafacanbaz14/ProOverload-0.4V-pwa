@@ -55,3 +55,16 @@ export const migrateWeekPlans = (settings = {}) => {
 };
 
 export const findPlan = (plans = [], id) => plans.find(p => p.id === id) || plans[0] || null;
+
+/** Silinen bir şablonu bütün haftalık program slotlarından kaldırır. */
+export const removeTemplateFromPlans = (plans = [], templateId) =>
+  (Array.isArray(plans) ? plans : []).map(plan => ({
+    ...plan,
+    days: Object.fromEntries(
+      PLAN_DAY_KEYS.map(key => [
+        key,
+        (Array.isArray(plan?.days?.[key]) ? plan.days[key] : [])
+          .filter(slot => slot?.type !== 'workout' || slot.templateId !== templateId),
+      ]),
+    ),
+  }));

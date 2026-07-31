@@ -17,14 +17,14 @@ npm run build
 
 ## Veri nerede tutuluyor
 
-Veri, tarayıcının `localStorage`'ında `po_*_v16` anahtarlarıyla saklanır ve
+Veri, tarayıcının `localStorage`'ında `po_*_v17` anahtarlarıyla saklanır ve
 **siteye (origin) bağlıdır**. Bunun iki pratik sonucu var:
 
 - **Aynı adrese** yeni sürüm yayınlarsan veri olduğu gibi kalır.
 - **Adres değişirse** (farklı bir Vercel projesi / farklı alan adı) yeni adres
   veriyi göremez. Bu durumda JSON yedeği üzerinden taşımak gerekir.
 
-Uygulama açılışta `_v16 → _v15 → _v14 → _v13` sırasıyla eski anahtarları da
+Uygulama açılışta `_v17 → _v16 → _v15 → _v14 → _v13` sırasıyla eski anahtarları da
 dener, yani daha eski sürümlerden gelen veri de otomatik okunur.
 
 ## Telefona kurma ve veri taşıma

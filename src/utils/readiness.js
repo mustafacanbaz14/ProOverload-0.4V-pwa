@@ -61,7 +61,19 @@ export const computeReadiness = (form = {}) => {
 
   // Her alan 1-10; ters olanlar 11-x ile çevrilir. Toplam 5-50 arası.
   const raw = READINESS_FIELDS.reduce((sum, f) => sum + (f.invert ? 11 - v(f.key) : v(f.key)), 0);
-  const score = Math.round(((raw - 5) / 45) * 100);
+  const rawScore = Math.round(((raw - 5) / 45) * 100);
+  let score = rawScore;
+  let safetyReason = null;
+
+  // Güvenlik kapısı: diğer dört alan mükemmel olsa bile yüksek eklem ağrısı
+  // “Zirve / rekor dene” tavsiyesi üretemez. 7-8 orta, 9-10 kritik tavanıdır.
+  if (v('jointPain') >= 9) {
+    score = Math.min(score, 39);
+    safetyReason = 'Şiddetli eklem ağrısı hazır oluşluk seviyesini Kritik ile sınırlandırdı.';
+  } else if (v('jointPain') >= 7) {
+    score = Math.min(score, 59);
+    safetyReason = 'Yüksek eklem ağrısı hazır oluşluk seviyesini Orta ile sınırlandırdı.';
+  }
   const zone = READINESS_ZONES.find(z => score >= z.min) || READINESS_ZONES[READINESS_ZONES.length - 1];
 
   const warnings = [];
@@ -86,7 +98,7 @@ export const computeReadiness = (form = {}) => {
     });
   }
 
-  return { raw, score, zone, warnings };
+  return { raw, rawScore, score, zone, warnings, safetyReason };
 };
 
 /**

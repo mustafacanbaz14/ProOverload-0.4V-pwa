@@ -137,7 +137,10 @@ const ActiveWorkoutView = memo(({
         {(activeWorkout.exercises || []).map((ex, exIndex) => {
           const recentData = getRecentExerciseData(ex.name);
           const { muscle, contributions } = detectMuscleGroup(ex.name, customExercises);
-          const target = recentData ? suggestNextTarget(recentData.sets, settings, muscle) : null;
+          const target = recentData ? suggestNextTarget(recentData.sets, settings, muscle, {
+            history: recentData.history,
+            readiness: activeWorkout.readiness,
+          }) : null;
           const record = personalRecords.get(ex.name);
           // Katkılar büyükten küçüğe: birincil kas en solda.
           const muscleParts = Object.entries(contributions || {}).sort((a, b) => b[1] - a[1]);
@@ -174,6 +177,7 @@ const ActiveWorkoutView = memo(({
                   <button
                     onClick={() => onToggleSuperset?.(ex.id)}
                     title={ex.supersetId ? 'Süperset bağını kaldır' : 'Sonraki hareketle süperset yap'}
+                    aria-label={ex.supersetId ? 'Süperset bağını kaldır' : 'Sonraki hareketle süperset yap'}
                     className={`p-1.5 transition-colors ${ex.supersetId ? 'text-purple-400' : 'text-zinc-600 active:text-purple-400'}`}
                   >
                     {ex.supersetId ? <Unlink size={13} /> : <Link2 size={13} />}
@@ -181,11 +185,12 @@ const ActiveWorkoutView = memo(({
                   <button
                     onClick={() => onEditExercise?.(ex.name)}
                     title="Kas eşlemesini düzenle"
+                    aria-label="Kas eşlemesini düzenle"
                     className="text-zinc-600 active:text-cyan-400 p-1.5"
                   >
                     <Settings size={13} />
                   </button>
-                  <button onClick={() => setActiveWorkout(prev => ({ ...prev, exercises: prev.exercises.filter(e => e.id !== ex.id) }))} className="text-zinc-600 active:text-red-500 p-1.5"><X size={14} /></button>
+                  <button aria-label="Hareketi antrenmandan çıkar" onClick={() => setActiveWorkout(prev => ({ ...prev, exercises: prev.exercises.filter(e => e.id !== ex.id) }))} className="text-zinc-600 active:text-red-500 p-1.5"><X size={14} /></button>
                 </div>
               </div>
 
@@ -224,7 +229,9 @@ const ActiveWorkoutView = memo(({
                     </span>
                     <span className="font-mono text-sm font-bold text-emerald-400">{target.weight} kg × {target.reps}</span>
                   </div>
-                  <div className="text-[10px] text-emerald-700 font-mono mt-1">{target.note}</div>
+                    <div className="text-[10px] text-emerald-700 font-mono mt-1">
+                      {target.note} · {target.confidence === 'high' ? 'yüksek güven' : 'orta güven'}
+                    </div>
                 </div>
               )}
 
@@ -322,7 +329,7 @@ const ActiveWorkoutView = memo(({
                       </div>
                       <div className="col-span-12 flex justify-between items-center px-1.5 -mt-0.5 mb-0.5">
                         <div className="flex items-center gap-2">
-                          <button onClick={() => removeSet(ex.id, set.id)} className="text-zinc-700 active:text-red-500 hover:text-red-500 p-1 -m-1 transition-colors" title="Bu seti sil">
+                          <button onClick={() => removeSet(ex.id, set.id)} className="text-zinc-700 active:text-red-500 hover:text-red-500 p-1 -m-1 transition-colors" title="Bu seti sil" aria-label="Bu seti sil">
                             <Trash2 size={11} />
                           </button>
                           <select

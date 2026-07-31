@@ -445,6 +445,8 @@ export const calorieDashboard = ({
   burnedManual = 0,
   maintenance = 0,
   targetIntake = 0,
+  totalOut = 0,
+  weekDays = [],
   weekIntakes = [],
   weekBurned = 0,
 } = {}) => {
@@ -455,22 +457,34 @@ export const calorieDashboard = ({
 
   if (!(maint > 0)) return { ready: false };
 
-  // Günün dengesi: alınan − (korunum + egzersizle yakılan).
-  // Korunum zaten dinlenme + günlük yaşamı kapsıyor; egzersiz onun üstüne biner.
-  const totalOut = maint + burned;
-  const balance = Math.round(inKcal - totalOut);
+  // Yeni enerji motoru BMR+NEAT+TEF+EAT toplamını doğrudan verir. Eski çağrılar
+  // için maintenance+burned geriye dönük yedek olarak korunur.
+  const out = parseNumber(totalOut) > 0 ? parseNumber(totalOut) : maint + burned;
+  const balance = Math.round(inKcal - out);
+
+  // Adaptif TDEE ortalama egzersizi zaten içerir. Bugünün hedefi, yalnızca
+  // bugünkü toplam harcamanın bu ortalamadan farkı kadar ayarlanır.
+  const activityAdjustment = Math.round(out - maint);
+  const adjustedTarget = Math.max(0, Math.round(target + activityAdjustment));
 
   // Hedeflenen denge: önerilen alım korunumun neresinde duruyor.
-  const targetBalance = Math.round(target + burned - totalOut);
+  const targetBalance = Math.round(adjustedTarget - out);
 
   // Hedefe göre bugün ne kadar sapıldı. Pozitif = hedeften fazla yenmiş.
-  const vsTarget = Math.round(inKcal - (target + burned));
+  const vsTarget = Math.round(inKcal - adjustedTarget);
 
   // Haftalık gerçekleşen: yalnızca kayıt girilmiş günler sayılır, boş günü
   // sıfır kalori kabul etmek haftalık açığı olduğundan büyük gösterirdi.
-  const loggedDays = weekIntakes.filter(v => parseNumber(v) > 0);
+  const normalizedWeek = Array.isArray(weekDays)
+    ? weekDays.filter(day => parseNumber(day?.intake) > 0 && parseNumber(day?.out) > 0)
+    : [];
+  const loggedDays = normalizedWeek.length > 0
+    ? normalizedWeek.map(day => parseNumber(day.intake))
+    : weekIntakes.filter(v => parseNumber(v) > 0);
   const weekIntakeTotal = loggedDays.reduce((s, v) => s + parseNumber(v), 0);
-  const weekOut = loggedDays.length * maint + parseNumber(weekBurned);
+  const weekOut = normalizedWeek.length > 0
+    ? normalizedWeek.reduce((sum, day) => sum + parseNumber(day.out), 0)
+    : loggedDays.length * maint + parseNumber(weekBurned);
   const weekBalance = loggedDays.length > 0
     ? Math.round(weekIntakeTotal - weekOut)
     : null;
@@ -482,8 +496,10 @@ export const calorieDashboard = ({
     burnedAuto: Math.round(parseNumber(burnedAuto)),
     burnedManual: Math.round(parseNumber(burnedManual)),
     maintenance: Math.round(maint),
-    totalOut: Math.round(totalOut),
+    totalOut: Math.round(out),
     target: Math.round(target),
+    adjustedTarget,
+    activityAdjustment,
     targetBalance,
     balance,
     vsTarget,

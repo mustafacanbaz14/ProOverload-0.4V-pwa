@@ -104,6 +104,7 @@ export const dayEnergyBreakdown = ({
   macros = {},
   lifting = 0,
   cardio = 0,
+  recovery = 0,
   manual = 0,
   avgDailyExercise = 0,
   neatMode = 'auto',
@@ -117,11 +118,12 @@ export const dayEnergyBreakdown = ({
   const base = parseNumber(bmr);
   const eatLifting = parseNumber(lifting);
   const eatCardio = parseNumber(cardio);
+  const eatRecovery = parseNumber(recovery);
   const eatManual = parseNumber(manual);
   const tef = thermicEffect(macros);
 
   const epoc = Math.round(eatLifting * EPOC_LIFTING + eatCardio * EPOC_CARDIO);
-  const eat = eatLifting + eatCardio + eatManual;
+  const eat = eatLifting + eatCardio + eatRecovery + eatManual;
 
   // NEAT (günlük hareket).
   //
@@ -166,6 +168,7 @@ export const dayEnergyBreakdown = ({
     { key: 'tef', label: 'Sindirim (Termik)', value: tef.total, color: 'bg-amber-500', hint: 'Besinleri işlemek için harcanan' },
     { key: 'lifting', label: 'Ağırlık Antrenmanı', value: eatLifting, color: 'bg-emerald-500', hint: 'Seans süresi × şiddet' },
     { key: 'cardio', label: 'Kardiyo', value: eatCardio, color: 'bg-red-500', hint: 'Aktiviteye göre MET değeri' },
+    { key: 'recovery', label: 'Meditasyon & Esneme', value: eatRecovery, color: 'bg-violet-500', hint: 'Dinlenmenin üstündeki küçük hareket katkısı' },
     { key: 'manual', label: 'Elle Eklenen', value: eatManual, color: 'bg-purple-500', hint: 'Senin girdiğin ekstra' },
     { key: 'epoc', label: 'Toparlanma (EPOC)', value: epoc, color: 'bg-orange-500', hint: 'Antrenman sonrası yükselen metabolizma' },
   ].filter(p => p.value > 0);
@@ -178,6 +181,7 @@ export const dayEnergyBreakdown = ({
     tef,
     lifting: eatLifting,
     cardio: eatCardio,
+    recovery: eatRecovery,
     manual: eatManual,
     epoc,
     eat,
@@ -218,6 +222,7 @@ export const buildEnergySeries = (nutritionHistory = [], {
         macros,
         lifting: w.lifting,
         cardio: w.cardio,
+        recovery: w.mind,
         manual: n.activeCaloriesOut,
         // Gün bazlı adım girilmişse o günün kaydından okunur.
         steps: n.steps,

@@ -1,10 +1,11 @@
 import {
   EXERCISE_RULES, STORAGE_VERSION, STORAGE_VERSIONS, DEFAULT_SETTINGS,
   SET_TYPE_KEYS, SMALL_MUSCLE_GROUPS
-} from './constants';
-import { migrateCustomExercises, normalizeMuscleName } from './migrations';
-import { migrateWeekPlans } from './planMigration';
-import { parseNumber } from './number';
+} from './constants.js';
+import { migrateCustomExercises, normalizeMuscleName } from './migrations.js';
+import { migrateWeekPlans } from './planMigration.js';
+import { parseNumber } from './number.js';
+import { mergeWellnessDay } from './wellness.js';
 
 /** Yazma daima en yeni sürüm anahtarına yapılır. */
 export const storageKey = (name) => `po_${name}${STORAGE_VERSION}`;
@@ -290,30 +291,62 @@ export const buildPersonalRecords = (workouts, excludeWorkoutId = null) => {
   return records;
 };
 
-export const suggestNextTarget = (previousSets, { repRangeMin, repRangeMax }, muscle) => {
+export const suggestNextTarget = (previousSets, { repRangeMin, repRangeMax }, muscle, context = {}) => {
   const working = (previousSets || []).filter(s => isWorkingSet(s) && parseNumber(s.reps) > 0);
   if (working.length === 0) return null;
 
-  const top = working.reduce((a, b) => (parseNumber(b.weight) > parseNumber(a.weight) ? b : a));
-  const weight = parseNumber(top.weight);
-  const reps = parseNumber(top.reps);
-  const rir = parseNumber(top.rir);
+  const maxWeight = Math.max(...working.map(s => parseNumber(s.weight)));
+  const topSets = working.filter(s => parseNumber(s.weight) === maxWeight);
+  const weight = maxWeight;
+  const reps = Math.round(topSets.reduce((sum, s) => sum + parseNumber(s.reps), 0) / topSets.length);
+  const rir = topSets.reduce((sum, s) => sum + parseNumber(s.rir), 0) / topSets.length;
   if (reps <= 0) return null;
 
   // Küçük kas gruplarında 2.5 kg'lık sıçrama çok büyük kalır.
   const increment = SMALL_MUSCLE_GROUPS.includes(muscle) ? 1.25 : 2.5;
 
-  if (reps >= repRangeMax) {
+  const readinessScore = parseNumber(context?.readiness?.score);
+  const jointPain = parseNumber(context?.readiness?.jointPain);
+  if (jointPain >= 9 || (readinessScore > 0 && readinessScore < 40)) {
+    const lighter = Number((weight * 0.9).toFixed(2));
+    return {
+      weight: lighter,
+      reps: Math.max(repRangeMin, reps),
+      confidence: 'high',
+      strategy: 'recovery',
+      note: `Toparlanma düşük; bugün yükü yaklaşık %10 azalt (${lighter} kg)`,
+    };
+  }
+
+  const history = Array.isArray(context?.history) ? context.history : [];
+  const recentTopSets = history.slice(0, 2).map(session => {
+    const valid = (session.sets || []).filter(s => isWorkingSet(s) && parseNumber(s.reps) > 0);
+    if (!valid.length) return null;
+    return valid.reduce((best, set) => estimate1RM(set.weight, set.reps, set.rir) > estimate1RM(best.weight, best.reps, best.rir) ? set : best);
+  }).filter(Boolean);
+  const repeatedSuccess = recentTopSets.length >= 2
+    && recentTopSets.every(s => parseNumber(s.reps) >= repRangeMax && parseNumber(s.rir) >= 1);
+
+  if ((reps >= repRangeMax && rir >= 1) || repeatedSuccess) {
     return {
       weight: Number((weight + increment).toFixed(2)),
       reps: repRangeMin,
-      note: `${reps} tekrara ulaştın, ağırlığı +${increment} kg artır`
+      confidence: repeatedSuccess ? 'high' : 'medium',
+      strategy: 'load',
+      note: `${reps} tekrar ve RIR ${rir.toFixed(1)}; ağırlığı +${increment} kg artır`,
     };
   }
   if (rir === 0 && reps < repRangeMin) {
-    return { weight, reps, note: 'Geçen sefer tükenişteydin, aynı yükte kal' };
+    const lighter = Number((weight * 0.975).toFixed(2));
+    return { weight: lighter, reps: repRangeMin, confidence: 'high', strategy: 'reset', note: 'Hedef aralığın altında tükendin; yükü %2,5 azaltıp temiz tekrar yap' };
   }
-  return { weight, reps: reps + 1, note: `Aynı ağırlıkta ${reps + 1} tekrar hedefle` };
+  return {
+    weight,
+    reps: Math.min(repRangeMax, reps + 1),
+    confidence: history.length >= 2 ? 'high' : 'medium',
+    strategy: 'reps',
+    note: `Aynı ağırlıkta ${Math.min(repRangeMax, reps + 1)} tekrar hedefle (son ort. RIR ${rir.toFixed(1)})`,
+  };
 };
 
 export const detectStandalone = () =>
@@ -387,7 +420,12 @@ export const loadPersistedState = () => {
     mealTemplates: loadWithFallback(keys('meal_templates'), []),
     dayTemplates: loadWithFallback(keys('day_templates'), []),
     activeWorkout: loadWithFallback(keys('active_workout'), null),
-    wellness: loadWithFallback(keys('wellness'), []),
+    wellness: (() => {
+      const raw = loadWithFallback(keys('wellness'), []);
+      return Array.isArray(raw)
+        ? raw.map(day => mergeWellnessDay(day, generateId)).filter(day => day.date)
+        : [];
+    })(),
     metricsHistory,
     currentMetricsForm,
     nutritionHistory,
