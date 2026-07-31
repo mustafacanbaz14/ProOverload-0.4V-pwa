@@ -3,6 +3,7 @@ import {
   SET_TYPE_KEYS, SMALL_MUSCLE_GROUPS
 } from './constants';
 import { migrateCustomExercises, normalizeMuscleName } from './migrations';
+import { migrateWeekPlans } from './planMigration';
 import { parseNumber } from './number';
 
 /** Yazma daima en yeni sürüm anahtarına yapılır. */
@@ -345,6 +346,11 @@ export const mergeSettings = (saved = {}) => {
   TRUTHY_SETTINGS.forEach(k => { if (!merged[k]) merged[k] = DEFAULT_SETTINGS[k]; });
   ARRAY_SETTINGS.forEach(k => { if (!Array.isArray(merged[k])) merged[k] = []; });
   if (!merged.weekPlan || typeof merged.weekPlan !== 'object') merged.weekPlan = {};
+  // Tek programdan çoklu program listesine göç. Idempotent: yeni biçim aynen
+  // geçer, eski `weekPlan` nesnesi ilk programa dönüşür.
+  const { plans, activeId } = migrateWeekPlans(merged);
+  merged.weekPlans = plans;
+  merged.activePlanId = activeId;
   return merged;
 };
 

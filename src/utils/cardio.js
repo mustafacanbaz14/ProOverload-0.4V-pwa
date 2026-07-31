@@ -49,6 +49,32 @@ export const CARDIO_ACTIVITIES = [
   { key: 'sex', label: 'Cinsel Aktivite', met: 2.8, group: 'Günlük', hint: 'Ölçümlere göre 1.8-2.8 MET; abartılı tahminlerden kaçınıldı' },
 ];
 
+/**
+ * Tempo / zorluk kademeleri.
+ *
+ * Compendium aynı aktiviteyi şiddete göre ayrı satırlarda listeliyor —
+ * basketbol "şut atma" 4.5 iken "maç" 8.0 MET. Yani tek bir MET değeri o
+ * aktiviteyi temsil etmiyor; nasıl yapıldığı kaloriyi neredeyse iki katına
+ * çıkarabiliyor. Buradaki çarpanlar tablodaki genel değeri o aralığa yayıyor.
+ *
+ * `fatigue` ise kaloriyle aynı şey değil: eğlence temposunda uzun süre oynamak
+ * çok kalori yakar ama toparlanmayı fazla zorlamaz; maç temposu kısa sürse bile
+ * sinir sistemi ve bacak kaslarında belirgin yorgunluk bırakır. Bu yüzden
+ * çakışma tavsiyesi kaloriye değil bu katsayıya bakıyor.
+ */
+export const CARDIO_EFFORTS = [
+  { key: 'fun', label: 'Eğlence', met: 0.72, fatigue: 0.5, hint: 'Rahat sohbet edebiliyorsun, sık duraklama var' },
+  { key: 'easy', label: 'Hafif', met: 0.88, fatigue: 0.75, hint: 'Konuşabiliyorsun ama nefes belirgin' },
+  { key: 'moderate', label: 'Orta', met: 1, fatigue: 1, hint: 'Tablodaki standart tempo' },
+  { key: 'hard', label: 'Zorlu', met: 1.15, fatigue: 1.35, hint: 'Cümle kuramıyorsun, tempo yüksek' },
+  { key: 'match', label: 'Maç Temposu', met: 1.3, fatigue: 1.8, hint: 'Yarışma şiddeti, sprintler ve yön değiştirmeler' },
+];
+
+export const DEFAULT_EFFORT = 'moderate';
+
+export const findEffort = (key) =>
+  CARDIO_EFFORTS.find(e => e.key === key) || CARDIO_EFFORTS.find(e => e.key === DEFAULT_EFFORT);
+
 // Ağırlık antrenmanı: Compendium'da şiddetli çaba 5.0, orta çaba 3.5 MET.
 // Süre tahmini setler arası dinlenmeyi de kapsadığı için orta değer alındı.
 export const LIFTING_MET = 4.5;
@@ -71,10 +97,64 @@ export const estimateCardioCalories = (met, weightKg, minutes) => {
   return Math.round((met - 1) * 3.5 * w / 200 * m);
 };
 
+/**
+ * Bir kardiyo girdisinin kalorisi.
+ *
+ * Girdide tempo varsa aktivitenin MET'i o kademeye göre ölçeklenir. Eski
+ * kayıtlarda tempo alanı yok — o durumda çarpan 1 olan "orta" kullanılır, yani
+ * geçmiş kayıtların kalorisi değişmez.
+ */
 export const cardioEntryCalories = (entry, weightKg) => {
   const act = findActivity(entry?.type);
   if (!act) return 0;
-  return estimateCardioCalories(act.met, weightKg, entry.minutes);
+  const effort = entry?.effort ? findEffort(entry.effort) : null;
+  const met = act.met * (effort ? effort.met : 1);
+  return estimateCardioCalories(met, weightKg, entry.minutes);
+};
+
+/**
+ * Yorgunluk yükü — kalori değil, toparlanma maliyeti.
+ *
+ * Birim keyfi ama tutarlı: MET × dakika × tempo katsayısı / 10. Amaç mutlak bir
+ * fizyolojik değer vermek değil, aynı gündeki iki uğraşı karşılaştırılabilir
+ * kılmak (çakışma tavsiyesi buna bakıyor).
+ */
+export const cardioFatigueLoad = (entry) => {
+  const act = findActivity(entry?.type);
+  if (!act) return 0;
+  const dk = Number(entry?.minutes) || 0;
+  if (dk <= 0) return 0;
+  const effort = entry?.effort ? findEffort(entry.effort) : null;
+  return Math.round(act.met * dk * (effort ? effort.fatigue : 1) / 10);
+};
+
+/**
+ * Planlanan ile gerçekleşen tempo arasındaki fark.
+ *
+ * Plan "orta tempo 45 dk koşu" derken gerçekte maç temposunda oynandıysa hem
+ * kalori hem yorgunluk plandan sapar; haftalık dengeyi bozan da çoğunlukla bu.
+ */
+export const effortDelta = (entry, weightKg) => {
+  const act = findActivity(entry?.type);
+  if (!act || !entry?.plannedEffort || !entry?.effort) return null;
+  if (entry.plannedEffort === entry.effort) return null;
+
+  const planlanan = findEffort(entry.plannedEffort);
+  const gercek = findEffort(entry.effort);
+  const dk = Number(entry.plannedMinutes ?? entry.minutes) || 0;
+
+  const planKcal = estimateCardioCalories(act.met * planlanan.met, weightKg, dk);
+  const gercekKcal = cardioEntryCalories(entry, weightKg);
+  const planYorgunluk = Math.round(act.met * dk * planlanan.fatigue / 10);
+  const gercekYorgunluk = cardioFatigueLoad(entry);
+
+  return {
+    planned: planlanan,
+    actual: gercek,
+    kcalDiff: gercekKcal - planKcal,
+    fatigueDiff: gercekYorgunluk - planYorgunluk,
+    harder: gercek.fatigue > planlanan.fatigue,
+  };
 };
 
 export const totalCardioCalories = (entries = [], weightKg) =>

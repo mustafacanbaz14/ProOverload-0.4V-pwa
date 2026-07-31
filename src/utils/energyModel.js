@@ -331,6 +331,78 @@ export const theoreticalWeek = (planDays = [], {
 };
 
 /**
+ * Plan ile gerçekleşen enerji dengesinin karşılaştırması.
+ *
+ * "Teorik" tek başına havada kalıyor: programın haftada 2800 kcal yakacağını
+ * bilmek, o programı uygulayıp uygulamadığını söylemiyor. Burada son 7 günün
+ * gerçekleşen harcaması, aynı haftanın plandaki karşılığıyla gün gün yan yana
+ * konuyor. Sapmanın işareti önemli — eksi taraf "planı uygulamadım", artı taraf
+ * "plandan fazlasını yaptım" demek ve ikisi de haftalık hedefi kaydırıyor.
+ *
+ * @param planDays computeWeekPlan'ın günleri (kcal + cardioKcal taşır)
+ * @param series   buildEnergySeries çıktısı (en yeni önce)
+ */
+export const planVsActual = (planDays = [], series = [], { maintenance = 0, days = 7 } = {}) => {
+  const maint = parseNumber(maintenance);
+  if (!(maint > 0) || planDays.length === 0) return null;
+
+  // getDay() pazar=0 verirken plan pazartesi ile başlıyor.
+  const HAFTA = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+  const planByKey = new Map(planDays.map(d => [d.key, d]));
+
+  const son = series.slice(0, days);
+  if (son.length === 0) return null;
+
+  const satirlar = son.map(g => {
+    const gunKey = HAFTA[new Date(`${g.date}T00:00:00`).getDay()];
+    const p = planByKey.get(gunKey);
+    const planEgzersiz = p ? parseNumber(p.kcal) + parseNumber(p.cardioKcal) : 0;
+    const planEpoc = p ? Math.round(parseNumber(p.kcal) * EPOC_LIFTING + parseNumber(p.cardioKcal) * EPOC_CARDIO) : 0;
+    const planToplam = Math.round(maint + planEgzersiz + planEpoc);
+
+    // Gerçekleşen egzersiz: bazal ve sindirim dışındaki kısım.
+    const b = g.breakdown || {};
+    const gercekEgzersiz = parseNumber(b.eat) + parseNumber(b.epoc);
+
+    return {
+      date: g.date,
+      dayKey: gunKey,
+      planName: p?.template?.name || null,
+      plannedExercise: Math.round(planEgzersiz + planEpoc),
+      actualExercise: Math.round(gercekEgzersiz),
+      plannedTotal: planToplam,
+      actualTotal: Math.round(g.out),
+      intake: g.intake,
+      plannedBalance: Math.round(g.intake - planToplam),
+      actualBalance: Math.round(g.balance),
+      // Plan gününde hiç egzersiz yoksa "atlandı" demek doğru olmaz.
+      skipped: planEgzersiz > 0 && gercekEgzersiz < planEgzersiz * 0.4,
+      extra: planEgzersiz === 0 && gercekEgzersiz > 100,
+    };
+  });
+
+  const topla = (f) => satirlar.reduce((s, r) => s + f(r), 0);
+  const planToplam = topla(r => r.plannedTotal);
+  const gercekToplam = topla(r => r.actualTotal);
+  const alim = topla(r => r.intake);
+
+  return {
+    rows: satirlar,
+    days: satirlar.length,
+    plannedTotal: planToplam,
+    actualTotal: gercekToplam,
+    intake: alim,
+    diff: gercekToplam - planToplam,
+    plannedBalance: alim - planToplam,
+    actualBalance: alim - gercekToplam,
+    // Haftalık farkın kilo karşılığı: 7700 kcal ≈ 1 kg.
+    diffKg: Math.round((gercekToplam - planToplam) / 7700 * 100) / 100,
+    skippedDays: satirlar.filter(r => r.skipped).length,
+    extraDays: satirlar.filter(r => r.extra).length,
+  };
+};
+
+/**
  * NEAT yöntemlerinin karşılaştırması.
  *
  * Aktif yöntemin sonucu tek başına "doğru mu" sorusuna cevap vermiyor. Burada

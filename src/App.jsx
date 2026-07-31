@@ -11,7 +11,7 @@ import { DEFAULT_EXERCISES, MUSCLE_GROUPS, getVolumeLandmarks, ACWR_MIN_DAYS } f
 import { migrateCustomExercises } from './utils/migrations';
 import { computeAdaptiveTDEE } from './utils/tdee';
 import { totalCardioCalories, dayWorkoutCalories } from './utils/cardio';
-import { computeWeekPlan } from './utils/weekPlan';
+import { computeWeekPlan, findPlan } from './utils/weekPlan';
 import { averageDailyExercise } from './utils/energyModel';
 import { DEFAULT_READINESS, READINESS_FIELDS, computeReadiness, readinessTrend } from './utils/readiness';
 import { safeSetItem, safeSetRawItem, createErrorThrottle } from './utils/persist';
@@ -1186,14 +1186,30 @@ export default function App() {
   }), [avgDailyExercise, settings.neatMode, settings.activityLevel,
     settings.neatManual, latestWeight, settings.neatMultiplier]);
 
-  // Haftalık programın teorik harcaması için plan günleri.
-  const weekPlanDays = useMemo(() => computeWeekPlan(settings.weekPlan || {}, templates, {
+  // Teorik hesaplar AKTİF programı kullanır: kullanıcı birden fazla program
+  // tutabiliyor ama ana ekranda görünen hafta yıldızladığı olan.
+  const activePlan = useMemo(
+    () => findPlan(settings.weekPlans || [], settings.activePlanId),
+    [settings.weekPlans, settings.activePlanId]);
+
+  const weekPlanResult = useMemo(() => computeWeekPlan(activePlan || {}, templates, {
     customExercises,
     restSeconds: settings.restSeconds,
     experienceLevel: settings.experienceLevel,
     weightKg: latestWeight,
-  }).days, [settings.weekPlan, settings.restSeconds, settings.experienceLevel,
+  }), [activePlan, settings.restSeconds, settings.experienceLevel,
     templates, customExercises, latestWeight]);
+
+  const weekPlanDays = weekPlanResult.days;
+
+  // Bugün için planlanmış kardiyo: kardiyo ekranında tek dokunuşla yüklenip
+  // gerçekleşen tempoyla karşılaştırılabilsin diye çıkarılıyor.
+  const todayPlannedCardio = useMemo(() => {
+    // getDay() pazar=0 verirken plan pazartesi ile başlıyor.
+    const gunler = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+    const bugun = gunler[new Date().getDay()];
+    return (activePlan?.days?.[bugun] || []).filter(s => s.type === 'cardio');
+  }, [activePlan]);
 
   // Aktif antrenman varsa oraya yazılır; yoksa bugünün kardiyo kaydına eklenir
   // (yoksa oluşturulur), böylece basketbol/koşu için seans başlatmak gerekmez.
@@ -1571,8 +1587,10 @@ export default function App() {
         <WeeklyPlanModal
           isOpen={isWeekPlanOpen}
           onClose={() => setIsWeekPlanOpen(false)}
-          plan={settings.weekPlan || {}}
-          onChangePlan={(plan) => setSettings(prev => ({ ...prev, weekPlan: plan }))}
+          plans={settings.weekPlans || []}
+          activePlanId={settings.activePlanId}
+          onChangePlans={(list) => setSettings(prev => ({ ...prev, weekPlans: list }))}
+          onChangeActive={(id) => setSettings(prev => ({ ...prev, activePlanId: id }))}
           templates={templates}
           customExercises={customExercises}
           restSeconds={settings.restSeconds}
@@ -1626,7 +1644,8 @@ export default function App() {
           dayCalories={dayCaloriesFor}
           neatOpts={neatOpts}
           planDays={weekPlanDays}
-          plannedCardioKcal={weeklyCardioKcal}
+          plannedCardioKcal={weekPlanResult.totalCardioKcal || weeklyCardioKcal}
+          cardioIsPlanned={weekPlanResult.totalCardioKcal > 0}
         />
 
         {/* KARDİYO */}
@@ -1637,6 +1656,7 @@ export default function App() {
           onDelete={handleDeleteCardio}
           weightKg={latestWeight}
           existing={cardioEntries}
+          planned={todayPlannedCardio}
         />
 
         {/* PLATE CALCULATOR */}

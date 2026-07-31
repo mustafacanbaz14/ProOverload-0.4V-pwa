@@ -17,7 +17,12 @@ export const DEFAULT_SETTINGS = {
   pinnedExercises: [],
   // 1RM analiz listesinin kendi gizleme listesi — antrenman seçimindekinden ayrı.
   hidden1RMExercises: [],
-  // Haftalık program: gün anahtarı -> şablon kimliği (null = dinlenme günü).
+  // Haftalık programlar: adlandırılmış liste, her gün saatli slot dizisi.
+  // Biri "aktif" seçilir ve ana ekrandaki teorik hesaplar onu kullanır.
+  weekPlans: [],
+  activePlanId: '',
+  // Eski tek program biçimi (gün -> şablon kimliği). Yalnızca göç için
+  // duruyor; yazma artık weekPlans üzerinden yapılıyor.
   weekPlan: {},
   // Ana sayfadaki 16 satırlık kas hacmi listesi varsayılan olarak kapalı.
   showMuscleVolume: false,

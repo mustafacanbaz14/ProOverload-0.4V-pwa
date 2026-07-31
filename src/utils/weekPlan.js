@@ -1,6 +1,13 @@
 import { MUSCLE_GROUPS, getVolumeLandmarks, volumeStatusOf, VOLUME_STATUS } from './constants';
 import { previewTemplateVolume, estimateDuration } from './templates';
-import { estimateLiftingCalories } from './cardio';
+import {
+  estimateLiftingCalories, findActivity, findEffort,
+  estimateCardioCalories, cardioFatigueLoad, DEFAULT_EFFORT,
+} from './cardio';
+import { parseNumber } from './number';
+import { normalizeDays } from './planMigration';
+
+export { normalizeDays };
 
 export const WEEKDAYS = [
   { key: 'mon', label: 'Pazartesi', short: 'Pzt' },
@@ -12,15 +19,25 @@ export const WEEKDAYS = [
   { key: 'sun', label: 'Pazar', short: 'Paz' },
 ];
 
+// Göç ve gün normalleştirme ayrı bir yaprak modülde (döngüsel import olmasın);
+// buradan yeniden dışa aktarılıyor ki çağıranlar tek yerden alsın.
+export { migrateWeekPlans, emptyPlan, findPlan } from './planMigration';
+
+/* ------------------------------------------------------------------ *
+ *  HESAP
+ * ------------------------------------------------------------------ */
+
+/** Slotları saate göre sıralar; saati girilmemiş olanlar sona gider. */
+const saateGore = (slots = []) => [...slots].sort((a, b) =>
+  (a.time || '99:99').localeCompare(b.time || '99:99'));
+
 /**
- * Haftalık planın teorik hacmini çıkarır.
+ * Haftalık planın teorik hacmi, süresi, kalorisi ve yorgunluğu.
  *
- * "Teorik" çünkü şablonlarda RIR yok: her set etkili sayılır. Gerçek hafta bunun
- * altında kalır, o yüzden buradaki sayı bir üst sınırdır ve plan kurarken
- * "en iyi ihtimalle şu kadar" diye okunmalıdır.
+ * "Teorik" çünkü şablonlarda RIR yok: her set etkili sayılır. Gerçek hafta
+ * bunun altında kalır, yani buradaki sayı bir üst sınırdır.
  *
- * @param plan  { mon: templateId|null, ... }
- * @param templates şablon listesi
+ * @param plan { days: { mon: [slot, ...], ... } } — eski `{mon: id}` biçimi de kabul edilir
  */
 export const computeWeekPlan = (plan = {}, templates = [], {
   customExercises = [],
@@ -29,27 +46,75 @@ export const computeWeekPlan = (plan = {}, templates = [], {
   weightKg = 0,
 } = {}) => {
   const byId = new Map(templates.map(t => [t.id, t]));
+  const days = normalizeDays(plan?.days || plan);
 
-  const days = WEEKDAYS.map(d => {
-    const template = byId.get(plan[d.key]) || null;
-    if (!template) return { ...d, template: null, sets: 0, minutes: 0, kcal: 0 };
-    const { totalSets } = previewTemplateVolume(template.exercises, customExercises);
-    const minutes = totalSets > 0 ? estimateDuration(template.exercises, restSeconds) : 0;
+  const gunler = WEEKDAYS.map(d => {
+    const slots = saateGore(days[d.key]);
+
+    let sets = 0;
+    let minutes = 0;
+    let kcal = 0;
+    let cardioKcal = 0;
+    let cardioMinutes = 0;
+    let fatigue = 0;
+    const byMuscle = {};
+    const workouts = [];
+    const cardios = [];
+
+    slots.forEach(slot => {
+      if (slot.type === 'cardio') {
+        const act = findActivity(slot.activity);
+        if (!act) return;
+        const dk = Math.max(0, parseNumber(slot.minutes));
+        if (dk <= 0) return;
+        const effort = findEffort(slot.effort || DEFAULT_EFFORT);
+        const k = estimateCardioCalories(act.met * effort.met, weightKg, dk);
+        cardioKcal += k;
+        cardioMinutes += dk;
+        minutes += dk;
+        fatigue += cardioFatigueLoad({ type: slot.activity, minutes: dk, effort: effort.key });
+        cardios.push({ ...slot, activity: act, effortInfo: effort, minutes: dk, kcal: k });
+        return;
+      }
+
+      const template = byId.get(slot.templateId);
+      if (!template) return;
+      const { totalSets, byMuscle: m } = previewTemplateVolume(template.exercises, customExercises);
+      const tahmin = totalSets > 0 ? estimateDuration(template.exercises, restSeconds) : 0;
+      // Slotta süre elle verilmişse (saatli plan) o kullanılır.
+      const sure = parseNumber(slot.minutes) > 0 ? parseNumber(slot.minutes) : tahmin;
+      sets += totalSets;
+      minutes += sure;
+      kcal += estimateLiftingCalories(sure, weightKg);
+      // Ağırlık antrenmanının yorgunluğu set sayısıyla ölçeklenir: seans uzasa
+      // bile dinlenmeyle geçen dakikalar toparlanmayı zorlamıyor.
+      fatigue += Math.round(totalSets * 1.5);
+      Object.entries(m).forEach(([kas, vol]) => { byMuscle[kas] = (byMuscle[kas] || 0) + vol; });
+      workouts.push({ ...slot, template, sets: totalSets, minutes: sure });
+    });
+
     return {
       ...d,
-      template,
-      sets: totalSets,
+      slots,
+      workouts,
+      cardios,
+      // Geriye dönük uyum: eskiden gün tek şablon taşıyordu.
+      template: workouts[0]?.template || null,
+      sets,
       minutes,
-      kcal: estimateLiftingCalories(minutes, weightKg),
+      kcal,
+      cardioKcal,
+      cardioMinutes,
+      fatigue,
+      byMuscle,
+      totalKcal: kcal + cardioKcal,
     };
   });
 
   // Hacimler gün gün toplanır.
   const muscleVolume = {};
-  days.forEach(d => {
-    if (!d.template) return;
-    const { byMuscle } = previewTemplateVolume(d.template.exercises, customExercises);
-    Object.entries(byMuscle).forEach(([muscle, vol]) => {
+  gunler.forEach(d => {
+    Object.entries(d.byMuscle).forEach(([muscle, vol]) => {
       muscleVolume[muscle] = Math.round(((muscleVolume[muscle] || 0) + vol) * 4) / 4;
     });
   });
@@ -61,17 +126,19 @@ export const computeWeekPlan = (plan = {}, templates = [], {
     return { muscle, volume, mev, mav, mrv, status: volumeStatusOf(volume, muscle, experienceLevel) };
   });
 
-  const trainingDays = days.filter(d => d.template).length;
+  const trainingDays = gunler.filter(d => d.slots.length > 0).length;
 
   return {
-    days,
+    days: gunler,
     muscleVolume,
     statuses,
     trainingDays,
     offDays: 7 - trainingDays,
-    totalSets: days.reduce((s, d) => s + d.sets, 0),
-    totalMinutes: days.reduce((s, d) => s + d.minutes, 0),
-    totalKcal: days.reduce((s, d) => s + d.kcal, 0),
+    totalSets: gunler.reduce((s, d) => s + d.sets, 0),
+    totalMinutes: gunler.reduce((s, d) => s + d.minutes, 0),
+    totalKcal: gunler.reduce((s, d) => s + d.kcal, 0),
+    totalCardioKcal: gunler.reduce((s, d) => s + d.cardioKcal, 0),
+    totalFatigue: gunler.reduce((s, d) => s + d.fatigue, 0),
     untrained: statuses.filter(s => s.status === 'none').map(s => s.muscle),
     under: statuses.filter(s => s.status === 'under').map(s => s.muscle),
     optimal: statuses.filter(s => s.status === 'optimal').map(s => s.muscle),

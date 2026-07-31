@@ -21,7 +21,7 @@ const GROUPS = [
     items: [
       { key: 'library', label: 'Hareket Kütüphanesi', hint: '250+ hareket, kas eşlemesi düzenleme', icon: Dumbbell, color: 'text-cyan-400' },
       { key: 'builder', label: 'Program Oluştur', hint: 'Gün gün şablon yaz', icon: CalendarPlus, color: 'text-emerald-400' },
-      { key: 'weekPlan', label: 'Haftalık Program', hint: 'Şablonları günlere dağıt, teorik hacmi gör', icon: CalendarRange, color: 'text-cyan-400' },
+      { key: 'weekPlan', label: 'Haftalık Programlar', hint: 'Çoklu program, saatli kardiyo, çakışma asistanı', icon: CalendarRange, color: 'text-cyan-400' },
       { key: 'plates', label: 'Plaka Hesaplayıcı', hint: 'Bar yüklemesi ve ısınma setleri', icon: Calculator, color: 'text-amber-400' },
     ],
   },

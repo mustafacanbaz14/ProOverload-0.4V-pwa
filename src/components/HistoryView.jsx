@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import { Trash2, Calendar, Scale, Beef, Pencil, Copy, BookmarkPlus, HeartPulse } from 'lucide-react';
 import { calcTonnage, calcEffectiveSets, isWorkingSet } from '../utils/helpers';
-import { findActivity, cardioEntryCalories, totalCardioCalories, dayWorkoutCalories } from '../utils/cardio';
+import { findActivity, findEffort, effortDelta, cardioEntryCalories, totalCardioCalories, dayWorkoutCalories } from '../utils/cardio';
 import { dailyTotals } from '../utils/nutritionStats';
 import { parseNumber, clampNumber } from '../utils/helpers';
 import { formatDay, weekdayName } from '../utils/dates';
@@ -133,15 +133,30 @@ const HistoryView = memo(({
                           </span>
                         )}
                       </div>
-                      {cardio.map(c => (
-                        <div key={c.id} className="text-[11px] font-mono text-zinc-300 bg-red-950/10 p-2 rounded-xl border border-red-900/25 flex justify-between items-center">
-                          <span className="font-bold text-zinc-200 truncate pr-2">{findActivity(c.type)?.label || c.type}</span>
-                          <span className="text-zinc-400 text-[10px] shrink-0">
-                            {c.minutes} dk
-                            {latestWeight > 0 && ` · ${cardioEntryCalories(c, latestWeight)} kcal`}
-                          </span>
-                        </div>
-                      ))}
+                      {cardio.map(c => {
+                        // Planla arasındaki tempo farkı varsa gösterilir: haftalık
+                        // dengeyi bozan çoğunlukla plandan sapan şiddet oluyor.
+                        const sapma = effortDelta(c, latestWeight);
+                        return (
+                          <div key={c.id} className="text-[11px] font-mono text-zinc-300 bg-red-950/10 p-2 rounded-xl border border-red-900/25 space-y-1">
+                            <div className="flex justify-between items-center">
+                              <span className="font-bold text-zinc-200 truncate pr-2">{findActivity(c.type)?.label || c.type}</span>
+                              <span className="text-zinc-400 text-[10px] shrink-0">
+                                {c.minutes} dk
+                                {c.effort && ` · ${findEffort(c.effort).label}`}
+                                {latestWeight > 0 && ` · ${cardioEntryCalories(c, latestWeight)} kcal`}
+                              </span>
+                            </div>
+                            {sapma && (
+                              <p className={`text-[9px] ${sapma.harder ? 'text-amber-400' : 'text-cyan-400'}`}>
+                                Plan {sapma.planned.label} → gerçekleşen {sapma.actual.label}
+                                {' · '}{sapma.kcalDiff > 0 ? '+' : ''}{sapma.kcalDiff} kcal
+                                {' · yorgunluk '}{sapma.fatigueDiff > 0 ? '+' : ''}{sapma.fatigueDiff}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 

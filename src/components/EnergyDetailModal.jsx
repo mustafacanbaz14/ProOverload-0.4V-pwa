@@ -1,6 +1,6 @@
 import React, { useState, useMemo, memo } from 'react';
 import { X, Flame, CalendarDays, Table2, Sparkles, Scale, Moon, Dumbbell, ChevronDown, Footprints } from 'lucide-react';
-import { buildEnergySeries, groupByWeek, dayEnergyBreakdown, theoreticalWeek, neatMethodComparison } from '../utils/energyModel';
+import { buildEnergySeries, groupByWeek, dayEnergyBreakdown, theoreticalWeek, planVsActual, neatMethodComparison } from '../utils/energyModel';
 import { dailyTotals } from '../utils/nutritionStats';
 import { parseNumber } from '../utils/helpers';
 import { formatDay } from '../utils/dates';
@@ -34,6 +34,8 @@ const EnergyDetailModal = memo(({
   neatOpts = {},
   planDays = [],
   plannedCardioKcal = 0,
+  // Kardiyo kalorisi plandan mı geldi yoksa gerçekleşenden mi — etiket buna göre.
+  cardioIsPlanned = false,
 }) => {
   const [tab, setTab] = useState('today');
   // Tabloda açılan gün — geçmiş günün dökümünü satır altında gösterir.
@@ -61,6 +63,12 @@ const EnergyDetailModal = memo(({
   const plan = useMemo(
     () => theoreticalWeek(planDays, { maintenance, plannedCardioKcal }),
     [planDays, maintenance, plannedCardioKcal]);
+
+  // Teorik hesap tek başına "programı uyguladım mı" sorusunu cevaplamıyor;
+  // son haftanın gerçekleşeni plandaki karşılığıyla yan yana konuyor.
+  const karsilastirma = useMemo(
+    () => planVsActual(planDays, series, { maintenance, days: 7 }),
+    [planDays, series, maintenance]);
 
   if (!isOpen) return null;
 
@@ -391,7 +399,7 @@ const EnergyDetailModal = memo(({
                   {[
                     { l: `Bazal + günlük hareket (7 gün)`, v: plan.baseKcal, c: 'text-zinc-300' },
                     { l: `Ağırlık antrenmanı (${plan.trainingDays} gün)`, v: plan.liftingKcal, c: 'text-emerald-400' },
-                    { l: 'Kardiyo (bu haftaki gerçekleşen)', v: plan.cardioKcal, c: 'text-red-400' },
+                    { l: cardioIsPlanned ? 'Kardiyo (plandaki)' : 'Kardiyo (bu haftaki gerçekleşen)', v: plan.cardioKcal, c: 'text-red-400' },
                     { l: 'Toparlanma (EPOC)', v: plan.epoc, c: 'text-orange-400' },
                   ].filter(x => x.v > 0).map(x => (
                     <div key={x.l} className="flex justify-between text-zinc-500">
@@ -414,6 +422,72 @@ const EnergyDetailModal = memo(({
                   <span className="text-[9px] font-mono text-zinc-500 uppercase">Dinlenme günü</span>
                 </div>
               </div>
+
+              {/* Plan ile gerçekleşen yan yana */}
+              {karsilastirma && (
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+                  <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-950/60 flex justify-between items-baseline">
+                    <h4 className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest">Plan mı, Gerçek mi</h4>
+                    <span className="text-[9px] font-mono text-zinc-600">son {karsilastirma.days} gün</span>
+                  </div>
+
+                  <div className="p-3.5 space-y-3">
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      {[
+                        { l: 'Plana göre', v: karsilastirma.plannedTotal, c: 'text-zinc-300' },
+                        { l: 'Gerçekleşen', v: karsilastirma.actualTotal, c: 'text-emerald-400' },
+                        {
+                          l: 'Fark',
+                          v: kcal(karsilastirma.diff),
+                          c: karsilastirma.diff < 0 ? 'text-amber-400' : 'text-cyan-400',
+                        },
+                      ].map(x => (
+                        <div key={x.l} className="bg-zinc-950 border border-zinc-800 rounded-xl py-2">
+                          <span className="text-[8px] font-mono text-zinc-500 block uppercase">{x.l}</span>
+                          <span className={`text-[12px] font-mono font-bold ${x.c}`}>{x.v}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <p className="text-[10px] font-mono text-zinc-400 leading-relaxed">
+                      {karsilastirma.diff < -200 ? (
+                        <>
+                          Planladığından <strong className="text-amber-400">{Math.abs(karsilastirma.diff)} kcal</strong> az
+                          yaktın{karsilastirma.skippedDays > 0 ? ` (${karsilastirma.skippedDays} gün atlanmış)` : ''}.
+                          Alım aynı kaldıysa haftalık denge {karsilastirma.diffKg > 0 ? '+' : ''}{-karsilastirma.diffKg} kg
+                          yönünde kaydı.
+                        </>
+                      ) : karsilastirma.diff > 200 ? (
+                        <>
+                          Planın <strong className="text-cyan-400">{karsilastirma.diff} kcal</strong> üstüne
+                          çıktın{karsilastirma.extraDays > 0 ? ` (${karsilastirma.extraDays} gün planda olmayan egzersiz)` : ''}.
+                          Kesme dönemindeysen iyi, kütle döneminde alımı da yukarı çekmen gerekir.
+                        </>
+                      ) : (
+                        <>Gerçekleşen harcama planla uyumlu — sapma {Math.abs(karsilastirma.diff)} kcal.</>
+                      )}
+                    </p>
+
+                    <div className="space-y-1">
+                      {karsilastirma.rows.map(r => (
+                        <div key={r.date} className="flex justify-between items-center text-[10px] font-mono gap-2">
+                          <span className="text-zinc-400 truncate min-w-0">
+                            {dateShort(r.date)}
+                            {r.planName && <span className="text-zinc-600"> · {r.planName}</span>}
+                          </span>
+                          <span className="shrink-0 flex items-center gap-1.5">
+                            <span className="text-zinc-600">{r.plannedTotal}</span>
+                            <span className="text-zinc-700">→</span>
+                            <span className="text-zinc-200">{r.actualTotal}</span>
+                            {r.skipped && <span className="text-amber-500 text-[9px]">atlandı</span>}
+                            {r.extra && <span className="text-cyan-500 text-[9px]">ekstra</span>}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <p className="text-[9px] font-mono text-zinc-600 leading-relaxed px-1">
                 Aradaki fark <strong className="text-zinc-400">{plan.trainingDayKcal - plan.restDayKcal} kcal</strong>.
