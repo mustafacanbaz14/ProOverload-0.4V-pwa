@@ -35,3 +35,6 @@ pnpm-debug.log*
 
 # Kişisel notlar
 notlar-yedek.txt
+
+# filter-branch artığı — depoya girmemeli
+.git-rewrite/
