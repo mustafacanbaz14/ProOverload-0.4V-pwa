@@ -1,8 +1,9 @@
 import React, { memo } from 'react';
-import { X, Zap, Clock, Layers, Link2 } from 'lucide-react';
+import { X, Zap, Clock, Layers, Link2, Flame } from 'lucide-react';
 import { getVolumeLandmarks } from '../utils/constants';
 import { previewTemplateVolume, estimateDuration } from '../utils/templates';
 import { isWorkingSet } from '../utils/helpers';
+import { estimateLiftingCalories } from '../utils/cardio';
 import MuscleHeatmap from './MuscleHeatmap';
 
 const TemplatePreviewModal = memo(({
@@ -13,11 +14,13 @@ const TemplatePreviewModal = memo(({
   restSeconds = 120,
   onStart,
   experienceLevel = 'intermediate',
+  weightKg = 0,
 }) => {
   if (!isOpen || !template) return null;
 
   const { byMuscle, totalSets, exercises } = previewTemplateVolume(template.exercises, customExercises);
   const minutes = estimateDuration(template.exercises, restSeconds);
+  const kcal = estimateLiftingCalories(minutes, weightKg);
 
   // En çok yüklenen kaslar üstte
   const ranked = Object.entries(byMuscle).sort((a, b) => b[1] - a[1]);
@@ -45,11 +48,13 @@ const TemplatePreviewModal = memo(({
         <div className="flex-1 overflow-y-auto hide-scrollbar p-4 space-y-4">
 
           {/* Özet */}
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-4 gap-2">
             {[
               { icon: <Clock size={13} className="text-emerald-400" />, label: 'Süre', value: `~${minutes} dk` },
               { icon: <Layers size={13} className="text-cyan-400" />, label: 'Set', value: totalSets },
               { icon: <Zap size={13} className="text-amber-400" />, label: 'Hareket', value: exercises },
+              // Kalori kiloya bağlı; ölçüm girilmemişse tahmin üretilmez.
+              { icon: <Flame size={13} className="text-red-400" />, label: 'Kalori', value: kcal > 0 ? `~${kcal}` : '—' },
             ].map(item => (
               <div key={item.label} className="bg-zinc-950 border border-zinc-800 rounded-xl py-2.5 text-center">
                 <div className="flex justify-center mb-1">{item.icon}</div>

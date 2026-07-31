@@ -5,6 +5,7 @@ import { parseNumber, clampNumber, INPUT_LIMITS } from '../utils/helpers';
 import MeasurementGuide from './MeasurementGuide';
 import GoalsCard from './GoalsCard';
 import { computeBMI, BMI_STATUS_COLOR } from '../utils/goals';
+import { formatDay } from '../utils/dates';
 
 // Kaliper ölçüm noktaları. 3 bölge yöntemi cinsiyete göre farklı noktalar kullanır,
 // 7 bölge yönteminde hepsi girilir.
@@ -129,6 +130,7 @@ const MetricsView = memo(({
           onChange={(e) => (onDateChange ? onDateChange(e.target.value) : updateField('date', e.target.value))}
           className={inputClass}
         />
+        <p className="text-[10px] font-mono font-bold text-cyan-500/80">{formatDay(form.date, 'long')}</p>
         <p className="text-[10px] font-mono text-zinc-500 leading-relaxed">
           {isExistingRecord
             ? 'Bu tarihte kayıt var — kaydettiğinde üzerine yazılır.'

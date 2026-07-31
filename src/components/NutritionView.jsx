@@ -5,6 +5,8 @@ import { dailyTotals } from '../utils/nutritionStats';
 import { dayWorkoutCalories } from '../utils/cardio';
 import { calorieDashboard, recommendedCalories } from '../utils/goals';
 import CalorieBalanceCard from './CalorieBalanceCard';
+import { formatDay, weekdayName } from '../utils/dates';
+import { dayMindCalories } from '../utils/wellness';
 
 const NutritionView = memo(({
   currentNutritionForm,
@@ -20,6 +22,7 @@ const NutritionView = memo(({
   adaptiveTDEE,
   workouts = [],
   latestWeight = 0,
+  wellness = [],
   maintenanceCalories = 0,
   onOpenEnergyDetail,
 }) => {
@@ -93,13 +96,17 @@ const NutritionView = memo(({
 
   const calorieData = calorieDashboard({
     intake: totals.calories,
-    burnedAuto: dayWorkoutCalories(workouts, currentNutritionForm.date, latestWeight).total,
+    // Meditasyon/esneme de yakıma dahil: küçük ama Toparlanma ekranında
+    // gösterilen sayıyla panonun tutması gerekiyor.
+    burnedAuto: dayWorkoutCalories(workouts, currentNutritionForm.date, latestWeight).total
+      + dayMindCalories(wellness, currentNutritionForm.date, latestWeight),
     burnedManual: currentNutritionForm.activeCaloriesOut,
     maintenance: maintenanceCalories,
     targetIntake: recommended?.target,
     weekIntakes: recent7Days.map(n => dailyTotals(n).calories),
     weekBurned: recent7Days.reduce((sum, n) =>
       sum + dayWorkoutCalories(workouts, n.date, latestWeight).total
+      + dayMindCalories(wellness, n.date, latestWeight)
       + parseNumber(n.activeCaloriesOut), 0),
   });
   const weeklyAvg = (() => {
@@ -198,6 +205,10 @@ const NutritionView = memo(({
               onChange={(e) => handleNutritionDateChange(e.target.value)}
               className="bg-zinc-950 border border-zinc-800 rounded-xl px-2 py-1 text-zinc-300 font-mono text-[11px] outline-none"
             />
+            {/* Tarih girdisi haftanın gününü göstermiyor; yanına ayrıca yazılıyor. */}
+            <span className="text-[10px] font-mono font-bold text-cyan-500/80 shrink-0">
+              {weekdayName(currentNutritionForm.date)}
+            </span>
           </div>
         </div>
 
@@ -257,7 +268,7 @@ const NutritionView = memo(({
       {/* Kalori panosu: gün ve hafta ölçeğinde tek bakışta durum. */}
       <CalorieBalanceCard
         data={calorieData}
-        dateLabel={currentNutritionForm.date}
+        dateLabel={formatDay(currentNutritionForm.date, 'medium')}
         goalLabel={recommended?.label}
         manualValue={currentNutritionForm.activeCaloriesOut}
         onChangeManual={(v) => setCurrentNutritionForm(prev => ({ ...prev, activeCaloriesOut: v }))}

@@ -4,6 +4,8 @@ import { calcTonnage, calcEffectiveSets, isWorkingSet } from '../utils/helpers';
 import { findActivity, cardioEntryCalories, totalCardioCalories, dayWorkoutCalories } from '../utils/cardio';
 import { dailyTotals } from '../utils/nutritionStats';
 import { parseNumber, clampNumber } from '../utils/helpers';
+import { formatDay, weekdayName } from '../utils/dates';
+import { dayMindCalories } from '../utils/wellness';
 
 // Listeler App tarafından tarihe göre azalan sırada verilir (en yeni en üstte).
 // Burada tekrar sıralama veya ters çevirme yapılmaz.
@@ -21,6 +23,7 @@ const HistoryView = memo(({
   handleEditNutrition,
   handleSaveAsTemplate,
   latestWeight = 0,
+  wellness = [],
   maintenanceCalories = 0,
   onUpdateNutrition,
 }) => {
@@ -70,6 +73,9 @@ const HistoryView = memo(({
                           onChange={(e) => handleEditOldWorkoutDate(w.id, e.target.value)}
                           className="bg-transparent text-zinc-400 font-mono outline-none border-b border-dashed border-zinc-700 focus:border-cyan-500 text-[10px]"
                         />
+                        {/* Tarih girdisi gün adını göstermiyor; program takibinde
+                            asıl bilgi o olduğu için yanına ayrıca yazılıyor. */}
+                        <span className="text-cyan-500/80 font-bold">{weekdayName(w.date)}</span>
                       </div>
                     </div>
                     <div className="flex items-center shrink-0">
@@ -169,7 +175,7 @@ const HistoryView = memo(({
                 <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
                   <div className="flex items-center space-x-2">
                     <Scale size={14} className="text-cyan-400" />
-                    <span className="text-xs font-bold text-zinc-200 font-mono">{m.date}</span>
+                    <span className="text-xs font-bold text-zinc-200 font-mono">{formatDay(m.date, 'medium', { year: true })}</span>
                   </div>
                   <div className="flex items-center shrink-0">
                     <button onClick={() => handleEditMetric?.(m)} title="Bu ölçümü düzenle" className="text-zinc-500 active:text-cyan-400 p-2">
@@ -210,7 +216,7 @@ const HistoryView = memo(({
                   <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
                     <div className="flex items-center space-x-2 min-w-0">
                       <Beef size={14} className="text-cyan-400 shrink-0" />
-                      <span className="text-xs font-bold text-zinc-200 font-mono">{n.date}</span>
+                      <span className="text-xs font-bold text-zinc-200 font-mono">{formatDay(n.date, 'medium', { year: true })}</span>
                       <span className="text-[9px] font-mono text-zinc-600 uppercase shrink-0">
                         {isDaily ? 'günlük toplam' : `${(n.meals || []).length} öğün`}
                       </span>
@@ -235,8 +241,9 @@ const HistoryView = memo(({
                       otomatik gelir; elle eklenen kısım burada düzenlenebilir. */}
                   {(() => {
                     const auto = dayWorkoutCalories(workouts, n.date, latestWeight);
+                    const zihin = dayMindCalories(wellness, n.date, latestWeight);
                     const manual = parseNumber(n.activeCaloriesOut);
-                    const burned = auto.total + manual;
+                    const burned = auto.total + zihin + manual;
                     const balance = maintenanceCalories > 0
                       ? Math.round(t.calories - burned - maintenanceCalories)
                       : null;

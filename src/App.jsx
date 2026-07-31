@@ -49,8 +49,11 @@ import TemplateBuilderModal from './components/TemplateBuilderModal';
 import CardioModal from './components/CardioModal';
 import EnergyDetailModal from './components/EnergyDetailModal';
 import ToolsModal from './components/ToolsModal';
+import WellnessModal from './components/WellnessModal';
 import PRCelebration from './components/PRCelebration';
 import WeeklyPlanModal from './components/WeeklyPlanModal';
+import { formatDay } from './utils/dates';
+import { emptyWellnessDay, dayMindCalories, computeSleepScore } from './utils/wellness';
 
 export default function App() {
   const [initial] = useState(loadPersistedState);
@@ -88,6 +91,7 @@ export default function App() {
   const [isToolsOpen, setIsToolsOpen] = useState(false);
   const [prCelebration, setPrCelebration] = useState(null);
   const [isWeekPlanOpen, setIsWeekPlanOpen] = useState(false);
+  const [isWellnessOpen, setIsWellnessOpen] = useState(false);
   // Kütüphaneden "yeni hareket" ile gelindiğinde kapanışta oraya dönülür.
   const [pickerReturnsToLibrary, setPickerReturnsToLibrary] = useState(false);
 
@@ -98,6 +102,8 @@ export default function App() {
   const [newExMechanics, setNewExMechanics] = useState('Push');
 
   const [settings, setSettings] = useState(initial.settings);
+  // Uyku ve meditasyon/esneme: tarih başına tek kayıt.
+  const [wellness, setWellness] = useState(initial.wellness);
   const [metricsHistory, setMetricsHistory] = useState(initial.metricsHistory);
   const [currentMetricsForm, setCurrentMetricsForm] = useState(initial.currentMetricsForm);
 
@@ -153,6 +159,7 @@ export default function App() {
   useEffect(() => { persist('active_workout', activeWorkout); }, [activeWorkout, persist]);
   useEffect(() => { persist('metrics', metricsHistory); }, [metricsHistory, persist]);
   useEffect(() => { persist('nutrition', nutritionHistory); }, [nutritionHistory, persist]);
+  useEffect(() => { persist('wellness', wellness); }, [wellness, persist]);
   useEffect(() => { persist('settings', settings); }, [settings, persist]);
 
   // Tema kök elemana yazılır; CSS değişkenleri oradan devralınıyor.
@@ -537,6 +544,23 @@ export default function App() {
     }));
   }, []);
 
+  /**
+   * Hareketi bir sıra yukarı/aşağı taşır.
+   *
+   * Aynı state üzerinden çalıştığı için hem aktif antrenmanda hem de geçmiş bir
+   * antrenmanı düzenlerken (isEditingOld) geçerli — ikisi de activeWorkout.
+   */
+  const moveExercise = useCallback((exerciseId, direction) => {
+    setActiveWorkout(prev => {
+      const list = [...(prev?.exercises || [])];
+      const from = list.findIndex(e => e.id === exerciseId);
+      const to = from + direction;
+      if (from < 0 || to < 0 || to >= list.length) return prev;
+      [list[from], list[to]] = [list[to], list[from]];
+      return { ...prev, exercises: list };
+    });
+  }, []);
+
   const removeSet = useCallback((exerciseId, setId) => {
     setActiveWorkout(prev => ({ ...prev, exercises: (prev?.exercises || []).map(ex => ex.id === exerciseId ? { ...ex, sets: (ex.sets || []).filter(s => s.id !== setId) } : ex) }));
   }, []);
@@ -597,7 +621,7 @@ export default function App() {
         elapsedSeconds: elapsed,
         exerciseName: active?.name || '',
         previousSets: (history?.sets || []).filter(isWorkingSet),
-        previousDate: history ? new Date(history.date).toLocaleDateString('tr-TR') : '',
+        previousDate: history ? formatDay(history.date, 'numeric') : '',
         effectiveSets: calcEffectiveSets(exercises),
         isPaused: workout.timer?.status !== 'running',
         restSecondsLeft: secondsLeft,
@@ -633,8 +657,24 @@ export default function App() {
 
 
   const handleStartRequest = useCallback((templateOrWorkout = null) => {
-    setPreWorkoutModal({ template: templateOrWorkout });
-  }, []);
+    // Uyku zaten Toparlanma ekranında ölçülmüşse aynı şeyi iki kez sormanın
+    // anlamı yok: 100'lük puan 1-10 ölçeğine indirilip form önceden dolduruluyor.
+    // Kullanıcı yine de kaydırıcıyla değiştirebilir.
+    const bugun = getLocalDateString();
+    const gece = wellness.find(r => r.date === bugun)?.sleep;
+    const oncekiler = wellness
+      .filter(r => r.date < bugun && r.sleep)
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .map(r => r.sleep);
+    const uyku = gece ? computeSleepScore(gece, oncekiler) : null;
+    if (uyku) {
+      setReadinessForm(prev => ({
+        ...prev,
+        sleep: Math.min(10, Math.max(1, Math.round(uyku.score / 10))),
+      }));
+    }
+    setPreWorkoutModal({ template: templateOrWorkout, sleepScore: uyku?.score ?? null });
+  }, [wellness]);
 
   const confirmStartWorkout = () => {
     const template = preWorkoutModal?.template;
@@ -951,11 +991,28 @@ export default function App() {
     }
   }, [pickerReturnsToLibrary]);
 
+  /**
+   * Bir günün uyku/zihin kaydını günceller.
+   *
+   * Kayıt yoksa o anda üretilir: kullanıcı tarihi seçip doğrudan yazmaya
+   * başlayabilsin diye önce "gün oluştur" adımı istenmiyor.
+   */
+  const handleUpdateWellnessDay = useCallback((date, updater) => {
+    setWellness(prev => {
+      const mevcut = prev.find(r => r.date === date);
+      const taban = mevcut || emptyWellnessDay(date, generateId());
+      const yeni = updater(taban);
+      return mevcut
+        ? prev.map(r => r.date === date ? yeni : r)
+        : [...prev, yeni];
+    });
+  }, []);
+
   const handleExportData = () => {
     const backup = {
       version: pkg.version,
       exportedAt: new Date().toISOString(),
-      workouts, templates, customExercises, customFoods, metricsHistory, nutritionHistory, settings
+      workouts, templates, customExercises, customFoods, metricsHistory, nutritionHistory, wellness, settings
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -1103,9 +1160,16 @@ export default function App() {
 
   // Modal her gün için ayrı ayrı soruyor; kilo ve antrenman listesi sabit
   // olduğu için tek bir fonksiyon yeterli.
+  // Meditasyon/esneme de dinlenmenin üstünde bir harcama; küçük ama gerçek.
+  // Kalori panosu ile Toparlanma ekranı aynı sayıyı göstersin diye burada
+  // toplanıyor.
   const dayCaloriesFor = useCallback(
-    (dateStr) => dayWorkoutCalories(workouts, dateStr, latestWeight),
-    [workouts, latestWeight]);
+    (dateStr) => {
+      const w = dayWorkoutCalories(workouts, dateStr, latestWeight);
+      const zihin = dayMindCalories(wellness, dateStr, latestWeight);
+      return { ...w, mind: zihin, total: w.total + zihin };
+    },
+    [workouts, latestWeight, wellness]);
 
   // Olculen TDEE o donemin ORTALAMA egzersizini zaten iceriyor; NEAT artigindan
   // dusulmezse antrenman kalorisi iki kez sayilir.
@@ -1303,6 +1367,7 @@ export default function App() {
               adaptiveTDEE={adaptiveTDEE}
               workouts={workouts}
               latestWeight={latestWeight}
+              wellness={wellness}
               maintenanceCalories={maintenanceCalories}
               onOpenEnergyDetail={() => setIsEnergyDetailOpen(true)}
             />
@@ -1346,6 +1411,7 @@ export default function App() {
               handleEditNutrition={handleEditNutrition}
               handleSaveAsTemplate={handleSaveAsTemplate}
               latestWeight={latestWeight}
+              wellness={wellness}
               maintenanceCalories={maintenanceCalories}
               onUpdateNutrition={handleUpdateNutritionField}
             />
@@ -1372,6 +1438,7 @@ export default function App() {
               onSaveAsTemplate={() => handleSaveAsTemplate(null)}
               onToggleSuperset={handleToggleSuperset}
               onEditExercise={setEditorExercise}
+              onMoveExercise={moveExercise}
               onOpenCardio={() => setIsCardioOpen(true)}
               cardioKcal={totalCardioCalories(activeWorkout.cardio || [], latestWeight)}
               rest={rest}
@@ -1403,7 +1470,7 @@ export default function App() {
         <QRCodeModal
           isOpen={isQRModalOpen}
           onClose={() => setIsQRModalOpen(false)}
-          fullData={{ workouts, templates, customExercises, customFoods, metricsHistory, nutritionHistory, settings }}
+          fullData={{ workouts, templates, customExercises, customFoods, metricsHistory, nutritionHistory, wellness, settings }}
           onImportData={handleImportData}
         />
 
@@ -1447,6 +1514,7 @@ export default function App() {
           customExercises={customExercises}
           restSeconds={settings.restSeconds}
           experienceLevel={settings.experienceLevel}
+          weightKg={latestWeight}
           onStart={(t) => handleStartRequest(t)}
         />
 
@@ -1489,6 +1557,7 @@ export default function App() {
           customExercises={customExercises}
           restSeconds={settings.restSeconds}
           experienceLevel={settings.experienceLevel}
+          weightKg={latestWeight}
           libraryProps={{
             allExerciseNames: allExercisesNames,
             getContributions: getExerciseContributions,
@@ -1514,6 +1583,16 @@ export default function App() {
         {/* REKOR KUTLAMASI */}
         <PRCelebration record={prCelebration} onDone={() => setPrCelebration(null)} />
 
+        {/* UYKU / MEDİTASYON & ESNEME */}
+        <WellnessModal
+          isOpen={isWellnessOpen}
+          onClose={() => setIsWellnessOpen(false)}
+          records={wellness}
+          todayStr={getLocalDateString()}
+          weightKg={latestWeight}
+          onUpdateDay={handleUpdateWellnessDay}
+        />
+
         {/* ARAÇLAR */}
         <ToolsModal
           isOpen={isToolsOpen}
@@ -1529,6 +1608,8 @@ export default function App() {
               compare: () => setIsComparisonOpen(true),
               guide: () => setIsMeasurementGuideOpen(true),
               report: () => setIsReportCardOpen(true),
+              wellness: () => setIsWellnessOpen(true),
+              sleep: () => setIsWellnessOpen(true),
             }[key];
             ac?.();
           }}
@@ -1590,7 +1671,13 @@ export default function App() {
               <h3 className="text-sm font-bold text-zinc-100 mb-2 uppercase tracking-wide border-b border-zinc-800 pb-3 flex items-center">
                 <BrainCircuit size={16} className="mr-2 text-cyan-500" /> Hazırbulunuşluk
               </h3>
-              <p className="text-[11px] text-zinc-400 mb-6 mt-2 leading-tight">Yüklenme şiddetini ve sakatlık riskini hesaplayabilmemiz için bugünkü mental ve fiziksel toparlanmanızı puanlayın.</p>
+              <p className="text-[11px] text-zinc-400 mb-4 mt-2 leading-tight">Yüklenme şiddetini ve sakatlık riskini hesaplayabilmemiz için bugünkü mental ve fiziksel toparlanmanızı puanlayın.</p>
+
+              {preWorkoutModal.sleepScore !== null && preWorkoutModal.sleepScore !== undefined && (
+                <p className="text-[10px] font-mono text-cyan-400 bg-cyan-950/20 border border-cyan-900/40 rounded-xl px-3 py-2 mb-4 leading-relaxed">
+                  Uyku alanı bu gecenin uyku puanından ({preWorkoutModal.sleepScore}/100) dolduruldu — istersen değiştir.
+                </p>
+              )}
 
               <div className="space-y-4 mb-5">
                 {READINESS_FIELDS.map(f => (

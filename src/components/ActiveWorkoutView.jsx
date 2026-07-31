@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { Activity, Pause, Play, Plus, X, Trash2, Trophy, TrendingUp, AlertCircle, Save, Timer, Layers, Link2, Unlink, BookmarkPlus, Settings, HeartPulse } from 'lucide-react';
+import { Activity, Pause, Play, Plus, X, Trash2, Trophy, TrendingUp, AlertCircle, Save, Timer, Layers, Link2, Unlink, BookmarkPlus, Settings, HeartPulse, ArrowUp, ArrowDown } from 'lucide-react';
 import WorkoutTimer from './WorkoutTimer';
 import { FORM_RATINGS, SET_TYPES } from '../utils/constants';
 import {
@@ -7,6 +7,8 @@ import {
   isWarmupSet, isWorkingSet, parseNumber, estimate1RM,
   suggestNextTarget, detectMuscleGroup, clampNumber, INPUT_LIMITS
 } from '../utils/helpers';
+import { formatDay } from '../utils/dates';
+import { READINESS_FIELDS, READINESS_ZONES } from '../utils/readiness';
 
 const ActiveWorkoutView = memo(({
   activeWorkout,
@@ -31,6 +33,7 @@ const ActiveWorkoutView = memo(({
   cardioKcal = 0,
   onToggleSuperset,
   onEditExercise,
+  onMoveExercise,
 }) => {
   if (!activeWorkout) return null;
 
@@ -83,21 +86,37 @@ const ActiveWorkoutView = memo(({
 
       {/* Ana İçerik: Egzersizler ve Setler */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 hide-scrollbar pb-32">
-        {activeWorkout.readiness && !activeWorkout.isEditingOld && (
-          <div className="bg-zinc-900 p-3 rounded-xl border border-zinc-800 flex justify-between items-center">
-            <div>
-              <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-1">Toparlanma Skoru</div>
-              <div className="flex space-x-3 text-[11px] font-mono">
-                <span className="text-blue-400">Uyku: {activeWorkout.readiness.sleep}/5</span>
-                <span className="text-orange-400">Stres: {activeWorkout.readiness.stress}/5</span>
-                <span className="text-red-400">Ağrı: {activeWorkout.readiness.soreness}/5</span>
+        {activeWorkout.readiness && !activeWorkout.isEditingOld && (() => {
+          // Skor kayıt anında hesaplanıp saklanıyor; burada yalnızca gösterilir.
+          // Bölge anahtarı da kayıtta var, yoksa skordan yeniden bulunur.
+          const r = activeWorkout.readiness;
+          const zone = READINESS_ZONES.find(z => z.key === r.zone)
+            || READINESS_ZONES.find(z => parseNumber(r.score) >= z.min)
+            || READINESS_ZONES[READINESS_ZONES.length - 1];
+          return (
+            <div className={`p-3 rounded-xl border ${zone.bg}`}>
+              <div className="flex justify-between items-center">
+                <div className="min-w-0">
+                  <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-1">Hazır Oluşluk</div>
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] font-mono">
+                    {READINESS_FIELDS.map(f => (
+                      <span key={f.key} className={f.color}>
+                        {f.label.split(' ')[0]}: {r[f.key] ?? '—'}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="text-right shrink-0 pl-2">
+                  <span className={`text-lg font-mono font-bold block ${zone.text}`}>{r.score}</span>
+                  <span className={`text-[9px] font-bold uppercase tracking-widest ${zone.text}`}>{zone.label}</span>
+                </div>
               </div>
+              <p className="text-[10px] font-mono text-zinc-400 leading-relaxed mt-2 pt-2 border-t border-zinc-800/60">
+                {zone.advice}
+              </p>
             </div>
-            <div className={`text-lg font-mono font-bold ${activeWorkout.readiness.score < 9 ? 'text-red-500' : activeWorkout.readiness.score < 12 ? 'text-yellow-500' : 'text-emerald-500'}`}>
-              {activeWorkout.readiness.score}/15
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {(activeWorkout.exercises || []).length === 0 && (
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 text-center space-y-3 my-4">
@@ -132,6 +151,26 @@ const ActiveWorkoutView = memo(({
                   <span className="truncate">{ex.name}</span>
                 </h3>
                 <div className="flex items-center shrink-0">
+                  {/* Sıralama: hareketi listede yukarı/aşağı taşır. Uçtaki
+                      hareket için buton pasif kalır ki sıra sessizce bozulmasın. */}
+                  <button
+                    onClick={() => onMoveExercise?.(ex.id, -1)}
+                    disabled={exIndex === 0}
+                    title="Yukarı taşı"
+                    aria-label="Hareketi yukarı taşı"
+                    className="p-1.5 text-zinc-600 active:text-cyan-400 disabled:opacity-25 disabled:active:text-zinc-600"
+                  >
+                    <ArrowUp size={13} />
+                  </button>
+                  <button
+                    onClick={() => onMoveExercise?.(ex.id, 1)}
+                    disabled={exIndex === (activeWorkout.exercises || []).length - 1}
+                    title="Aşağı taşı"
+                    aria-label="Hareketi aşağı taşı"
+                    className="p-1.5 text-zinc-600 active:text-cyan-400 disabled:opacity-25 disabled:active:text-zinc-600"
+                  >
+                    <ArrowDown size={13} />
+                  </button>
                   <button
                     onClick={() => onToggleSuperset?.(ex.id)}
                     title={ex.supersetId ? 'Süperset bağını kaldır' : 'Sonraki hareketle süperset yap'}
@@ -191,7 +230,7 @@ const ActiveWorkoutView = memo(({
 
               {recentData && (
                 <div className="bg-cyan-950/20 px-3 py-1.5 border-b border-zinc-800 text-[10px] text-cyan-500/70 font-mono flex gap-3 overflow-x-auto hide-scrollbar items-center">
-                  <span className="text-cyan-600 font-bold shrink-0">Geçen ({new Date(recentData.date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}):</span>
+                  <span className="text-cyan-600 font-bold shrink-0">Geçen ({formatDay(recentData.date)}):</span>
                   {recentData.sets.map((s, i) => (
                     <span key={i} className="shrink-0">{s.weight}x{s.reps} {s.rir !== '' && s.rir !== undefined && `(RIR:${s.rir})`}</span>
                   ))}

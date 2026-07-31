@@ -381,6 +381,7 @@ export const loadPersistedState = () => {
     mealTemplates: loadWithFallback(keys('meal_templates'), []),
     dayTemplates: loadWithFallback(keys('day_templates'), []),
     activeWorkout: loadWithFallback(keys('active_workout'), null),
+    wellness: loadWithFallback(keys('wellness'), []),
     metricsHistory,
     currentMetricsForm,
     nutritionHistory,

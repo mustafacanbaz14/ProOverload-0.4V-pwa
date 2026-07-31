@@ -1,6 +1,7 @@
 import React, { memo } from 'react';
 import { X, Target, Calendar } from 'lucide-react';
 import { getVolumeLandmarks, volumeStatusOf, VOLUME_STATUS } from '../utils/constants';
+import { formatDay } from '../utils/dates';
 
 const WEIGHT_LABEL = {
   1: 'Birincil',
@@ -96,7 +97,7 @@ const MuscleDetailModal = memo(({ isOpen, onClose, muscle, total = 0, breakdown 
                     {item.dates?.length > 0 && (
                       <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-zinc-900 text-[9px] font-mono text-zinc-600">
                         <Calendar size={9} />
-                        {item.dates.map(d => new Date(d).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })).join(' · ')}
+                        {item.dates.map(d => formatDay(d)).join(' · ')}
                       </div>
                     )}
                   </div>

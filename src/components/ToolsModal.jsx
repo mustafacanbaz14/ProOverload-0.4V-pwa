@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import {
-  X, Wrench, Dumbbell, CalendarPlus, CalendarRange, HeartPulse,
-  Trophy, Flame, Calculator, ArrowRightLeft, Ruler,
+  X, Wrench, Brain, Dumbbell, CalendarPlus, CalendarRange, HeartPulse,
+  Trophy, Flame, Calculator, ArrowRightLeft, Ruler, Moon,
 } from 'lucide-react';
 
 /**
@@ -30,6 +30,13 @@ const GROUPS = [
     items: [
       { key: 'cardio', label: 'Kardiyo Ekle', hint: '37 aktivite, MET tabanlı kalori', icon: HeartPulse, color: 'text-red-400' },
       { key: 'energy', label: 'Kalori Detayı', hint: 'Gün gün, hafta hafta harcama dökümü', icon: Flame, color: 'text-red-400' },
+    ],
+  },
+  {
+    title: 'Toparlanma',
+    items: [
+      { key: 'wellness', label: 'Uyku Takibi', hint: 'Yatış/uyanış saati, 100 üzerinden puan', icon: Moon, color: 'text-purple-400' },
+      { key: 'wellness', label: 'Meditasyon & Esneme', hint: 'Günlük, haftalık, aylık log', icon: Brain, color: 'text-cyan-400' },
     ],
   },
   {

@@ -8,6 +8,7 @@ import {
   buildNutritionSeries, averageOverDays, macroSplit, proteinPerKg, adherenceStats
 } from '../utils/nutritionStats';
 import { energyBalanceAdvice, recommendedCalories } from '../utils/goals';
+import { formatDay } from '../utils/dates';
 
 // Beslenme grafiğinde izlenebilecek alanlar.
 const NUTRITION_METRICS = [
@@ -66,7 +67,7 @@ const AnalyticsView = memo(({
         let val = 0;
         if (bodyMetricKey === 'weight') val = parseNumber(m.weight);
         else val = parseNumber(m.measurements?.[bodyMetricKey]);
-        return { val, label: new Date(m.date).toLocaleDateString('tr-TR', { month: 'short', day: 'numeric' }) };
+        return { val, label: formatDay(m.date) };
       })
       .filter(d => d.val > 0);
 
@@ -79,7 +80,7 @@ const AnalyticsView = memo(({
       if (smoothed.length >= 2) {
         chartData = smoothed.map(p => ({
           val: p.value,
-          label: new Date(p.date).toLocaleDateString('tr-TR', { month: 'short', day: 'numeric' })
+          label: formatDay(p.date)
         }));
       }
     }
@@ -96,7 +97,7 @@ const AnalyticsView = memo(({
         if (e1rm > max1RM) max1RM = e1rm;
       });
       if (max1RM > 0) {
-        chartData.push({ val: max1RM, label: new Date(w.date).toLocaleDateString('tr-TR', { month: 'short', day: 'numeric' }) });
+        chartData.push({ val: max1RM, label: formatDay(w.date) });
       }
     });
   }
@@ -128,7 +129,7 @@ const AnalyticsView = memo(({
       .slice(-12)
       .map(([date, total]) => ({
         val: Math.round(total * 4) / 4,
-        label: new Date(date).toLocaleDateString('tr-TR', { month: 'short', day: 'numeric' })
+        label: formatDay(date)
       }));
   }
 
@@ -176,7 +177,7 @@ const AnalyticsView = memo(({
     const recent = nutritionSeries.slice(-30);
     let chart = recent.map(d => ({
       val: Math.round(d[metric.key]),
-      label: new Date(d.date).toLocaleDateString('tr-TR', { month: 'short', day: 'numeric' }),
+      label: formatDay(d.date),
     }));
 
     // Günlük değerler oynak; karar 7 günlük ortalamadan verilir.
@@ -186,7 +187,7 @@ const AnalyticsView = memo(({
       if (smoothed.length >= 2) {
         chart = smoothed.map(p => ({
           val: Math.round(p.value),
-          label: new Date(p.date).toLocaleDateString('tr-TR', { month: 'short', day: 'numeric' }),
+          label: formatDay(p.date),
         }));
       }
     }
@@ -650,7 +651,7 @@ const AnalyticsView = memo(({
                         return (
                           <tr key={d.date} className="border-t border-zinc-800/70">
                             <td className="text-left px-3 py-2 text-zinc-400 whitespace-nowrap">
-                              {new Date(d.date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}
+                              {formatDay(d.date)}
                             </td>
                             <td className={`text-right px-2 py-2 font-bold ${kcalColor}`}>{Math.round(d.calories)}</td>
                             <td className="text-right px-2 py-2 text-emerald-400/80">{Math.round(d.protein)}</td>

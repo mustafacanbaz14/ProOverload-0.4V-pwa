@@ -1,8 +1,9 @@
 import React, { useState, memo } from 'react';
-import { X, Plus, Trash2, Save, Clock, Layers, Calendar, ChevronUp, ChevronDown } from 'lucide-react';
+import { X, Plus, Trash2, Save, Clock, Layers, Calendar, ChevronUp, ChevronDown, ArrowUp, ArrowDown, Flame } from 'lucide-react';
 import { getVolumeLandmarks } from '../utils/constants';
 import { previewTemplateVolume, estimateDuration } from '../utils/templates';
 import { generateId } from '../utils/helpers';
+import { estimateLiftingCalories } from '../utils/cardio';
 import ExerciseLibraryModal from './ExerciseLibraryModal';
 
 const DAY_NAMES = ['1. Gün', '2. Gün', '3. Gün', '4. Gün', '5. Gün', '6. Gün', '7. Gün'];
@@ -27,6 +28,7 @@ const TemplateBuilderModal = memo(({
   customExercises = [],
   restSeconds = 120,
   experienceLevel = 'intermediate',
+  weightKg = 0,
   libraryProps = {},
 }) => {
   const [programName, setProgramName] = useState(editing?.name || '');
@@ -60,10 +62,18 @@ const TemplateBuilderModal = memo(({
   const { byMuscle, totalSets } = previewTemplateVolume(toExercises(day), customExercises);
   // Boş günde "~1 dk" saçma görünüyor; süre ancak set varsa anlamlı.
   const minutes = totalSets > 0 ? estimateDuration(toExercises(day), restSeconds) : 0;
+  const kcal = estimateLiftingCalories(minutes, weightKg);
   const ranked = Object.entries(byMuscle).sort((a, b) => b[1] - a[1]);
   const maxVol = ranked.length ? ranked[0][1] : 1;
 
   const updateDay = (patch) => setDays(prev => prev.map((d, i) => i === activeDay ? { ...d, ...patch } : d));
+  const moveExercise = (index, direction) => {
+    const to = index + direction;
+    if (to < 0 || to >= day.exercises.length) return;
+    const list = [...day.exercises];
+    [list[index], list[to]] = [list[to], list[index]];
+    updateDay({ exercises: list });
+  };
   const setExerciseSets = (uid, n) => updateDay({
     exercises: day.exercises.map(ex => ex.uid === uid ? { ...ex, sets: Math.max(1, Math.min(12, n)) } : ex)
   });
@@ -127,7 +137,7 @@ const TemplateBuilderModal = memo(({
       <div className="flex-1 overflow-y-auto hide-scrollbar p-3 space-y-3 pb-safe">
 
         {/* Gün özeti */}
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl py-2.5 text-center">
             <Clock size={13} className="text-emerald-400 mx-auto mb-1" />
             <span className="text-sm font-mono font-bold text-zinc-100 block">~{minutes} dk</span>
@@ -135,6 +145,15 @@ const TemplateBuilderModal = memo(({
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl py-2.5 text-center">
             <Layers size={13} className="text-cyan-400 mx-auto mb-1" />
             <span className="text-sm font-mono font-bold text-zinc-100 block">{totalSets} set</span>
+          </div>
+          {/* Kalori tahmini kiloya bağlı; ölçüm yoksa sayı uydurmak yerine
+              boş bırakılır. */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl py-2.5 text-center">
+            <Flame size={13} className="text-red-400 mx-auto mb-1" />
+            <span className="text-sm font-mono font-bold text-zinc-100 block">
+              {kcal > 0 ? `~${kcal}` : '—'}
+              <span className="text-[9px] text-zinc-500"> kcal</span>
+            </span>
           </div>
         </div>
 
@@ -144,11 +163,31 @@ const TemplateBuilderModal = memo(({
             <div className="text-center py-8 text-zinc-600 text-[11px] font-mono">
               Bu güne henüz hareket eklenmedi.
             </div>
-          ) : day.exercises.map(ex => (
+          ) : day.exercises.map((ex, exIndex) => (
             <div key={ex.uid} className="bg-zinc-900 border border-zinc-800 rounded-xl p-3">
               <div className="flex justify-between items-center gap-2 mb-2">
-                <span className="text-[11px] font-bold text-zinc-200 truncate min-w-0">{ex.name}</span>
+                <span className="text-[11px] font-bold text-zinc-200 truncate min-w-0">
+                  <span className="text-cyan-500 mr-1">{exIndex + 1}.</span>{ex.name}
+                </span>
                 <div className="flex items-center shrink-0">
+                  <button
+                    onClick={() => moveExercise(exIndex, -1)}
+                    disabled={exIndex === 0}
+                    title="Yukarı taşı"
+                    aria-label="Hareketi yukarı taşı"
+                    className="text-zinc-600 active:text-cyan-400 p-1.5 disabled:opacity-25 disabled:active:text-zinc-600"
+                  >
+                    <ArrowUp size={13} />
+                  </button>
+                  <button
+                    onClick={() => moveExercise(exIndex, 1)}
+                    disabled={exIndex === day.exercises.length - 1}
+                    title="Aşağı taşı"
+                    aria-label="Hareketi aşağı taşı"
+                    className="text-zinc-600 active:text-cyan-400 p-1.5 disabled:opacity-25 disabled:active:text-zinc-600"
+                  >
+                    <ArrowDown size={13} />
+                  </button>
                   <button
                     onClick={() => updateDay({ exercises: day.exercises.filter(e => e.uid !== ex.uid) })}
                     className="text-zinc-600 active:text-red-500 p-1.5"

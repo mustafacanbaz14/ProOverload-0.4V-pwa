@@ -2,6 +2,7 @@ import React, { useState, memo } from 'react';
 import { X, Scale, ArrowRight, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { parseNumber, computeComposition } from '../utils/helpers';
 import { BODY_METRICS } from '../utils/constants';
+import { formatDay } from '../utils/dates';
 
 const MetricsComparisonModal = memo(({ isOpen, onClose, metricsHistory = [] }) => {
   const sortedMetrics = [...metricsHistory].sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -50,7 +51,7 @@ const MetricsComparisonModal = memo(({ isOpen, onClose, metricsHistory = [] }) =
               className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-zinc-300 text-[11px] outline-none"
             >
               {sortedMetrics.map(m => (
-                <option key={`a-${m.id || m.date}`} value={m.date}>{new Date(m.date).toLocaleDateString('tr-TR')} ({m.weight}kg)</option>
+                <option key={`a-${m.id || m.date}`} value={m.date}>{formatDay(m.date, 'numeric')} ({m.weight}kg)</option>
               ))}
             </select>
           </div>
@@ -63,7 +64,7 @@ const MetricsComparisonModal = memo(({ isOpen, onClose, metricsHistory = [] }) =
               className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-cyan-400 font-bold text-[11px] outline-none"
             >
               {sortedMetrics.map(m => (
-                <option key={`b-${m.id || m.date}`} value={m.date}>{new Date(m.date).toLocaleDateString('tr-TR')} ({m.weight}kg)</option>
+                <option key={`b-${m.id || m.date}`} value={m.date}>{formatDay(m.date, 'numeric')} ({m.weight}kg)</option>
               ))}
             </select>
           </div>

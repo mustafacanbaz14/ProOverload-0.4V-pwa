@@ -3,6 +3,7 @@ import { X, Flame, CalendarDays, Table2, Sparkles, Scale, Moon, Dumbbell, Chevro
 import { buildEnergySeries, groupByWeek, dayEnergyBreakdown, theoreticalWeek, neatMethodComparison } from '../utils/energyModel';
 import { dailyTotals } from '../utils/nutritionStats';
 import { parseNumber } from '../utils/helpers';
+import { formatDay } from '../utils/dates';
 
 const TABS = [
   { key: 'today', label: 'Bugün', icon: Flame },
@@ -12,7 +13,7 @@ const TABS = [
 ];
 
 const kcal = (n) => `${n > 0 ? '+' : ''}${Math.round(n)}`;
-const dateShort = (d) => new Date(d).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
+const dateShort = (d) => formatDay(d);
 
 /**
  * Kalori giriş/çıkış detayı.
