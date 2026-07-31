@@ -31,8 +31,9 @@ const WellnessModal = memo(({
   todayStr,
   weightKg = 0,
   onUpdateDay,
+  initialTab = 'sleep',
 }) => {
-  const [tab, setTab] = useState('sleep');
+  const [tab, setTab] = useState(initialTab);
   const [date, setDate] = useState(todayStr);
   const [pencere, setPencere] = useState(7);
 

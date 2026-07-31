@@ -92,6 +92,9 @@ export default function App() {
   const [prCelebration, setPrCelebration] = useState(null);
   const [isWeekPlanOpen, setIsWeekPlanOpen] = useState(false);
   const [isWellnessOpen, setIsWellnessOpen] = useState(false);
+  // Araçlar listesinde uyku ve meditasyon ayrı giriş; hangisinden gelindiyse
+  // Toparlanma ekranı o sekmede açılır.
+  const [wellnessTab, setWellnessTab] = useState('sleep');
   // Kütüphaneden "yeni hareket" ile gelindiğinde kapanışta oraya dönülür.
   const [pickerReturnsToLibrary, setPickerReturnsToLibrary] = useState(false);
 
@@ -1603,6 +1606,8 @@ export default function App() {
 
         {/* UYKU / MEDİTASYON & ESNEME */}
         <WellnessModal
+          key={wellnessTab}
+          initialTab={wellnessTab}
           isOpen={isWellnessOpen}
           onClose={() => setIsWellnessOpen(false)}
           records={wellness}
@@ -1626,8 +1631,8 @@ export default function App() {
               compare: () => setIsComparisonOpen(true),
               guide: () => setIsMeasurementGuideOpen(true),
               report: () => setIsReportCardOpen(true),
-              wellness: () => setIsWellnessOpen(true),
-              sleep: () => setIsWellnessOpen(true),
+              sleep: () => { setWellnessTab('sleep'); setIsWellnessOpen(true); },
+              mind: () => { setWellnessTab('mind'); setIsWellnessOpen(true); },
             }[key];
             ac?.();
           }}
