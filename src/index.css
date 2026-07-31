@@ -111,3 +111,14 @@
     box-shadow: 0 0 20px -5px rgba(249, 115, 22, 0.3);
   }
 }
+
+/* Rekor kutlaması — paket eklemeden saf CSS konfeti. */
+@keyframes pr-fall {
+  0%   { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(105vh) rotate(540deg); opacity: 0; }
+}
+@keyframes pr-pop {
+  0%   { transform: scale(.6); opacity: 0; }
+  60%  { transform: scale(1.04); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}

@@ -1,0 +1,30 @@
+Beslenme analizi sekmesi ve katlanabilir kas hacmi listesi (0.7.0)
+
+Analiz ekranına dördüncü sekme olarak Beslenme eklendi. Gösterdikleri:
+7 ve 30 günlük ortalamalar, kalori/protein hedefine göre ilerleme çubukları,
+makroların kaloriye katkı yüzdesi (tek çubukta üç renk), son 30 günün hedef
+tutarlılığı (hedefin ±%10'u içinde kalan gün sayısı), seçilebilir metrik ile
+trend grafiği (kalori/protein/karbonhidrat/yağ, 7 günlük ortalama
+anahtarıyla) ve son 14 günün tablosu. Tabloda kalori hücreleri hedefe göre
+renklendiriliyor: mavi altında, yeşil hedefte, turuncu üstünde.
+
+Kalori hedefi gerçek TDEE varsa ondan, yoksa BMR tahmininden alınıyor ve
+hangisinin kullanıldığı tablonun altında açıkça yazıyor.
+
+Günlük toplam hesabı yeni src/utils/nutritionStats.js'e taşındı; beslenme
+sekmesi de artık aynı fonksiyonu kullanıyor. Aynı matematiği iki yerde
+tutmak, birini düzeltip diğerini unutunca iki ekranın farklı sayı göstermesi
+demekti. Haftalık ortalama da önce toplayıp bir kez bölecek şekilde
+düzeltildi — her günü ayrı yuvarlamak hata biriktiriyordu.
+
+Ortalamalar yalnızca kayıt girilmiş günleri sayıyor; boş günleri 0 kalori
+kabul etmek ortalamayı yanlış aşağı çekerdi.
+
+Ana sayfadaki 16 satırlık haftalık kas hacmi listesi tek tıkla açılıp
+kapanıyor, varsayılan olarak kapalı geliyor ve tercih ayarlarda saklanıyor.
+Kapalıyken bile başlıkta kaç kasın eşik altında / tavan üstünde olduğu
+görünüyor, böylece açmadan da durum anlaşılıyor.
+
+Dört sekme 375px'te tek satıra sığmadığı için etiketler kısaltıldı
+(Vücut / 1RM / Hacim / Beslenme).
+

@@ -19,6 +19,7 @@ const HomeView = memo(({
   experienceLevel = 'intermediate',
   onOpenTemplateBuilder,
   onOpenTools,
+  readiness,
   weeklyCardioKcal = 0,
   showMuscleVolume = false,
   onToggleMuscleVolume,
@@ -34,6 +35,44 @@ const HomeView = memo(({
             <p className="text-[10px] text-orange-300 mt-1 font-mono">Verilerinizi en son 7 günden uzun süre önce yedeklediniz veya hiç yedeklemediniz. Cihaz hafızası temizlenirse verileriniz kaybolur.</p>
           </div>
           <button onClick={() => setIsSettingsModalOpen(true)} className="text-[10px] bg-orange-500/20 text-orange-400 px-3 py-2 rounded-xl font-bold uppercase tracking-wider hover:bg-orange-500/30 transition-colors">Aç</button>
+        </div>
+      )}
+
+      {/* Hazır oluşluk eğilimi — üst üste düşük skor hacimden bağımsız bir
+          deload sinyali; hacim tavanı aşılmasa da toparlanamama gösterir. */}
+      {readiness && (
+        <div className={`rounded-2xl border p-3 ${readiness.zone.bg}`}>
+          <div className="flex justify-between items-center gap-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">Hazır Oluşluk Trendi</span>
+            <span className="flex items-baseline gap-1.5 shrink-0">
+              <span className={`text-lg font-mono font-bold ${readiness.zone.text}`}>{readiness.ortalama}</span>
+              <span className="text-[9px] font-mono text-zinc-500">/100</span>
+              {readiness.degisim !== null && readiness.degisim !== 0 && (
+                <span className={`text-[10px] font-mono ${readiness.degisim > 0 ? 'text-emerald-400' : 'text-orange-400'}`}>
+                  {readiness.degisim > 0 ? '↑' : '↓'}{Math.abs(readiness.degisim)}
+                </span>
+              )}
+            </span>
+          </div>
+          {/* Mini seri: son kayıtlar tek bakışta */}
+          <div className="flex items-end gap-0.5 h-6 mt-2">
+            {readiness.seri.map((p, i) => (
+              <div
+                key={i}
+                className={`flex-1 rounded-sm ${p.score >= 80 ? 'bg-emerald-500' : p.score >= 60 ? 'bg-cyan-500' : p.score >= 40 ? 'bg-amber-500' : 'bg-red-500'}`}
+                style={{ height: `${Math.max(12, p.score)}%` }}
+              />
+            ))}
+          </div>
+          <p className="text-[9px] font-mono text-zinc-500 leading-relaxed mt-1.5">
+            Son {readiness.kayitSayisi} seans · {readiness.zone.label}
+          </p>
+          {readiness.deloadOnerisi && (
+            <p className="text-[10px] font-mono text-red-300 leading-relaxed mt-1.5 pt-1.5 border-t border-zinc-800/60">
+              Üst üste üç seansta hazır oluşluk düşük. Hacim tavanı aşılmasa bile
+              toparlanamıyorsun — bu hafta yükü %30 azaltmayı düşün.
+            </p>
+          )}
         </div>
       )}
 

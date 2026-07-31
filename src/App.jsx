@@ -13,6 +13,7 @@ import { computeAdaptiveTDEE } from './utils/tdee';
 import { totalCardioCalories, dayWorkoutCalories } from './utils/cardio';
 import { computeWeekPlan } from './utils/weekPlan';
 import { averageDailyExercise } from './utils/energyModel';
+import { DEFAULT_READINESS, READINESS_FIELDS, computeReadiness, readinessTrend } from './utils/readiness';
 import { safeSetItem, safeSetRawItem, createErrorThrottle } from './utils/persist';
 // Sürüm tek kaynaktan okunur: package.json. Ekranda gösterilen sürüm ile
 // yedek dosyasına yazılan sürümün birbirinden sapması böyle engellenir.
@@ -24,7 +25,7 @@ import {
   foldForSearch, parseNumber, mergeMetrics, mergeNutrition,
   isWorkingSet, calcEffectiveSets, buildPersonalRecords, loadPersistedState,
   computeComposition, sortByDateDesc, storageKey, suggestNextTarget, mergeSettings,
-  mergeWorkout, mergeTemplate
+  mergeWorkout, mergeTemplate, isWarmupSet, estimate1RM
 } from './utils/helpers';
 
 import Navbar from './components/Navbar';
@@ -48,6 +49,7 @@ import TemplateBuilderModal from './components/TemplateBuilderModal';
 import CardioModal from './components/CardioModal';
 import EnergyDetailModal from './components/EnergyDetailModal';
 import ToolsModal from './components/ToolsModal';
+import PRCelebration from './components/PRCelebration';
 import WeeklyPlanModal from './components/WeeklyPlanModal';
 
 export default function App() {
@@ -59,7 +61,7 @@ export default function App() {
 
   const [preWorkoutModal, setPreWorkoutModal] = useState(null);
   const [isEndWorkoutModalOpen, setIsEndWorkoutModalOpen] = useState(false);
-  const [readinessForm, setReadinessForm] = useState({ sleep: 3, stress: 3, soreness: 3 });
+  const [readinessForm, setReadinessForm] = useState(DEFAULT_READINESS);
 
   const [view, setView] = useState('home');
   const [historyTab, setHistoryTab] = useState('workouts');
@@ -84,6 +86,7 @@ export default function App() {
   const [isCardioOpen, setIsCardioOpen] = useState(false);
   const [isEnergyDetailOpen, setIsEnergyDetailOpen] = useState(false);
   const [isToolsOpen, setIsToolsOpen] = useState(false);
+  const [prCelebration, setPrCelebration] = useState(null);
   const [isWeekPlanOpen, setIsWeekPlanOpen] = useState(false);
   // Kütüphaneden "yeni hareket" ile gelindiğinde kapanışta oraya dönülür.
   const [pickerReturnsToLibrary, setPickerReturnsToLibrary] = useState(false);
@@ -266,6 +269,11 @@ export default function App() {
   const personalRecords = useMemo(() => {
     return buildPersonalRecords(workouts, activeWorkout?.id);
   }, [workouts, activeWorkout?.id]);
+
+  // Rekor kontrolü set güncellenirken yapılıyor; o an güncel tabloyu okumak
+  // için ref kullanılır, yoksa bağımlılık zinciri her tuşta yeniden kurulurdu.
+  const personalRecordsRef = useRef(personalRecords);
+  useEffect(() => { personalRecordsRef.current = personalRecords; }, [personalRecords]);
 
   // Gerçek (adaptif) TDEE: ölçülen kilo değişimi + kaydedilen alım.
   // Formül BMR yalnızca bir tahmindir; bu hesap gerçek harcamayı doğrudan ölçer.
@@ -503,6 +511,24 @@ export default function App() {
   }, [settings.autoCopyLastSet]);
 
   const updateSet = useCallback((exerciseId, setId, field, value) => {
+    // Rekor tespiti: yalnızca ağırlık/tekrar değişince ve set anlamlı hale
+    // gelince bakılır, her tuş vuruşunda değil.
+    if (field === 'weight' || field === 'reps') {
+      const ex = activeWorkoutRef.current?.exercises?.find(e => e.id === exerciseId);
+      const st = ex?.sets?.find(x => x.id === setId);
+      if (ex && st) {
+        const yeni = { ...st, [field]: value };
+        const kg = parseNumber(yeni.weight);
+        const tekrar = parseNumber(yeni.reps);
+        if (kg > 0 && tekrar > 0 && !isWarmupSet(yeni)) {
+          const tahmin = estimate1RM(kg, tekrar, yeni.rir);
+          const eski = personalRecordsRef.current?.get(ex.name);
+          if (tahmin > 0 && (!eski || tahmin > eski.e1rm + 0.5)) {
+            setPrCelebration({ name: ex.name, weight: kg, reps: tekrar });
+          }
+        }
+      }
+    }
     setActiveWorkout(prev => ({
       ...prev,
       activeExerciseId: exerciseId,
@@ -613,7 +639,7 @@ export default function App() {
   const confirmStartWorkout = () => {
     const template = preWorkoutModal?.template;
     const todayStr = getLocalDateString();
-    const readinessScore = readinessForm.sleep + (6 - readinessForm.stress) + (6 - readinessForm.soreness);
+    const hazir = computeReadiness(readinessForm);
 
     // Süperset bağları ve set yapısı şablondan aynen taşınır.
     const initialExercises = template ? templateToExercises(template, generateId) : [];
@@ -624,7 +650,7 @@ export default function App() {
       name: template?.name || 'Serbest Antrenman',
       exercises: initialExercises,
       activeExerciseId: initialExercises[0]?.id || null,
-      readiness: { ...readinessForm, score: readinessScore },
+      readiness: { ...readinessForm, score: hazir.score, zone: hazir.zone.key },
       timer: { status: 'running', startTime: Date.now(), accumulatedSeconds: 0 },
       rating: 4,
       notes: ''
@@ -1159,6 +1185,10 @@ export default function App() {
       .reduce((sum, w) => sum + totalCardioCalories(w.cardio || [], latestWeight), 0);
   }, [workouts, latestWeight]);
 
+  // Hazır oluşluk eğilimi: tek gün gürültülü, karar son kayıtların
+  // ortalamasından verilir. Üst üste düşük skor deload sinyali.
+  const readiness = useMemo(() => readinessTrend(workouts, 10), [workouts]);
+
   const needsBackup = useMemo(() => {
     if (!lastBackupDate) return true;
     const diffDays = (todayTime - new Date(lastBackupDate).getTime()) / (1000 * 3600 * 24);
@@ -1222,6 +1252,7 @@ export default function App() {
               experienceLevel={settings.experienceLevel}
               onOpenTemplateBuilder={() => setIsBuilderOpen(true)}
               onOpenTools={() => setIsToolsOpen(true)}
+              readiness={readiness}
               weeklyCardioKcal={weeklyCardioKcal}
               showMuscleVolume={settings.showMuscleVolume}
               onToggleMuscleVolume={() => setSettings(prev => ({ ...prev, showMuscleVolume: !prev.showMuscleVolume }))}
@@ -1480,6 +1511,9 @@ export default function App() {
           weightKg={latestWeight}
         />
 
+        {/* REKOR KUTLAMASI */}
+        <PRCelebration record={prCelebration} onDone={() => setPrCelebration(null)} />
+
         {/* ARAÇLAR */}
         <ToolsModal
           isOpen={isToolsOpen}
@@ -1558,20 +1592,51 @@ export default function App() {
               </h3>
               <p className="text-[11px] text-zinc-400 mb-6 mt-2 leading-tight">Yüklenme şiddetini ve sakatlık riskini hesaplayabilmemiz için bugünkü mental ve fiziksel toparlanmanızı puanlayın.</p>
 
-              <div className="space-y-5 mb-8">
-                <div>
-                  <label className="flex justify-between text-xs text-zinc-300 font-bold mb-2"><span>Uyku & Toparlanma</span> <span className="text-cyan-400">{readinessForm.sleep}/5</span></label>
-                  <input type="range" min="1" max="5" value={readinessForm.sleep} onChange={(e) => setReadinessForm(p => ({ ...p, sleep: parseInt(e.target.value) }))} className="w-full accent-cyan-500" />
-                </div>
-                <div>
-                  <label className="flex justify-between text-xs text-zinc-300 font-bold mb-2"><span>Psikolojik Stres</span> <span className="text-orange-400">{readinessForm.stress}/5</span></label>
-                  <input type="range" min="1" max="5" value={readinessForm.stress} onChange={(e) => setReadinessForm(p => ({ ...p, stress: parseInt(e.target.value) }))} className="w-full accent-orange-500" />
-                </div>
-                <div>
-                  <label className="flex justify-between text-xs text-zinc-300 font-bold mb-2"><span>Kas Ağrısı (DOMS)</span> <span className="text-red-400">{readinessForm.soreness}/5</span></label>
-                  <input type="range" min="1" max="5" value={readinessForm.soreness} onChange={(e) => setReadinessForm(p => ({ ...p, soreness: parseInt(e.target.value) }))} className="w-full accent-red-500" />
-                </div>
+              <div className="space-y-4 mb-5">
+                {READINESS_FIELDS.map(f => (
+                  <div key={f.key}>
+                    <label className="flex justify-between text-xs text-zinc-300 font-bold mb-1.5">
+                      <span>{f.label}</span>
+                      <span className={f.color}>{readinessForm[f.key]}/10</span>
+                    </label>
+                    <input
+                      type="range" min="1" max="10"
+                      value={readinessForm[f.key]}
+                      onChange={(e) => setReadinessForm(p => ({ ...p, [f.key]: parseInt(e.target.value, 10) }))}
+                      className={`w-full ${f.accent}`}
+                    />
+                    <div className="flex justify-between text-[9px] font-mono text-zinc-600 mt-0.5">
+                      <span>{f.low}</span><span>{f.high}</span>
+                    </div>
+                  </div>
+                ))}
               </div>
+
+              {/* Skor, bölge ve tavsiye anında hesaplanır. */}
+              {(() => {
+                const h = computeReadiness(readinessForm);
+                return (
+                  <div className={`rounded-2xl border p-3.5 mb-5 ${h.zone.bg}`}>
+                    <div className="flex justify-between items-baseline mb-2">
+                      <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Hazır Oluşluk</span>
+                      <span className={`text-[11px] font-bold uppercase ${h.zone.text}`}>{h.zone.label}</span>
+                    </div>
+                    <div className="flex items-baseline gap-2 mb-2">
+                      <span className={`text-3xl font-mono font-bold ${h.zone.text}`}>{h.score}</span>
+                      <span className="text-[10px] font-mono text-zinc-500">/ 100</span>
+                    </div>
+                    <div className="w-full bg-zinc-950 rounded-full h-1.5 border border-zinc-800 mb-2">
+                      <div className={`h-1.5 rounded-full transition-all duration-500 ${h.zone.bar}`} style={{ width: `${h.score}%` }} />
+                    </div>
+                    <p className="text-[10px] font-mono text-zinc-300 leading-relaxed">{h.zone.advice}</p>
+                    {h.warnings.map(w => (
+                      <p key={w.key} className="text-[9px] font-mono text-amber-300 leading-relaxed mt-1.5 pt-1.5 border-t border-zinc-800/60">
+                        {w.text}
+                      </p>
+                    ))}
+                  </div>
+                );
+              })()}
 
               <div className="flex space-x-3">
                 <button onClick={() => setPreWorkoutModal(null)} className="flex-1 bg-zinc-800 active:bg-zinc-700 text-zinc-300 font-bold py-3.5 rounded-xl uppercase text-xs transition-colors">İptal</button>
