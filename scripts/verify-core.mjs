@@ -5,6 +5,7 @@ import { calorieDashboard, deriveGoalSet } from '../src/utils/goals.js';
 import { mergeWellnessDay } from '../src/utils/wellness.js';
 import { migrateWeekPlans, removeTemplateFromPlans } from '../src/utils/planMigration.js';
 import { suggestNextTarget } from '../src/utils/helpers.js';
+import { dailyTotals, nutritionDayScore } from '../src/utils/nutritionStats.js';
 
 const tests = [];
 const test = (name, run) => tests.push({ name, run });
@@ -103,6 +104,30 @@ test('düşük hazır oluşluk progresyon yerine toparlanma yükü verir', () =>
   );
   assert.equal(target.weight, 90);
   assert.equal(target.strategy, 'recovery');
+});
+
+test('beslenme toplamı mikro değerleri ve öğünleri birlikte toplar', () => {
+  const totals = dailyTotals({ meals: [
+    { calories: 500, protein: 35, carbs: 55, fats: 15, fiber: 7, sodium: 0.4 },
+    { calories: 300, protein: 20, carbs: 30, fats: 8, fiber: 4, sodium: 0.2 },
+  ] });
+  assert.equal(totals.calories, 800);
+  assert.equal(totals.protein, 55);
+  assert.equal(totals.fiber, 11);
+  assert.ok(Math.abs(totals.sodium - 0.6) < 0.0001);
+});
+
+test('günlük beslenme uyumu hedef ve suya göre puanlanır', () => {
+  const score = nutritionDayScore({
+    totals: { calories: 2450, protein: 150, fiber: 25 },
+    targetCalories: 2500,
+    targetProtein: 150,
+    waterMl: 2800,
+    weightKg: 80,
+  });
+  assert.equal(score.score, 98);
+  assert.equal(score.waterTarget, 2800);
+  assert.deepEqual(score.next, []);
 });
 
 for (const { name, run } of tests) {

@@ -48,6 +48,12 @@ export const DEFAULT_SETTINGS = {
   theme: 'dark',
   // Yazı büyüklüğü çarpanı (kök font-size). 1 = varsayılan.
   fontScale: 1,
+  // Basit görünüm günlük kararları öne çıkarıp gelişmiş kartları kapalı başlatır;
+  // hiçbir özellik kaldırılmaz, ayrıntılar tek dokunuşla açılır.
+  interfaceMode: 'simple',
+  // Yerel/çevrimiçi besinlerin küçük kopyaları. Ayarlarda tutulduğu için ayrıca
+  // bir localStorage anahtarı ve göç adımı gerektirmez.
+  favoriteFoods: [],
   // NEAT için kullanıcı çarpanı: otomatik/seviye hesabını ölçekler.
   neatMultiplier: 1
 };

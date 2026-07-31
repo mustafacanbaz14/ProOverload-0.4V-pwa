@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { X, Settings, Download, Upload, Smartphone, HeartPulse, Database, Dumbbell, Beef, Sun, Moon, Footprints } from 'lucide-react';
+import { X, Settings, Download, Upload, Smartphone, HeartPulse, Database, Dumbbell, Beef, Sun, Moon, Footprints, Layers3 } from 'lucide-react';
 import { exportAppleHealthXML, exportGoogleFitJSON } from '../utils/healthSync';
 import { EXPERIENCE_LEVELS } from '../utils/constants';
 import { ratesForGoal } from '../utils/goals';
@@ -167,6 +167,34 @@ const SettingsModal = memo(({
               <p className="text-[9px] font-mono text-zinc-600 mt-2 leading-relaxed">
                 Tüm uygulamadaki yazılar bu orana göre ölçeklenir.
               </p>
+            </div>
+
+            <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800">
+              <span className="text-zinc-200 text-[11px] font-bold flex items-center gap-1.5 mb-1">
+                <Layers3 size={12} className="text-orange-400" /> Bilgi Yoğunluğu
+              </span>
+              <span className="text-zinc-500 text-[10px] font-mono block mb-2 leading-snug">
+                Basit görünüm günlük kararları öne çıkarır; ayrıntılar kaldırılmaz, kapalı başlar.
+              </span>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { key: 'simple', label: 'Basit', hint: 'Önerilen' },
+                  { key: 'detailed', label: 'Detaylı', hint: 'Her şey açık' },
+                ].map(mode => {
+                  const active = (settings.interfaceMode || 'simple') === mode.key;
+                  return (
+                    <button
+                      key={mode.key}
+                      type="button"
+                      onClick={() => set({ interfaceMode: mode.key })}
+                      className={`py-2 rounded-lg border transition-colors ${active ? 'bg-orange-950/40 border-orange-600 text-orange-400' : 'bg-zinc-900 border-zinc-800 text-zinc-500'}`}
+                    >
+                      <span className="text-[10px] font-bold uppercase block">{mode.label}</span>
+                      <span className="text-[8px] font-mono opacity-70 block">{mode.hint}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </Group>
 

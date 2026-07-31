@@ -16,7 +16,7 @@ import { removeTemplateFromPlans } from './utils/planMigration';
 import { buildPersonalVolumeGuidance } from './utils/personalization';
 import { averageDailyExercise, dayEnergyBreakdown } from './utils/energyModel';
 import { recommendedCalories } from './utils/goals';
-import { dailyTotals } from './utils/nutritionStats';
+import { caloriesFromMacros, dailyTotals } from './utils/nutritionStats';
 import { DEFAULT_READINESS, READINESS_FIELDS, computeReadiness, readinessTrend } from './utils/readiness';
 import { safeSetRawItem } from './utils/persist';
 import { useAppPersistence } from './hooks/useAppPersistence';
@@ -1457,13 +1457,16 @@ export default function App() {
               updateMeal={(id, field, value) => {
                 setCurrentNutritionForm(prev => ({
                   ...prev,
-                  meals: (prev.meals || []).map(m => m.id === id ? { ...m, [field]: value } : m)
-                }));
-              }}
-              addMeal={() => {
-                setCurrentNutritionForm(prev => ({
-                  ...prev,
-                  meals: [...(prev.meals || []), { id: generateId(), name: `${(prev.meals || []).length + 1}. Öğün`, calories: '', protein: '', carbs: '', fats: '' }]
+                  meals: (prev.meals || []).map(m => {
+                    if (m.id !== id) return m;
+                    const next = { ...m, [field]: value };
+                    // Makrolar elle değiştirildiğinde kalori de güncellenmeli;
+                    // aksi halde geçmişte öğün dolu olsa bile 0 kcal görünüyordu.
+                    if (['protein', 'carbs', 'fats'].includes(field)) {
+                      next.calories = caloriesFromMacros(next.protein, next.carbs, next.fats);
+                    }
+                    return next;
+                  })
                 }));
               }}
               handleSaveNutrition={handleSaveNutrition}
@@ -1589,6 +1592,19 @@ export default function App() {
           customFoods={customFoods}
           setCustomFoods={setCustomFoods}
           recentFoods={recentFoods}
+          favoriteFoods={settings.favoriteFoods || []}
+          onToggleFavorite={(food) => {
+            setSettings(prev => {
+              const favorites = Array.isArray(prev.favoriteFoods) ? prev.favoriteFoods : [];
+              const exists = favorites.some(item => item.name === food.name);
+              return {
+                ...prev,
+                favoriteFoods: exists
+                  ? favorites.filter(item => item.name !== food.name)
+                  : [food, ...favorites].slice(0, 16),
+              };
+            });
+          }}
           onAddFoodToMeal={(meal, sourceFood) => {
             setCurrentNutritionForm(prev => ({
               ...prev,

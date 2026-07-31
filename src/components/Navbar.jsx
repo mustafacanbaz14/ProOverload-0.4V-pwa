@@ -3,10 +3,10 @@ import { Activity, Scale, Beef, LineChart, History } from 'lucide-react';
 
 const Navbar = memo(({ view, setView }) => {
   const navItems = [
-    { key: 'home', label: 'Antrenman', icon: Activity, activeColor: 'text-cyan-400', glowColor: 'bg-cyan-500' },
+    { key: 'home', label: 'Bugün', icon: Activity, activeColor: 'text-cyan-400', glowColor: 'bg-cyan-500' },
     { key: 'profile', label: 'Vücut', icon: Scale, activeColor: 'text-cyan-400', glowColor: 'bg-cyan-500' },
     { key: 'nutrition', label: 'Beslenme', icon: Beef, activeColor: 'text-orange-400', glowColor: 'bg-orange-500' },
-    { key: 'analysis', label: 'Analiz', icon: LineChart, activeColor: 'text-emerald-400', glowColor: 'bg-emerald-500' },
+    { key: 'analysis', label: 'Gelişim', icon: LineChart, activeColor: 'text-emerald-400', glowColor: 'bg-emerald-500' },
     { key: 'history', label: 'Geçmiş', icon: History, activeColor: 'text-cyan-400', glowColor: 'bg-cyan-500' },
   ];
 

@@ -143,6 +143,9 @@ export const mergeNutrition = (data) => ({
   activeCaloriesOut: data?.activeCaloriesOut || '', bmrAtTheTime: data?.bmrAtTheTime || 0,
   // Adım sayısı: NEAT 'steps' modunda günlük hareket buradan hesaplanır.
   steps: data?.steps || '',
+  // Günlük su tüketimi beslenme kaydına aittir; geçmiş günler ayrı ayrı
+  // düzenlenebilir. Eski kayıtlarda alan yoksa boş başlar.
+  waterMl: data?.waterMl || '',
   caloriesIn: data?.caloriesIn || 0, protein: data?.protein || 0, carbs: data?.carbs || 0, fats: data?.fats || 0,
   meals: Array.isArray(data?.meals) && data.meals.length > 0 ? data.meals : [{ id: generateId(), name: '1. Öğün', calories: '', protein: '', carbs: '', fats: '' }]
 });
@@ -364,7 +367,7 @@ const TRUTHY_SETTINGS = [
 ];
 
 // Dizi olması gereken alanlar; kayıt bozuksa varsayılana dönülür.
-const ARRAY_SETTINGS = ['hiddenExercises', 'pinnedExercises', 'hidden1RMExercises'];
+const ARRAY_SETTINGS = ['hiddenExercises', 'pinnedExercises', 'hidden1RMExercises', 'favoriteFoods'];
 
 /**
  * Kaydedilmiş ayarları varsayılanların ÜSTÜNE serer.

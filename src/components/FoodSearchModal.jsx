@@ -5,6 +5,11 @@ import { FOOD_DATABASE, FOOD_CATEGORIES } from '../utils/foodDatabase';
 const BarcodeScannerModal = lazy(() => import('./BarcodeScannerModal'));
 
 const EMPTY_CUSTOM = { name: '', calories100g: '', protein100g: '', carbs100g: '', fats100g: '' };
+const POPULAR_FOODS = [
+  'Tavuk Göğsü (derisiz, pişmiş)', 'Yumurta (tam)', 'Süzme Yoğurt (Yunan)',
+  'Yulaf Ezmesi (kuru)', 'Pirinç (pişmiş)', 'Bulgur (pişmiş)',
+  'Mercimek (pişmiş)', 'Muz', 'Elma', 'Badem', 'Mercimek Çorbası', 'Whey Protein Tozu',
+];
 
 const FoodSearchModal = memo(({
   isOpen,
@@ -13,6 +18,8 @@ const FoodSearchModal = memo(({
   customFoods = [],
   setCustomFoods,
   recentFoods = [],
+  favoriteFoods = [],
+  onToggleFavorite,
 }) => {
   const [tab, setTab] = useState('local'); // 'local' | 'online' | 'custom'
   const [query, setQuery] = useState('');
@@ -33,6 +40,13 @@ const FoodSearchModal = memo(({
   const localResults = useMemo(() => {
     const all = [...customFoods, ...FOOD_DATABASE];
     const q = foldForSearch(query).trim();
+    // İlk açılışta 118 satırı birden göstermek aramayı anlaşılmaz kılıyordu.
+    // Favori/son kullanılanlar yukarıda; burada yalnızca dengeli bir başlangıç
+    // listesi var. Arama veya kategori seçimi tüm veritabanını açar.
+    if (!q && category === 'Tümü') {
+      const popular = FOOD_DATABASE.filter(food => POPULAR_FOODS.includes(food.name));
+      return [...customFoods.slice(0, 4), ...popular];
+    }
     return all.filter(f => {
       if (category !== 'Tümü' && f.category !== category) return false;
       if (!q) return true;
@@ -181,6 +195,7 @@ const FoodSearchModal = memo(({
 
   const categories = ['Tümü', ...(customFoods.length ? ['Kendi Besinlerim'] : []), ...FOOD_CATEGORIES];
   const results = tab === 'online' ? onlineResults : localResults;
+  const isFavorite = (food) => favoriteFoods.some(item => item.name === food.name);
 
   return (
     <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[90] flex items-center justify-center p-4">
@@ -198,9 +213,9 @@ const FoodSearchModal = memo(({
         <div className="p-3 space-y-3 border-b border-zinc-800 bg-zinc-950 shrink-0">
           <div className="flex bg-zinc-900 p-1 rounded-xl border border-zinc-800">
             {[
-              { key: 'local', label: 'Yerel', icon: Database },
-              { key: 'online', label: 'Çevrimiçi', icon: Globe },
-              { key: 'custom', label: 'Yeni Besin', icon: Plus },
+              { key: 'local', label: 'Hazır Liste', icon: Database },
+              { key: 'online', label: 'İnternette Ara', icon: Globe },
+              { key: 'custom', label: 'Kendi Besinim', icon: Plus },
             ].map(t => {
               const active = tab === t.key;
               const TabIcon = t.icon;
@@ -244,6 +259,7 @@ const FoodSearchModal = memo(({
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder={tab === 'online' && onlineMode === 'barcode' ? 'Barkod numarası' : 'Besin adı ara...'}
+                  aria-label="Besin ara"
                   className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-xs text-zinc-100 font-mono outline-none focus:border-orange-500 transition-colors"
                 />
                 {tab === 'online' && onlineMode === 'barcode' && (
@@ -251,6 +267,7 @@ const FoodSearchModal = memo(({
                     type="button"
                     onClick={() => setScannerOpen(true)}
                     title="Kamerayla barkod tara"
+                    aria-label="Kamerayla barkod tara"
                     className="bg-zinc-800 active:bg-zinc-700 border border-zinc-700 text-orange-400 px-3.5 rounded-xl flex items-center justify-center"
                   >
                     <Camera size={15} />
@@ -301,6 +318,25 @@ const FoodSearchModal = memo(({
             </>
           )}
         </div>
+
+        {tab === 'local' && !query.trim() && favoriteFoods.length > 0 && (
+          <div className="px-3 pt-2.5 pb-1 border-b border-zinc-800 bg-zinc-950">
+            <span className="text-[9px] font-mono text-orange-400 uppercase tracking-widest flex items-center mb-1.5">
+              <Star size={10} className="mr-1" fill="currentColor" /> Favorilerin
+            </span>
+            <div className="flex gap-1.5 overflow-x-auto hide-scrollbar -mx-1 px-1 pb-1">
+              {favoriteFoods.map(food => (
+                <button
+                  key={food.id || food.name}
+                  onClick={() => addToMeal(food)}
+                  className="shrink-0 px-2.5 py-1.5 rounded-lg border border-orange-900/50 bg-orange-950/20 text-[10px] font-bold text-orange-300 active:bg-orange-900/40 max-w-[150px] truncate"
+                >
+                  {food.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Sık kullanılanlar: son eklenen besinler tek dokunuşla geri eklenir.
             Yalnızca yerel sekmede ve arama yokken gösterilir, sonuç listesini
@@ -416,6 +452,14 @@ const FoodSearchModal = memo(({
                         </span>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() => onToggleFavorite?.(food)}
+                          title={isFavorite(food) ? 'Favorilerden çıkar' : 'Favorilere ekle'}
+                          aria-label={isFavorite(food) ? 'Favorilerden çıkar' : 'Favorilere ekle'}
+                          className={`p-1.5 transition-colors ${isFavorite(food) ? 'text-orange-400' : 'text-zinc-600 active:text-orange-400'}`}
+                        >
+                          <Star size={13} fill={isFavorite(food) ? 'currentColor' : 'none'} />
+                        </button>
                         {food.source === 'custom' && (
                           <button
                             onClick={() => setCustomFoods(prev => prev.filter(f => f.id !== food.id))}

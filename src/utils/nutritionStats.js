@@ -20,7 +20,10 @@ export const dailyTotals = (record) => {
     protein: acc.protein + parseNumber(m.protein),
     carbs: acc.carbs + parseNumber(m.carbs),
     fats: acc.fats + parseNumber(m.fats),
-  }), { calories: 0, protein: 0, carbs: 0, fats: 0 });
+    fiber: acc.fiber + parseNumber(m.fiber),
+    sugars: acc.sugars + parseNumber(m.sugars),
+    sodium: acc.sodium + parseNumber(m.sodium),
+  }), { calories: 0, protein: 0, carbs: 0, fats: 0, fiber: 0, sugars: 0, sodium: 0 });
 };
 
 /** Makrolardan kalori: protein/karbonhidrat 4, yağ 9 kcal/g. */
@@ -120,5 +123,62 @@ export const adherenceStats = (series = [], targetCalories = 0, days = 30) => {
     onTarget,
     over,
     onTargetPct: Math.round((onTarget / window.length) * 100),
+  };
+};
+
+/**
+ * Günlük kayıt uyumu. Bu bir "besin sağlıklı mı?" puanı değildir; yalnızca
+ * kullanıcının kendi kalori/protein/su hedeflerine ne kadar yaklaştığını söyler.
+ * Lif verisi yoksa kullanıcı cezalandırılmaz ve puan kalan üç başlığa dağıtılır.
+ */
+export const nutritionDayScore = ({
+  totals,
+  targetCalories = 0,
+  targetProtein = 0,
+  waterMl = 0,
+  weightKg = 0,
+} = {}) => {
+  if (!totals || parseNumber(totals.calories) <= 0) return null;
+
+  const closeness = (value, target, tolerance) => {
+    if (!(target > 0)) return null;
+    const difference = Math.abs(parseNumber(value) - target) / target;
+    return Math.max(0, Math.min(1, 1 - difference / tolerance));
+  };
+
+  const calorie = closeness(totals.calories, parseNumber(targetCalories), 0.35);
+  const proteinTarget = parseNumber(targetProtein);
+  const protein = proteinTarget > 0
+    ? Math.max(0, Math.min(1, parseNumber(totals.protein) / proteinTarget))
+    : null;
+  const waterTarget = parseNumber(weightKg) > 0 ? Math.round(parseNumber(weightKg) * 35) : 2500;
+  const water = Math.max(0, Math.min(1, parseNumber(waterMl) / waterTarget));
+  const fiberKnown = parseNumber(totals.fiber) > 0;
+  const fiber = fiberKnown ? Math.max(0, Math.min(1, parseNumber(totals.fiber) / 25)) : null;
+
+  const pieces = [
+    { value: calorie, weight: 35 },
+    { value: protein, weight: 35 },
+    { value: water, weight: 15 },
+    { value: fiber, weight: 15 },
+  ].filter(piece => piece.value !== null);
+  const totalWeight = pieces.reduce((sum, piece) => sum + piece.weight, 0);
+  const score = totalWeight > 0
+    ? Math.round(pieces.reduce((sum, piece) => sum + piece.value * piece.weight, 0) / totalWeight * 100)
+    : 0;
+
+  const label = score >= 85 ? 'Çok iyi' : score >= 65 ? 'İyi' : score >= 45 ? 'Geliştirilebilir' : 'Eksik';
+  const next = [];
+  if (calorie !== null && calorie < 0.65) next.push('kalori hedefi');
+  if (protein !== null && protein < 0.8) next.push('protein');
+  if (water < 0.8) next.push('su');
+  if (fiberKnown && fiber < 0.75) next.push('lif');
+
+  return {
+    score,
+    label,
+    next: next.slice(0, 2),
+    waterTarget,
+    fiberKnown,
   };
 };
