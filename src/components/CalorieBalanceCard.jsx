@@ -45,23 +45,66 @@ const CalorieBalanceCard = memo(({ data, dateLabel, manualValue, onChangeManual,
         <h3 className="text-[11px] font-bold text-zinc-200 uppercase tracking-wider flex items-center">
           <Flame size={13} className="mr-2 text-red-400" /> Kalori Panosu
         </h3>
-        <span className="text-[10px] font-mono text-zinc-500">{dateLabel}</span>
+        <span className="text-[10px] font-mono text-zinc-500">{goalLabel ? `${goalLabel} · ` : ''}{dateLabel}</span>
       </div>
 
       <div className="p-4 space-y-3.5">
 
-        {/* Önce cümle, sonra sayı: sayı yığını tek başına yorumlanamıyor. */}
-        <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-3.5">
+        {/* Asıl soru "bugün ne kadar daha yiyebilirim". Önce o cevaplanıyor,
+            yorum ve döküm altta kalıyor. */}
+        {(() => {
+          const kalan = data.target + data.burned - data.intake;
+          const hedefToplam = data.target + data.burned;
+          const oran = hedefToplam > 0 ? Math.min(100, (data.intake / hedefToplam) * 100) : 0;
+          const asti = kalan < 0;
+          const renkKalan = asti ? 'text-amber-400' : 'text-emerald-400';
+          return (
+            <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4">
+              <div className="text-center mb-3">
+                <span className={`text-4xl font-mono font-bold ${renkKalan}`}>
+                  {Math.abs(kalan)}
+                </span>
+                <span className="text-[11px] font-mono text-zinc-500 block mt-0.5">
+                  {asti ? 'kcal hedefin üstünde' : 'kcal daha yiyebilirsin'}
+                </span>
+              </div>
+
+              <div className="w-full bg-zinc-900 rounded-full h-2.5 border border-zinc-800 overflow-hidden mb-2">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${asti ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                  style={{ width: `${oran}%` }}
+                />
+              </div>
+
+              {/* Denklem: sayıların nereden geldiği tek satırda görünüyor. */}
+              <div className="grid grid-cols-4 gap-1 text-center">
+                {[
+                  { l: 'Hedef', v: data.target, c: 'text-emerald-400' },
+                  { l: '− Alınan', v: data.intake, c: 'text-cyan-400' },
+                  { l: '+ Yakılan', v: data.burned, c: 'text-red-400' },
+                  { l: '= Kalan', v: kalan, c: renkKalan },
+                ].map(x => (
+                  <div key={x.l}>
+                    <span className={`text-[13px] font-mono font-bold block ${x.c}`}>{x.v}</span>
+                    <span className="text-[9px] font-mono text-zinc-600 block">{x.l}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Bu tempo nereye götürür */}
+        <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-3">
           <div className="flex items-center gap-2 mb-1">
-            <Ikon size={16} className={renk} />
-            <span className={`text-2xl font-mono font-bold ${renk}`}>
-              {Math.abs(data.balance)}
+            <Ikon size={14} className={renk} />
+            <span className={`text-[13px] font-mono font-bold ${renk}`}>
+              {Math.abs(data.balance)} kcal {durum}
             </span>
-            <span className="text-[11px] font-mono text-zinc-500">kcal {durum}</span>
           </div>
           <p className="text-[10px] font-mono text-zinc-500 leading-relaxed">
-            {data.intake} aldın, {data.totalOut} harcadın
-            <span className="text-zinc-600"> (korunum {data.maintenance} + egzersiz {data.burned})</span>.
+            Korunumun {data.maintenance} kcal; egzersizle birlikte bugün
+            {' '}{data.totalOut} harcadın.
             {data.projectedWeeklyKg !== 0 && (
               <> Bu tempo sürerse haftada{' '}
                 <strong className={renk}>
@@ -70,38 +113,13 @@ const CalorieBalanceCard = memo(({ data, dateLabel, manualValue, onChangeManual,
               </>
             )}
           </p>
-        </div>
-
-        {/* Hedefe göre bugün */}
-        <div className={`rounded-2xl border p-3 ${
-          hedefteMi
-            ? 'bg-emerald-950/15 border-emerald-900/40'
-            : 'bg-zinc-950 border-zinc-800'
-        }`}>
-          <div className="flex justify-between items-center gap-2 mb-1">
-            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center">
-              <Target size={11} className="mr-1.5 text-emerald-400" /> Bugünkü Hedef
-            </span>
-            <span className="text-[11px] font-mono">
-              <strong className="text-emerald-400">{data.target}</strong>
-              <span className="text-zinc-600"> kcal{goalLabel ? ` · ${goalLabel}` : ''}</span>
-            </span>
-          </div>
-          <p className="text-[10px] font-mono leading-relaxed">
-            {hedefteMi ? (
-              <span className="text-emerald-300">Hedefindesin — sapma {Math.abs(sapma)} kcal.</span>
-            ) : sapma > 0 ? (
-              <span className="text-amber-300">
-                Hedefin <strong>{sapma} kcal</strong> üstündesin.
-                {data.burned > 0 && <span className="text-zinc-500"> Egzersiz yakımın hesaba katıldı.</span>}
-              </span>
-            ) : (
-              <span className="text-cyan-300">
-                Hedefin <strong>{Math.abs(sapma)} kcal</strong> altındasın.
-                <span className="text-zinc-500"> Fazla açık kas kaybı riskini artırır.</span>
-              </span>
-            )}
-          </p>
+          {!hedefteMi && (
+            <p className={`text-[10px] font-mono leading-relaxed mt-1.5 pt-1.5 border-t border-zinc-800 ${sapma > 0 ? 'text-amber-300' : 'text-cyan-300'}`}>
+              {sapma > 0
+                ? `Hedefin ${sapma} kcal üstündesin.`
+                : `Hedefin ${Math.abs(sapma)} kcal altındasın — fazla açık kas kaybı riskini artırır.`}
+            </p>
+          )}
         </div>
 
         {/* Yakım dökümü — elle ekleme burada */}

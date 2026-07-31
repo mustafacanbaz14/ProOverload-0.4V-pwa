@@ -1,6 +1,6 @@
 import React, { useState, useMemo, memo } from 'react';
-import { X, Flame, CalendarDays, Table2, Sparkles, Scale, Moon, Dumbbell, ChevronDown } from 'lucide-react';
-import { buildEnergySeries, groupByWeek, dayEnergyBreakdown, theoreticalWeek } from '../utils/energyModel';
+import { X, Flame, CalendarDays, Table2, Sparkles, Scale, Moon, Dumbbell, ChevronDown, Footprints } from 'lucide-react';
+import { buildEnergySeries, groupByWeek, dayEnergyBreakdown, theoreticalWeek, neatMethodComparison } from '../utils/energyModel';
 import { dailyTotals } from '../utils/nutritionStats';
 import { parseNumber } from '../utils/helpers';
 
@@ -147,6 +147,63 @@ const EnergyDetailModal = memo(({
                 ))}
               </div>
             </div>
+
+            {/* NEAT detayı: hangi yöntem, hangi formül, alternatifler ne verirdi */}
+            {today.neat !== null && (() => {
+              const yontemler = neatMethodComparison({
+                maintenance, bmr, tefTotal: today.tef.total,
+                avgDailyExercise: neatOpts.avgDailyExercise,
+                activityLevel: neatOpts.activityLevel,
+                steps: todayForm?.steps,
+                neatManual: neatOpts.neatManual,
+                cardioKcal: today.cardio,
+                weightKg: neatOpts.weightKg,
+                multiplier: neatOpts.neatMultiplier,
+              });
+              const aktif = today.neatSource || 'auto';
+              const carpan = Number(neatOpts.neatMultiplier) || 1;
+              return (
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-3.5 space-y-2.5">
+                  <div className="flex justify-between items-baseline">
+                    <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center">
+                      <Footprints size={11} className="mr-1.5 text-cyan-400" /> Günlük Hareket Detayı
+                    </h4>
+                    <span className="text-[9px] font-mono text-zinc-600">
+                      {carpan !== 1 ? `çarpan ${carpan}×` : 'çarpan yok'}
+                    </span>
+                  </div>
+
+                  {yontemler.map(y => {
+                    const secili = y.key === aktif;
+                    return (
+                      <div
+                        key={y.key}
+                        className={`rounded-xl border p-2.5 ${secili ? 'border-cyan-700 bg-cyan-950/20' : 'border-zinc-800 bg-zinc-950'}`}
+                      >
+                        <div className="flex justify-between items-center gap-2">
+                          <span className={`text-[11px] font-bold ${secili ? 'text-cyan-300' : 'text-zinc-300'}`}>
+                            {y.label}{secili && ' · kullanılan'}
+                          </span>
+                          <span className={`text-[12px] font-mono font-bold shrink-0 ${y.value === null ? 'text-zinc-600' : secili ? 'text-cyan-400' : 'text-zinc-400'}`}>
+                            {y.value === null ? '—' : `${y.value} kcal`}
+                          </span>
+                        </div>
+                        <p className="text-[9px] font-mono text-zinc-600 leading-relaxed mt-1">{y.formula}</p>
+                        {secili && (
+                          <p className="text-[9px] font-mono text-zinc-500 leading-relaxed mt-1">{y.note}</p>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  <p className="text-[9px] font-mono text-zinc-600 leading-relaxed">
+                    Yöntemi ve çarpanı Ayarlar &gt; Vücut &amp; Hesaplama&apos;dan
+                    değiştirebilirsin. Yöntemler arasındaki fark büyükse, veri
+                    biriktikçe otomatik yöntem en isabetlisi olur.
+                  </p>
+                </div>
+              );
+            })()}
 
             {/* Vücut kompozisyonunun etkisi */}
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-3.5 space-y-2">

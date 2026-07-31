@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { AlertCircle, Activity, Target, Zap, BookmarkPlus, Trash2, Trophy, Clock, Layers, ChevronRight, ChevronDown, Dumbbell, CalendarPlus, HeartPulse, Flame, CalendarRange, Pencil } from 'lucide-react';
+import { AlertCircle, Activity, Target, Zap, BookmarkPlus, Trash2, Clock, Layers, ChevronRight, ChevronDown, Dumbbell, CalendarPlus, HeartPulse, Flame, CalendarRange, Pencil, Wrench } from 'lucide-react';
 import { MUSCLE_SECTIONS, getVolumeLandmarks, volumeStatusOf, VOLUME_STATUS, acwrStatusOf, ACWR_STATUS, ACWR_HINT } from '../utils/constants';
 import { previewTemplateVolume, estimateDuration } from '../utils/templates';
 import MuscleHeatmap from './MuscleHeatmap';
@@ -11,17 +11,14 @@ const HomeView = memo(({
   setIsSettingsModalOpen,
   handleStartRequest,
   setDeleteConfirm,
-  setIsReportCardOpen,
   onSelectMuscle,
   onPreviewTemplate,
   onEditTemplate,
   customExercises = [],
   restSeconds = 120,
   experienceLevel = 'intermediate',
-  onOpenLibrary,
   onOpenTemplateBuilder,
-  onOpenCardio,
-  onOpenWeekPlan,
+  onOpenTools,
   weeklyCardioKcal = 0,
   showMuscleVolume = false,
   onToggleMuscleVolume,
@@ -62,15 +59,6 @@ const HomeView = memo(({
           <span className="text-2xl font-mono text-cyan-400 z-10">{dashboardStats.thisWeekEffectiveSets} <span className="text-xs text-zinc-500">Set</span></span>
         </div>
       </div>
-
-      {/* Antrenman Raporu Karnesi Oluştur Butonu */}
-      <button
-        onClick={() => setIsReportCardOpen(true)}
-        className="w-full bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-yellow-400 font-bold py-3 px-4 rounded-2xl flex items-center justify-center space-x-2 uppercase tracking-wide text-xs transition-colors"
-      >
-        <Trophy size={16} />
-        <span>Gelişim Raporu Karnesi Oluştur</span>
-      </button>
 
       {/* İnteraktif Kas Isı Haritası */}
       <MuscleHeatmap muscleVolume={dashboardStats.muscleVolume} onSelectMuscle={onSelectMuscle} experienceLevel={experienceLevel} />
@@ -201,43 +189,21 @@ const HomeView = memo(({
       </button>
 
       <button
-        onClick={() => onOpenCardio?.()}
+        onClick={() => onOpenTools?.()}
         className="w-full bg-zinc-900 active:bg-zinc-800 border border-zinc-800 text-zinc-200 font-bold py-3.5 px-4 rounded-2xl flex justify-center items-center uppercase tracking-wide text-xs transition-colors"
       >
-        <HeartPulse size={16} className="mr-2 text-red-400" /> Kardiyo Ekle
-        {weeklyCardioKcal > 0 && (
-          <span className="ml-2 flex items-center text-[10px] font-mono text-zinc-500 normal-case tracking-normal">
-            <Flame size={11} className="mr-1 text-red-400" />bu hafta {weeklyCardioKcal} kcal
-          </span>
-        )}
-      </button>
-
-      <div className="grid grid-cols-2 gap-3">
-        <button
-          onClick={() => onOpenLibrary?.()}
-          className="bg-zinc-900 active:bg-zinc-800 border border-zinc-800 text-zinc-300 font-bold py-3.5 px-3 rounded-2xl flex flex-col items-center justify-center gap-1.5 uppercase tracking-wide text-[10px] transition-colors"
-        >
-          <Dumbbell size={16} className="text-cyan-400" />
-          Hareket Kütüphanesi
-        </button>
-        <button
-          onClick={() => onOpenTemplateBuilder?.()}
-          className="bg-zinc-900 active:bg-zinc-800 border border-zinc-800 text-zinc-300 font-bold py-3.5 px-3 rounded-2xl flex flex-col items-center justify-center gap-1.5 uppercase tracking-wide text-[10px] transition-colors"
-        >
-          <CalendarPlus size={16} className="text-emerald-400" />
-          Program Oluştur
-        </button>
-      </div>
-
-      <button
-        onClick={() => onOpenWeekPlan?.()}
-        className="w-full bg-zinc-900 active:bg-zinc-800 border border-zinc-800 text-zinc-200 font-bold py-3.5 px-4 rounded-2xl flex justify-center items-center uppercase tracking-wide text-xs transition-colors"
-      >
-        <CalendarRange size={16} className="mr-2 text-cyan-400" /> Haftalık Program
+        <Wrench size={16} className="mr-2 text-cyan-400" /> Araçlar
         <span className="ml-2 text-[10px] font-mono text-zinc-500 normal-case tracking-normal">
-          şablonları günlere dağıt
+          kütüphane · program · kardiyo
         </span>
       </button>
+
+      {weeklyCardioKcal > 0 && (
+        <div className="flex items-center justify-center gap-1.5 text-[10px] font-mono text-zinc-500">
+          <Flame size={11} className="text-red-400" />
+          Bu hafta kardiyodan {weeklyCardioKcal} kcal
+        </div>
+      )}
 
       {/* Bölüm liste boşken de görünür: eskiden tamamen gizleniyordu ve
           kullanıcı şablon diye bir özellik olduğunu fark edemiyordu. */}

@@ -329,3 +329,66 @@ export const theoreticalWeek = (planDays = [], {
       : Math.round(maint),
   };
 };
+
+/**
+ * NEAT yöntemlerinin karşılaştırması.
+ *
+ * Aktif yöntemin sonucu tek başına "doğru mu" sorusuna cevap vermiyor. Burada
+ * her yöntem aynı verilerle hesaplanıp yan yana konuyor; kullanıcı kendi
+ * gününe hangisinin uyduğunu görüp seçebiliyor. Uygulanamayan yöntem (veri
+ * eksikse) neden hesaplanamadığını söylüyor.
+ */
+export const neatMethodComparison = ({
+  maintenance = 0, bmr = 0, tefTotal = 0, avgDailyExercise = 0,
+  activityLevel = 'light', steps = 0, neatManual = 0,
+  cardioKcal = 0, weightKg = 0, multiplier = 1,
+} = {}) => {
+  const maint = parseNumber(maintenance);
+  const base = parseNumber(bmr);
+  const carpan = parseNumber(multiplier) || 1;
+  const uygula = (v) => (v === null ? null : Math.round(v * carpan));
+
+  const otoHam = (maint > 0 && base > 0)
+    ? Math.max(0, Math.round(maint - base - parseNumber(tefTotal) - parseNumber(avgDailyExercise)))
+    : null;
+
+  const lvl = ACTIVITY_LEVELS.find(l => l.key === activityLevel) || ACTIVITY_LEVELS[1];
+  const seviyeHam = base > 0 ? Math.round(base * lvl.factor) : null;
+
+  const kardiyoAdim = stepsCoveredByCardio(cardioKcal, weightKg);
+  const netAdim = Math.max(0, parseNumber(steps) - kardiyoAdim);
+  const adimHam = parseNumber(steps) > 0 ? caloriesFromSteps(netAdim, weightKg) : null;
+
+  const elleHam = parseNumber(neatManual) > 0 ? Math.round(parseNumber(neatManual)) : null;
+
+  return [
+    {
+      key: 'auto', label: 'Otomatik (artık)', value: uygula(otoHam),
+      formula: otoHam === null
+        ? 'Gerçek harcama ve bazal metabolizma gerekiyor.'
+        : `${maint} korunum − ${base} bazal − ${Math.round(parseNumber(tefTotal))} sindirim − ${Math.round(parseNumber(avgDailyExercise))} ort. egzersiz`,
+      note: 'Ölçülen harcamadan diğer bileşenleri düşer. En kişiye özel yöntem; veri biriktikçe isabeti artar.',
+    },
+    {
+      key: 'level', label: `Seviye (${lvl.label})`, value: uygula(seviyeHam),
+      formula: seviyeHam === null ? 'Bazal metabolizma gerekiyor.' : `${base} bazal × ${lvl.factor}`,
+      note: 'Meslek ve gün düzenine göre kaba tahmin. Veri azken en güvenli başlangıç.',
+    },
+    {
+      key: 'steps', label: 'Adım sayısı', value: uygula(adimHam),
+      formula: adimHam === null
+        ? 'O güne adım sayısı girilmemiş.'
+        : kardiyoAdim > 0
+          ? `(${parseNumber(steps)} − ${kardiyoAdim} kardiyo payı) × 0.0005 × ${parseNumber(weightKg)} kg`
+          : `${parseNumber(steps)} adım × 0.0005 × ${parseNumber(weightKg)} kg`,
+      note: kardiyoAdim > 0
+        ? 'Kardiyo olarak girdiğin koşu/yürüyüşün adım karşılığı düşülür, iki kez sayılmaz.'
+        : 'Sayaç verisi varsa en somut yöntem. Ayakta durma gibi adımsız hareketi yakalamaz.',
+    },
+    {
+      key: 'manual', label: 'Elle girilen', value: uygula(elleHam),
+      formula: elleHam === null ? 'Ayarlardan sabit bir değer girilmemiş.' : `${elleHam} kcal (sabit)`,
+      note: 'Kendi ölçümüne veya bir cihaza güveniyorsan doğrudan yaz.',
+    },
+  ];
+};

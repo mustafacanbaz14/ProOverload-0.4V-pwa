@@ -47,6 +47,7 @@ import ExerciseLibraryModal from './components/ExerciseLibraryModal';
 import TemplateBuilderModal from './components/TemplateBuilderModal';
 import CardioModal from './components/CardioModal';
 import EnergyDetailModal from './components/EnergyDetailModal';
+import ToolsModal from './components/ToolsModal';
 import WeeklyPlanModal from './components/WeeklyPlanModal';
 
 export default function App() {
@@ -82,6 +83,7 @@ export default function App() {
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [isCardioOpen, setIsCardioOpen] = useState(false);
   const [isEnergyDetailOpen, setIsEnergyDetailOpen] = useState(false);
+  const [isToolsOpen, setIsToolsOpen] = useState(false);
   const [isWeekPlanOpen, setIsWeekPlanOpen] = useState(false);
   // Kütüphaneden "yeni hareket" ile gelindiğinde kapanışta oraya dönülür.
   const [pickerReturnsToLibrary, setPickerReturnsToLibrary] = useState(false);
@@ -1212,17 +1214,14 @@ export default function App() {
               setIsSettingsModalOpen={setIsSettingsModalOpen}
               handleStartRequest={handleStartRequest}
               setDeleteConfirm={setDeleteConfirm}
-              setIsReportCardOpen={setIsReportCardOpen}
               onSelectMuscle={setDetailMuscle}
               onPreviewTemplate={setPreviewTemplate}
               onEditTemplate={(t) => { setEditingTemplate(t); setIsBuilderOpen(true); }}
               customExercises={customExercises}
               restSeconds={settings.restSeconds}
               experienceLevel={settings.experienceLevel}
-              onOpenLibrary={() => setIsLibraryOpen(true)}
               onOpenTemplateBuilder={() => setIsBuilderOpen(true)}
-              onOpenCardio={() => setIsCardioOpen(true)}
-              onOpenWeekPlan={() => setIsWeekPlanOpen(true)}
+              onOpenTools={() => setIsToolsOpen(true)}
               weeklyCardioKcal={weeklyCardioKcal}
               showMuscleVolume={settings.showMuscleVolume}
               onToggleMuscleVolume={() => setSettings(prev => ({ ...prev, showMuscleVolume: !prev.showMuscleVolume }))}
@@ -1479,6 +1478,26 @@ export default function App() {
           restSeconds={settings.restSeconds}
           experienceLevel={settings.experienceLevel}
           weightKg={latestWeight}
+        />
+
+        {/* ARAÇLAR */}
+        <ToolsModal
+          isOpen={isToolsOpen}
+          onClose={() => setIsToolsOpen(false)}
+          onSelect={(key) => {
+            const ac = {
+              library: () => setIsLibraryOpen(true),
+              builder: () => setIsBuilderOpen(true),
+              weekPlan: () => setIsWeekPlanOpen(true),
+              plates: () => setPlateCalc({ weight: 0 }),
+              cardio: () => setIsCardioOpen(true),
+              energy: () => setIsEnergyDetailOpen(true),
+              compare: () => setIsComparisonOpen(true),
+              guide: () => setIsMeasurementGuideOpen(true),
+              report: () => setIsReportCardOpen(true),
+            }[key];
+            ac?.();
+          }}
         />
 
         {/* KALORİ DETAYI */}
