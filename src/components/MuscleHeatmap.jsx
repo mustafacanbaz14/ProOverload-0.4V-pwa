@@ -33,9 +33,21 @@ const MuscleHeatmap = memo(({
   const region = (muscle) => ({
     fill: getMuscleColor(vol(muscle), muscle, experienceLevel),
     onClick: () => setSelected(muscle),
+    onKeyDown: (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        setSelected(muscle);
+      }
+    },
+    role: 'button',
+    tabIndex: 0,
+    'aria-label': `${muscle}: ${vol(muscle)} etkili set`,
     className: 'cursor-pointer transition-all duration-300',
-    stroke: selected === muscle ? '#e4e4e7' : 'transparent',
-    strokeWidth: selected === muscle ? 1.2 : 0,
+    stroke: selected === muscle ? '#22d3ee' : 'transparent',
+    strokeWidth: selected === muscle ? 1.5 : 0,
+    strokeLinejoin: 'round',
+    strokeLinecap: 'round',
+    vectorEffect: 'non-scaling-stroke',
   });
 
   return (
@@ -53,7 +65,7 @@ const MuscleHeatmap = memo(({
           {/* --- ÖN CEPHE --- */}
           <div className="flex flex-col items-center">
             <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-1.5">Ön</span>
-            <svg viewBox="0 0 110 180" className="w-28 h-44">
+            <svg viewBox="0 0 110 180" className="w-28 h-44" role="img" aria-label="Ön kas bölgeleri">
               <circle cx="55" cy="15" r="9" fill="#3f3f46" />
               <rect x="51" y="24" width="8" height="5" fill="#3f3f46" />
 
@@ -95,7 +107,7 @@ const MuscleHeatmap = memo(({
           {/* --- ARKA CEPHE --- */}
           <div className="flex flex-col items-center">
             <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-1.5">Arka</span>
-            <svg viewBox="0 0 110 180" className="w-28 h-44">
+            <svg viewBox="0 0 110 180" className="w-28 h-44" role="img" aria-label="Arka kas bölgeleri">
               <circle cx="55" cy="15" r="9" fill="#3f3f46" />
               <rect x="51" y="24" width="8" height="5" fill="#3f3f46" />
 
@@ -106,9 +118,10 @@ const MuscleHeatmap = memo(({
               <ellipse cx="33" cy="42" rx="8" ry="7" {...region('Arka Omuz')} />
               <ellipse cx="77" cy="42" rx="8" ry="7" {...region('Arka Omuz')} />
 
-              {/* Kanat (latissimus) — koltuk altından bele daralan V */}
-              <path d="M 42 46 L 55 46 L 55 72 L 46 66 Z" {...region('Kanat')} />
-              <path d="M 68 46 L 55 46 L 55 72 L 64 66 Z" {...region('Kanat')} />
+              {/* Kanatlar merkezde üst üste bindirilmez. Eski üçgenler x=55 çizgisini
+                  paylaşınca özellikle iOS ölçeklemesinde dikiş/taşma oluşturuyordu. */}
+              <path d="M 43 45 C 39 49 39 58 43 64 C 45 68 48 72 51 75 L 53 62 L 52 47 Z" {...region('Kanat')} />
+              <path d="M 67 45 C 71 49 71 58 67 64 C 65 68 62 72 59 75 L 57 62 L 58 47 Z" {...region('Kanat')} />
 
               {/* Orta sırt (romboid) — kürek kemikleri arası */}
               <rect x="48" y="47" width="14" height="14" rx="2" {...region('Orta Sırt')} />

@@ -1,5 +1,5 @@
 import React, { memo, useState, useMemo } from 'react';
-import { Search, Eye, EyeOff } from 'lucide-react';
+import { Search, Eye, EyeOff, BrainCircuit, TrendingDown, Utensils } from 'lucide-react';
 import TrendChart from './TrendChart';
 import { BODY_METRICS, MUSCLE_GROUPS, getVolumeLandmarks } from '../utils/constants';
 import { estimate1RM, isWorkingSet, parseNumber, detectMuscleGroup, foldForSearch } from '../utils/helpers';
@@ -9,6 +9,7 @@ import {
 } from '../utils/nutritionStats';
 import { energyBalanceAdvice, recommendedCalories } from '../utils/goals';
 import { formatDay } from '../utils/dates';
+import { buildPlateauInsights, buildNutritionPerformanceInsight } from '../utils/insights';
 
 // Beslenme grafiğinde izlenebilecek alanlar.
 const NUTRITION_METRICS = [
@@ -37,6 +38,7 @@ const AnalyticsView = memo(({
   settings = {},
   computedComp,
   adaptiveTDEE,
+  embedded = false,
 }) => {
   const [muscleKey, setMuscleKey] = useState('Göğüs');
   const [showAverage, setShowAverage] = useState(true);
@@ -145,6 +147,11 @@ const AnalyticsView = memo(({
     return rec ? parseNumber(rec.weight) : 0;
   }, [metricsHistory]);
 
+  const coachInsights = useMemo(() => ({
+    plateaus: buildPlateauInsights(workouts),
+    nutrition: buildNutritionPerformanceInsight(workouts, nutritionHistory, latestWeight),
+  }), [workouts, nutritionHistory, latestWeight]);
+
   const nutritionAnalysis = useMemo(() => {
     if (analysisType !== 'nutrition' || nutritionSeries.length === 0) return null;
 
@@ -221,14 +228,14 @@ const AnalyticsView = memo(({
   }, [analysisType, nutritionSeries, nutritionMetric, showAverage, adaptiveTDEE, computedComp, settings, latestWeight]);
 
   return (
-    <div className="p-4 space-y-4 pb-nav h-full overflow-y-auto hide-scrollbar bg-black">
-      {/* Dört sekme tek satırda sığmıyor; etiketler kısaltıldı. */}
-      <div className="flex bg-zinc-900 p-1 rounded-2xl border border-zinc-800">
+    <div className={`${embedded ? 'px-4 pt-2' : 'p-4'} space-y-4 pb-nav h-full overflow-y-auto hide-scrollbar bg-black`}>
+      <div className="grid grid-cols-5 bg-zinc-900 p-1 rounded-2xl border border-zinc-800">
         {[
           { key: 'body', label: 'Vücut' },
           { key: '1rm', label: '1RM' },
           { key: 'muscle', label: 'Hacim' },
           { key: 'nutrition', label: 'Beslenme' },
+          { key: 'coach', label: 'Koç' },
         ].map(t => (
           <button
             key={t.key}
@@ -375,6 +382,57 @@ const AnalyticsView = memo(({
           ) : (
             <div className="text-center py-12 text-zinc-600 text-xs font-mono">Grafiği görmek için bir hareket seçin</div>
           )}
+        </div>
+      )}
+
+      {analysisType === 'coach' && (
+        <div className="space-y-3">
+          <div className="bg-gradient-to-br from-cyan-950/35 to-zinc-900 border border-cyan-900/40 rounded-2xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <BrainCircuit size={16} className="text-cyan-400" />
+              <h3 className="text-xs font-bold text-zinc-100 uppercase tracking-wider">Kişisel Koç İçgörüleri</h3>
+            </div>
+            <p className="text-[10px] font-mono text-zinc-500 leading-relaxed">
+              Yalnızca yeterli geçmiş olduğunda sonuç üretir; tek bir kötü seans alarm sayılmaz.
+            </p>
+          </div>
+
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-zinc-800 flex items-center gap-2">
+              <TrendingDown size={14} className="text-amber-400" />
+              <h4 className="text-[11px] font-bold text-zinc-200 uppercase tracking-wider">Plato Taraması</h4>
+            </div>
+            <div className="p-3 space-y-2">
+              {coachInsights.plateaus.length === 0 ? (
+                <p className="text-[10px] font-mono text-emerald-400 leading-relaxed py-2 text-center">
+                  4+ seans ve 21+ günlük veride belirgin bir plato görünmüyor.
+                </p>
+              ) : coachInsights.plateaus.map(item => (
+                <div key={item.name} className="bg-zinc-950 border border-zinc-800 rounded-xl p-3">
+                  <div className="flex justify-between gap-2">
+                    <strong className="text-[11px] text-zinc-200 truncate">{item.name}</strong>
+                    <span className={`text-[10px] font-mono shrink-0 ${item.state === 'decline' ? 'text-red-400' : 'text-amber-400'}`}>
+                      {item.change > 0 ? '+' : ''}{item.change}%
+                    </span>
+                  </div>
+                  <p className="text-[9px] font-mono text-zinc-500 mt-1 leading-relaxed">{item.sessions} seans · {item.advice}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Utensils size={14} className="text-emerald-400" />
+              <h4 className="text-[11px] font-bold text-zinc-200 uppercase tracking-wider">Beslenme × Performans</h4>
+            </div>
+            <p className="text-[11px] font-bold text-zinc-200">
+              {coachInsights.nutrition.label || 'Henüz yeterli eşleşen veri yok'}
+            </p>
+            <p className="text-[9px] font-mono text-zinc-500 leading-relaxed mt-1.5">
+              {coachInsights.nutrition.message} · {coachInsights.nutrition.samples} eşleşen gün
+            </p>
+          </div>
         </div>
       )}
 

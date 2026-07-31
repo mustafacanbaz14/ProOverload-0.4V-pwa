@@ -54,6 +54,8 @@ export const DEFAULT_SETTINGS = {
   // Yerel/çevrimiçi besinlerin küçük kopyaları. Ayarlarda tutulduğu için ayrıca
   // bir localStorage anahtarı ve göç adımı gerektirmez.
   favoriteFoods: [],
+  // İlk kullanım turu yalnızca yeni ve boş veri havuzunda otomatik açılır.
+  onboardingComplete: false,
   // NEAT için kullanıcı çarpanı: otomatik/seviye hesabını ölçekler.
   neatMultiplier: 1
 };

@@ -6,6 +6,7 @@ import { mergeWellnessDay } from '../src/utils/wellness.js';
 import { migrateWeekPlans, removeTemplateFromPlans } from '../src/utils/planMigration.js';
 import { suggestNextTarget } from '../src/utils/helpers.js';
 import { dailyTotals, nutritionDayScore } from '../src/utils/nutritionStats.js';
+import { buildPlateauInsights, buildNutritionPerformanceInsight } from '../src/utils/insights.js';
 
 const tests = [];
 const test = (name, run) => tests.push({ name, run });
@@ -128,6 +129,28 @@ test('günlük beslenme uyumu hedef ve suya göre puanlanır', () => {
   assert.equal(score.score, 98);
   assert.equal(score.waterTarget, 2800);
   assert.deepEqual(score.next, []);
+});
+
+test('plato taraması tek kötü seansta alarm üretmez', () => {
+  const workout = (date, weight) => ({ date, exercises: [{ name: 'Bench', sets: [{ weight, reps: 8, rir: 2 }] }] });
+  const result = buildPlateauInsights([
+    workout('2026-06-01', 100), workout('2026-06-08', 100),
+    workout('2026-06-22', 100), workout('2026-06-29', 99),
+  ]);
+  assert.equal(result.length, 1);
+  assert.equal(result[0].name, 'Bench');
+});
+
+test('beslenme performans ilişkisi altı eşleşmeden önce kesin hüküm vermez', () => {
+  const workoutsForInsight = Array.from({ length: 5 }, (_, index) => ({
+    date: `2026-07-0${index + 1}`, readiness: { score: 60 + index },
+  }));
+  const nutritionForInsight = workoutsForInsight.map((workout, index) => ({
+    date: workout.date, meals: [{ carbs: 200 + index * 10 }],
+  }));
+  const result = buildNutritionPerformanceInsight(workoutsForInsight, nutritionForInsight, 80);
+  assert.equal(result.enough, false);
+  assert.equal(result.samples, 5);
 });
 
 for (const { name, run } of tests) {

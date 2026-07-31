@@ -1,5 +1,5 @@
-import React, { memo } from 'react';
-import { User, Scale, Ruler, Info, Save, ArrowRightLeft, Calendar, Droplet, History } from 'lucide-react';
+import React, { memo, useState } from 'react';
+import { User, Scale, Ruler, Info, Save, ArrowRightLeft, Calendar, Droplet, History, ChevronDown } from 'lucide-react';
 import { BODY_METRICS, FAT_METHOD_LABELS } from '../utils/constants';
 import { parseNumber, clampNumber, INPUT_LIMITS } from '../utils/helpers';
 import MeasurementGuide from './MeasurementGuide';
@@ -19,17 +19,23 @@ const SKINFOLD_SITES = [
   { key: 'subscapular', label: 'Subskapular', male3: false, female3: false },
 ];
 
-const Section = ({ icon, title, action, children }) => (
-  <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
-    <div className="flex justify-between items-center px-4 py-3 border-b border-zinc-800 bg-zinc-950/60">
-      <h3 className="text-[11px] font-bold text-zinc-200 uppercase tracking-wider flex items-center">
-        <span className="mr-2 text-cyan-400 flex items-center">{icon}</span>{title}
-      </h3>
-      {action}
+const Section = ({ icon, title, action, children, defaultOpen = true }) => {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
+      <div className={`flex justify-between items-center px-3 border-zinc-800 bg-zinc-950/60 ${open ? 'border-b' : ''}`}>
+        <button onClick={() => setOpen(value => !value)} aria-expanded={open} className="flex-1 py-3 text-left flex items-center justify-between min-w-0">
+          <h3 className="text-[11px] font-bold text-zinc-200 uppercase tracking-wider flex items-center min-w-0">
+            <span className="mr-2 text-cyan-400 flex items-center">{icon}</span>{title}
+          </h3>
+          <ChevronDown size={14} className={`text-zinc-600 transition-transform ${open ? 'rotate-180' : ''}`} />
+        </button>
+        {action && <div className="ml-2 shrink-0">{action}</div>}
+      </div>
+      {open && <div className="p-4 space-y-3">{children}</div>}
     </div>
-    <div className="p-4 space-y-3">{children}</div>
-  </div>
-);
+  );
+};
 
 const Field = ({ label, children }) => (
   <div>
@@ -55,6 +61,7 @@ const MetricsView = memo(({
   goalValues = {},
   weeklyKg = 0,
   onDateChange,
+  embedded = false,
 }) => {
   const form = currentMetricsForm;
 
@@ -101,7 +108,19 @@ const MetricsView = memo(({
   ];
 
   return (
-    <div className="p-4 space-y-4 pb-28 h-full overflow-y-auto hide-scrollbar bg-black">
+    <div className={`${embedded ? 'px-4 pt-2' : 'p-4'} space-y-4 pb-28 h-full overflow-y-auto hide-scrollbar bg-black`}>
+
+      <div className="bg-gradient-to-br from-cyan-950/35 to-zinc-900 border border-cyan-900/35 rounded-2xl p-4">
+        <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Son Durum</span>
+        <div className="grid grid-cols-4 gap-2 mt-2 text-center">
+          {[
+            ['Kilo', `${parseNumber(form.weight) || '—'}`, 'kg'],
+            ['Yağ', computedComp.activeBF || '—', '%'],
+            ['FFMI', computedComp.ffmi || '—', ''],
+            ['BMI', computeBMI(form.weight, form.height)?.bmi || '—', ''],
+          ].map(([label, value, unit]) => <div key={label}><strong className="text-sm font-mono text-zinc-100 block">{value}<small className="text-[8px] text-zinc-500 ml-0.5">{unit}</small></strong><span className="text-[8px] font-mono text-zinc-600 uppercase">{label}</span></div>)}
+        </div>
+      </div>
 
       <button
         onClick={() => setIsComparisonOpen(true)}
@@ -160,7 +179,7 @@ const MetricsView = memo(({
       </Section>
 
       {/* --- YAĞ ORANI YÖNTEMİ --- */}
-      <Section icon={<Droplet size={13} />} title="Yağ Oranı Kaynağı">
+      <Section icon={<Droplet size={13} />} title="Yağ Oranı Kaynağı" defaultOpen={settings.interfaceMode === 'detailed'}>
         <div className="grid grid-cols-4 gap-2">
           {fatOptions.map(opt => {
             const selected = form.fatPreference === opt.key;
@@ -295,6 +314,7 @@ const MetricsView = memo(({
       {/* --- ÇEVRE ÖLÇÜLERİ --- */}
       <Section icon={<Ruler size={13} />}
         title="Çevre Ölçüleri (cm)"
+        defaultOpen={settings.interfaceMode === 'detailed'}
         action={
           <button
             onClick={() => setIsMeasurementGuideOpen(!isMeasurementGuideOpen)}

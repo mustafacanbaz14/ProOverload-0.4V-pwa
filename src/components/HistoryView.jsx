@@ -1,6 +1,6 @@
-import React, { memo } from 'react';
-import { Trash2, Calendar, Scale, Beef, Pencil, Copy, BookmarkPlus, HeartPulse } from 'lucide-react';
-import { calcTonnage, calcEffectiveSets, isWorkingSet } from '../utils/helpers';
+import React, { memo, useMemo, useState } from 'react';
+import { Trash2, Calendar, Scale, Beef, Pencil, Copy, BookmarkPlus, HeartPulse, Search } from 'lucide-react';
+import { calcTonnage, calcEffectiveSets, isWorkingSet, foldForSearch } from '../utils/helpers';
 import { findActivity, findEffort, effortDelta, cardioEntryCalories, totalCardioCalories, dayWorkoutCalories } from '../utils/cardio';
 import { dailyTotals } from '../utils/nutritionStats';
 import { parseNumber, clampNumber } from '../utils/helpers';
@@ -27,8 +27,21 @@ const HistoryView = memo(({
   maintenanceCalories = 0,
   onUpdateNutrition,
 }) => {
+  const [query, setQuery] = useState('');
+  const q = foldForSearch(query).trim();
+  const filteredWorkouts = useMemo(() => !q ? workouts : workouts.filter(w =>
+    foldForSearch(`${w.name || ''} ${w.date} ${(w.exercises || []).map(ex => ex.name).join(' ')}`).includes(q)), [workouts, q]);
+  const filteredMetrics = useMemo(() => !q ? metricsHistory : metricsHistory.filter(m =>
+    foldForSearch(`${m.date} ${m.weight} ${m.bodyFat || ''}`).includes(q)), [metricsHistory, q]);
+  const filteredNutrition = useMemo(() => !q ? nutritionHistory : nutritionHistory.filter(n =>
+    foldForSearch(`${n.date} ${(n.meals || []).map(meal => meal.name).join(' ')}`).includes(q)), [nutritionHistory, q]);
+
   return (
     <div className="p-4 space-y-4 pb-nav h-full overflow-y-auto hide-scrollbar bg-black">
+      <div>
+        <span className="text-[10px] font-mono text-cyan-500 uppercase tracking-widest">Kayıt Arşivi</span>
+        <h2 className="text-xl font-black text-zinc-100 mt-0.5">Geçmiş</h2>
+      </div>
       <div className="flex bg-zinc-900 p-1 rounded-2xl border border-zinc-800">
         <button
           onClick={() => setHistoryTab('workouts')}
@@ -50,12 +63,17 @@ const HistoryView = memo(({
         </button>
       </div>
 
+      <div className="relative">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Tarih, hareket, öğün veya kayıt ara…" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-zinc-200 outline-none focus:border-cyan-600" />
+      </div>
+
       {historyTab === 'workouts' && (
         <div className="space-y-3">
-          {workouts.length === 0 ? (
+          {filteredWorkouts.length === 0 ? (
             <div className="text-center py-12 text-zinc-600 text-xs font-mono">Henüz antrenman kaydı yok</div>
           ) : (
-            workouts.map(w => {
+            filteredWorkouts.map(w => {
               const tonnage = calcTonnage(w.exercises);
               const effectiveSets = calcEffectiveSets(w.exercises);
               const cardio = w.cardio || [];
@@ -182,10 +200,10 @@ const HistoryView = memo(({
 
       {historyTab === 'metrics' && (
         <div className="space-y-3">
-          {metricsHistory.length === 0 ? (
+          {filteredMetrics.length === 0 ? (
             <div className="text-center py-12 text-zinc-600 text-xs font-mono">Henüz ölçüm kaydı yok</div>
           ) : (
-            metricsHistory.map(m => (
+            filteredMetrics.map(m => (
               <div key={m.id} className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 space-y-2">
                 <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
                   <div className="flex items-center space-x-2">
@@ -217,10 +235,10 @@ const HistoryView = memo(({
 
       {historyTab === 'nutrition' && (
         <div className="space-y-3">
-          {nutritionHistory.length === 0 ? (
+          {filteredNutrition.length === 0 ? (
             <div className="text-center py-12 text-zinc-600 text-xs font-mono">Henüz beslenme kaydı yok</div>
           ) : (
-            nutritionHistory.map(n => {
+            filteredNutrition.map(n => {
               // Toplamlar öğünlerden hesaplanır. Eskiden kayıttaki üst düzey
               // caloriesIn/protein/carbs/fats alanları okunuyordu ama bu alanlar
               // hiçbir zaman doldurulmuyordu; veri girilmiş günler bile 0 görünüyordu.

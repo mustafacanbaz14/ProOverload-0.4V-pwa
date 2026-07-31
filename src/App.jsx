@@ -39,9 +39,7 @@ import Navbar from './components/Navbar';
 import HomeView from './components/HomeView';
 import ActiveWorkoutView from './components/ActiveWorkoutView';
 import HistoryView from './components/HistoryView';
-import MetricsView from './components/MetricsView';
 import NutritionView from './components/NutritionView';
-import AnalyticsView from './components/AnalyticsView';
 import SettingsModal from './components/SettingsModal';
 import QRCodeModal from './components/QRCodeModal';
 import FoodSearchModal from './components/FoodSearchModal';
@@ -59,6 +57,10 @@ import ToolsModal from './components/ToolsModal';
 import WellnessModal from './components/WellnessModal';
 import PRCelebration from './components/PRCelebration';
 import WeeklyPlanModal from './components/WeeklyPlanModal';
+import TrainingView from './components/TrainingView';
+import ProgressHubView from './components/ProgressHubView';
+import GlobalSearchModal from './components/GlobalSearchModal';
+import OnboardingModal from './components/OnboardingModal';
 import { formatDay, formatDayRelative } from './utils/dates';
 import { emptyWellnessDay, mergeWellnessDay, dayMindCalories, computeSleepScore } from './utils/wellness';
 
@@ -76,6 +78,7 @@ export default function App() {
   const [view, setView] = useState('home');
   const [historyTab, setHistoryTab] = useState('workouts');
   const [analysisType, setAnalysisType] = useState('body');
+  const [progressTab, setProgressTab] = useState('body');
 
   const [customExercises, setCustomExercises] = useState(initial.customExercises);
   const [customFoods, setCustomFoods] = useState(initial.customFoods);
@@ -99,6 +102,12 @@ export default function App() {
   const [prCelebration, setPrCelebration] = useState(null);
   const [isWeekPlanOpen, setIsWeekPlanOpen] = useState(false);
   const [isWellnessOpen, setIsWellnessOpen] = useState(false);
+  const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(() =>
+    !initial.settings.onboardingComplete
+    && initial.workouts.length === 0
+    && initial.metricsHistory.length === 0
+    && initial.nutritionHistory.length === 0);
   // Araçlar listesinde uyku ve meditasyon ayrı giriş; hangisinden gelindiyse
   // Toparlanma ekranı o sekmede açılır.
   const [wellnessTab, setWellnessTab] = useState('sleep');
@@ -769,7 +778,8 @@ export default function App() {
 
   const handleEditMetric = useCallback((metric) => {
     setCurrentMetricsForm(mergeMetrics(metric));
-    setView('profile');
+    setProgressTab('body');
+    setView('progress');
     showToast('Ölçüm düzenleniyor.');
   }, [showToast]);
 
@@ -1151,6 +1161,12 @@ export default function App() {
     setView(next);
   }, [nutritionHistory]);
 
+  const handleGlobalNavigate = useCallback((next, subTab) => {
+    if (next === 'progress' && subTab) setProgressTab(subTab);
+    if (next === 'history' && subTab) setHistoryTab(subTab);
+    handleChangeView(next);
+  }, [handleChangeView]);
+
   // --- KARDİYO ---
 
   // Kalori tahmini vücut ağırlığına dayanır; en son girilen ölçüm kullanılır.
@@ -1396,9 +1412,14 @@ export default function App() {
             </div>
             <span className="text-[9px] font-mono text-zinc-600 self-center">v{pkg.version}</span>
           </div>
-          <button onClick={() => setIsSettingsModalOpen(true)} aria-label="Ayarları aç" className="px-4 py-3.5 text-zinc-400 hover:text-cyan-400 active:scale-95 transition-all">
-            <Settings size={18} />
-          </button>
+          <div className="flex items-center">
+            <button onClick={() => setIsGlobalSearchOpen(true)} aria-label="Uygulamada ara" className="px-3 py-3.5 text-zinc-400 hover:text-cyan-400 active:scale-95 transition-all">
+              <Search size={18} />
+            </button>
+            <button onClick={() => setIsSettingsModalOpen(true)} aria-label="Ayarları aç" className="px-3 py-3.5 text-zinc-400 hover:text-cyan-400 active:scale-95 transition-all">
+              <Settings size={18} />
+            </button>
+          </div>
         </header>
 
         {/* MAIN VIEW CONTENT */}
@@ -1430,22 +1451,18 @@ export default function App() {
             />
           )}
 
-          {view === 'profile' && (
-            <MetricsView
-              currentMetricsForm={currentMetricsForm}
-              setCurrentMetricsForm={setCurrentMetricsForm}
-              computedComp={computedComp}
-              handleSaveMetrics={handleSaveMetrics}
-              setIsMeasurementGuideOpen={setIsMeasurementGuideOpen}
-              isMeasurementGuideOpen={isMeasurementGuideOpen}
-              setIsComparisonOpen={setIsComparisonOpen}
-              latestMetrics={sortedMetrics[0] || null}
-              onDateChange={handleMetricsDateChange}
-              isExistingRecord={metricsHistory.some(m => m.date === currentMetricsForm.date)}
-              settings={settings}
-              setSettings={setSettings}
-              goalValues={goalValues}
-              weeklyKg={adaptiveTDEE?.insufficient ? 0 : (adaptiveTDEE?.weightChangePerWeek || 0)}
+          {view === 'training' && (
+            <TrainingView
+              templates={templates}
+              restSeconds={settings.restSeconds}
+              weightKg={latestWeight}
+              onStart={handleStartRequest}
+              onLibrary={() => setIsLibraryOpen(true)}
+              onBuilder={() => setIsBuilderOpen(true)}
+              onWeekPlan={() => setIsWeekPlanOpen(true)}
+              onCardio={() => setIsCardioOpen(true)}
+              onPreview={setPreviewTemplate}
+              onEdit={(template) => { setEditingTemplate(template); setIsBuilderOpen(true); }}
             />
           )}
 
@@ -1484,26 +1501,46 @@ export default function App() {
             />
           )}
 
-          {view === 'analysis' && (
-            <AnalyticsView
-              analysisType={analysisType}
-              setAnalysisType={setAnalysisType}
-              bodyMetricKey={bodyMetricKey}
-              setBodyMetricKey={setBodyMetricKey}
-              analysisExercise={analysisExercise}
-              setAnalysisExercise={setAnalysisExercise}
-              metricsHistory={metricsHistory}
-              workouts={workouts}
-              allExercisesNames={allExercisesNames}
-              customExercises={customExercises}
-              experienceLevel={settings.experienceLevel}
-              exercisePerformCounts={exercisePerformCounts}
-              hidden1RMExercises={settings.hidden1RMExercises}
-              onToggleHidden1RM={handleToggleHidden1RM}
-              nutritionHistory={sortedNutrition}
-              settings={settings}
-              computedComp={computedComp}
-              adaptiveTDEE={adaptiveTDEE}
+          {view === 'progress' && (
+            <ProgressHubView
+              tab={progressTab}
+              setTab={setProgressTab}
+              metricsProps={{
+                currentMetricsForm,
+                setCurrentMetricsForm,
+                computedComp,
+                handleSaveMetrics,
+                setIsMeasurementGuideOpen,
+                isMeasurementGuideOpen,
+                setIsComparisonOpen,
+                latestMetrics: sortedMetrics[0] || null,
+                onDateChange: handleMetricsDateChange,
+                isExistingRecord: metricsHistory.some(m => m.date === currentMetricsForm.date),
+                settings,
+                setSettings,
+                goalValues,
+                weeklyKg: adaptiveTDEE?.insufficient ? 0 : (adaptiveTDEE?.weightChangePerWeek || 0),
+              }}
+              analyticsProps={{
+                analysisType,
+                setAnalysisType,
+                bodyMetricKey,
+                setBodyMetricKey,
+                analysisExercise,
+                setAnalysisExercise,
+                metricsHistory,
+                workouts,
+                allExercisesNames,
+                customExercises,
+                experienceLevel: settings.experienceLevel,
+                exercisePerformCounts,
+                hidden1RMExercises: settings.hidden1RMExercises,
+                onToggleHidden1RM: handleToggleHidden1RM,
+                nutritionHistory: sortedNutrition,
+                settings,
+                computedComp,
+                adaptiveTDEE,
+              }}
             />
           )}
 
@@ -1563,6 +1600,35 @@ export default function App() {
           <Navbar view={view} setView={handleChangeView} />
         )}
 
+        <GlobalSearchModal
+          isOpen={isGlobalSearchOpen}
+          onClose={() => setIsGlobalSearchOpen(false)}
+          exercises={allExercisesNames}
+          templates={templates}
+          workouts={sortedWorkouts}
+          onNavigate={handleGlobalNavigate}
+          onExercise={setEditorExercise}
+          onTemplate={setPreviewTemplate}
+          onTool={(key) => {
+            const action = {
+              library: () => setIsLibraryOpen(true),
+              weekPlan: () => setIsWeekPlanOpen(true),
+              energy: () => setIsEnergyDetailOpen(true),
+              sleep: () => { setWellnessTab('sleep'); setIsWellnessOpen(true); },
+            }[key];
+            action?.();
+          }}
+        />
+
+        <OnboardingModal
+          isOpen={isOnboardingOpen}
+          settings={settings}
+          onFinish={(patch) => {
+            setSettings(prev => ({ ...prev, ...patch }));
+            setIsOnboardingOpen(false);
+          }}
+        />
+
         {/* SETTINGS MODAL */}
         <SettingsModal
           isOpen={isSettingsModalOpen}
@@ -1575,6 +1641,7 @@ export default function App() {
           workouts={workouts}
           nutritionHistory={nutritionHistory}
           lastBackupDate={lastBackupDate}
+          onOpenOnboarding={() => setIsOnboardingOpen(true)}
         />
 
         {/* QR CODE MODAL */}

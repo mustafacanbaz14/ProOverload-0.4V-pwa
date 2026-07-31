@@ -49,6 +49,7 @@ const SettingsModal = memo(({
   workouts,
   nutritionHistory,
   lastBackupDate,
+  onOpenOnboarding,
 }) => {
   if (!isOpen) return null;
 
@@ -196,6 +197,15 @@ const SettingsModal = memo(({
                 })}
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={() => { onClose(); onOpenOnboarding?.(); }}
+              className="w-full p-3 bg-zinc-950 rounded-xl border border-zinc-800 text-left active:bg-zinc-900"
+            >
+              <span className="text-zinc-200 text-[11px] font-bold block">Uygulama Turunu Tekrar Göster</span>
+              <span className="text-zinc-500 text-[9px] font-mono block mt-0.5">Ana bölümleri ve kullanım akışını yeniden anlatır.</span>
+            </button>
           </Group>
 
           {/* --- VÜCUT & HESAPLAMA --- */}
