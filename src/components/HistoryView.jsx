@@ -1,6 +1,6 @@
 import React, { memo, useMemo, useState } from 'react';
-import { Trash2, Calendar, Scale, Beef, Pencil, Copy, BookmarkPlus, HeartPulse, Search, Timer, Flame, Activity } from 'lucide-react';
-import { calcTonnage, calcEffectiveSets, isWorkingSet, foldForSearch } from '../utils/helpers';
+import { Trash2, Calendar, Scale, Beef, Pencil, Copy, BookmarkPlus, HeartPulse, Search, Timer, Flame, Activity, Plus, Dumbbell, X } from 'lucide-react';
+import { calcTonnage, calcEffectiveSets, isWorkingSet, foldForSearch, getLocalDateString } from '../utils/helpers';
 import {
   findActivity, findEffort, effortDelta, cardioEntryCalories, totalCardioCalories,
   dayWorkoutCalories, cardioArchiveSummary, evaluateCardioEntry,
@@ -24,6 +24,11 @@ const HistoryView = memo(({
   handleRepeatWorkout,
   handleEditMetric,
   handleEditNutrition,
+  onAddWorkout,
+  onAddCardio,
+  onAddMetric,
+  onAddNutrition,
+  onEditCardio,
   handleSaveAsTemplate,
   latestWeight = 0,
   wellness = [],
@@ -31,6 +36,8 @@ const HistoryView = memo(({
   onUpdateNutrition,
 }) => {
   const [query, setQuery] = useState('');
+  const [addOpen, setAddOpen] = useState(false);
+  const [addDate, setAddDate] = useState(getLocalDateString);
   const q = foldForSearch(query).trim();
   const strengthWorkouts = useMemo(() => workouts.filter(w => (w.exercises || []).length > 0), [workouts]);
   const cardioRecords = useMemo(() => workouts.flatMap(workout => (workout.cardio || []).map(cardio => ({
@@ -54,6 +61,47 @@ const HistoryView = memo(({
         <span className="text-[10px] font-mono text-cyan-500 uppercase tracking-widest">Kayıt Arşivi</span>
         <h2 className="text-xl font-black text-zinc-100 mt-0.5">Geçmiş</h2>
       </div>
+
+      <section className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+        <button
+          onClick={() => setAddOpen(value => !value)}
+          className="w-full p-3.5 flex items-center justify-between text-left active:bg-zinc-800"
+          aria-expanded={addOpen}
+        >
+          <span className="flex items-center gap-2.5 min-w-0">
+            <span className="w-8 h-8 rounded-xl bg-cyan-950/50 border border-cyan-800/50 text-cyan-400 flex items-center justify-center shrink-0"><Plus size={16} /></span>
+            <span>
+              <strong className="text-[12px] text-zinc-100 block">Geçmişe kayıt ekle</strong>
+              <span className="text-[9px] font-mono text-zinc-500">Tarihi seç; kayıt türünü tek dokunuşla aç</span>
+            </span>
+          </span>
+          {addOpen ? <X size={16} className="text-zinc-500" /> : <Plus size={16} className="text-zinc-500" />}
+        </button>
+        {addOpen && (
+          <div className="border-t border-zinc-800 p-3 space-y-3 bg-zinc-950/50">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <span className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest block">Kayıt tarihi</span>
+                <strong className="text-[10px] text-cyan-400">{formatDay(addDate, 'medium', { year: true })}</strong>
+              </div>
+              <input type="date" value={addDate} max={getLocalDateString()} onChange={(event) => setAddDate(event.target.value)} className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-2 text-[10px] font-mono text-zinc-300 outline-none focus:border-cyan-600" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { key: 'workout', label: 'Antrenman', icon: Dumbbell, tone: 'text-cyan-400 border-cyan-900/50', action: onAddWorkout },
+                { key: 'cardio', label: 'Kardiyo', icon: HeartPulse, tone: 'text-red-400 border-red-900/50', action: onAddCardio },
+                { key: 'nutrition', label: 'Beslenme', icon: Beef, tone: 'text-emerald-400 border-emerald-900/50', action: onAddNutrition },
+                { key: 'metric', label: 'Vücut Ölçümü', icon: Scale, tone: 'text-purple-400 border-purple-900/50', action: onAddMetric },
+              ].map(item => (
+                <button key={item.key} onClick={() => { item.action?.(addDate); setAddOpen(false); }} className={`bg-zinc-900 border rounded-xl p-3 flex items-center gap-2 text-[10px] font-bold ${item.tone}`}>
+                  {React.createElement(item.icon, { size: 14 })} {item.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[9px] font-mono text-zinc-600 leading-relaxed">O tarihte beslenme veya ölçüm varsa yeni kopya açmak yerine mevcut kayıt düzenlemeye yüklenir.</p>
+          </div>
+        )}
+      </section>
       <div className="grid grid-cols-4 bg-zinc-900 p-1 rounded-2xl border border-zinc-800">
         <button
           onClick={() => setHistoryTab('workouts')}
@@ -265,7 +313,10 @@ const HistoryView = memo(({
                     <h4 className="text-sm font-bold text-red-400 flex items-center"><HeartPulse size={14} className="mr-1.5" />{activity?.label || record.cardio.type}</h4>
                     <span className="text-[10px] font-mono text-zinc-500">{formatDay(record.date, 'medium', { year: true })}</span>
                   </div>
-                  <button onClick={() => setDeleteConfirm({ isOpen: true, type: 'cardio', id: `${record.workoutId}::${record.cardio.id}` })} aria-label="Kardiyo kaydını sil" className="p-2 text-zinc-600 active:text-red-500"><Trash2 size={14} /></button>
+                  <div className="flex items-center shrink-0">
+                    <button onClick={() => onEditCardio?.(record)} aria-label="Kardiyo kaydını düzenle" title="Düzenle" className="p-2 text-zinc-500 active:text-cyan-400"><Pencil size={14} /></button>
+                    <button onClick={() => setDeleteConfirm({ isOpen: true, type: 'cardio', id: `${record.workoutId}::${record.cardio.id}` })} aria-label="Kardiyo kaydını sil" className="p-2 text-zinc-600 active:text-red-500"><Trash2 size={14} /></button>
+                  </div>
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-center">
                   {[
@@ -294,6 +345,7 @@ const HistoryView = memo(({
                     Aktif toparlanma temposu
                   </span>
                 )}
+                {record.cardio.note && <p className="text-[10px] text-zinc-400 bg-zinc-950/60 border border-zinc-800 rounded-lg px-2.5 py-2">{record.cardio.note}</p>}
                 {deviation && <p className={`text-[9px] font-mono ${deviation.harder ? 'text-amber-400' : 'text-cyan-400'}`}>Plan {deviation.planned.label} → gerçekleşen {deviation.actual.label} · {deviation.kcalDiff > 0 ? '+' : ''}{deviation.kcalDiff} kcal</p>}
               </div>
             );

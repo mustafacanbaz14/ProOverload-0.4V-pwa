@@ -1,10 +1,11 @@
 import React, { useState, memo } from 'react';
-import { X, HeartPulse, Flame, Clock, Plus, Trash2, Gauge, CalendarCheck, ChevronDown, Search } from 'lucide-react';
+import { X, HeartPulse, Flame, Clock, Plus, Trash2, Gauge, CalendarCheck, ChevronDown, Search, Save, CalendarDays } from 'lucide-react';
 import {
   CARDIO_ACTIVITIES, CARDIO_GROUPS, CARDIO_EFFORTS, DEFAULT_EFFORT,
   findActivity, findEffort, estimateCardioCalories, cardioEntryCalories, effortDelta,
 } from '../utils/cardio';
-import { clampNumber, INPUT_LIMITS, foldForSearch } from '../utils/helpers';
+import { clampNumber, INPUT_LIMITS, foldForSearch, getLocalDateString } from '../utils/helpers';
+import { formatDay } from '../utils/dates';
 
 const QUICK_MINUTES = [15, 20, 30, 45, 60];
 
@@ -14,15 +15,23 @@ const QUICK_MINUTES = [15, 20, 30, 45, 60];
  * `weightKg` en son ölçümden gelir; ölçüm yoksa tahmin yapılamaz ve kullanıcıya
  * uydurma bir sayı göstermek yerine ölçüm girmesi söylenir.
  */
-const CardioModal = memo(({ isOpen, onClose, onSave, weightKg, existing = [], onDelete, planned = [] }) => {
-  const [type, setType] = useState('zone2');
-  const [minutes, setMinutes] = useState(30);
-  const [effort, setEffort] = useState(DEFAULT_EFFORT);
+const CardioModal = memo(({
+  isOpen, onClose, onSave, weightKg, existing = [], onDelete, planned = [],
+  initialDate, editingEntry = null,
+}) => {
+  const [type, setType] = useState(editingEntry?.type || 'zone2');
+  const [minutes, setMinutes] = useState(editingEntry?.minutes || 30);
+  const [effort, setEffort] = useState(editingEntry?.effort || DEFAULT_EFFORT);
+  const [date, setDate] = useState(initialDate || getLocalDateString());
+  const [note, setNote] = useState(editingEntry?.note || '');
   const [showActivities, setShowActivities] = useState(false);
   const [activityQuery, setActivityQuery] = useState('');
   // Plandan yüklendiyse planlanan tempo/süre burada tutulur; kayda da yazılır
   // ki sonradan "planladığımdan sert mi geçti" sorusu cevaplanabilsin.
-  const [plan, setPlan] = useState(null);
+  const [plan, setPlan] = useState(editingEntry?.plannedEffort ? {
+    effort: editingEntry.plannedEffort,
+    minutes: Number(editingEntry.plannedMinutes) || 0,
+  } : null);
 
   if (!isOpen) return null;
 
@@ -54,7 +63,7 @@ const CardioModal = memo(({ isOpen, onClose, onSave, weightKg, existing = [], on
 
       <div className="px-4 py-3 border-b border-zinc-800 flex justify-between items-center bg-zinc-900 shrink-0 pt-safe">
         <h3 className="text-[12px] font-bold text-zinc-100 uppercase tracking-wider flex items-center">
-          <HeartPulse size={15} className="mr-2 text-red-400" /> Kardiyo Ekle
+          <HeartPulse size={15} className="mr-2 text-red-400" /> {editingEntry ? 'Kardiyo Düzenle' : 'Kardiyo Ekle'}
         </h3>
         <button onClick={onClose} className="text-zinc-400 active:text-zinc-100 p-2 -mr-1" aria-label="Kapat">
           <X size={20} />
@@ -62,6 +71,21 @@ const CardioModal = memo(({ isOpen, onClose, onSave, weightKg, existing = [], on
       </div>
 
       <div className="flex-1 overflow-y-auto hide-scrollbar p-3 space-y-3 pb-safe">
+
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-3 flex items-center gap-3">
+          <CalendarDays size={16} className="text-cyan-400 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <span className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest block">Kayıt tarihi</span>
+            <span className="text-[10px] font-bold text-zinc-300 block truncate">{formatDay(date, 'medium', { year: true })}</span>
+          </div>
+          <input
+            type="date"
+            value={date}
+            max={getLocalDateString()}
+            onChange={(event) => setDate(event.target.value)}
+            className="bg-zinc-950 border border-zinc-800 rounded-xl px-2 py-2 text-[10px] font-mono text-zinc-300 outline-none focus:border-cyan-600 max-w-[132px]"
+          />
+        </div>
 
         {/* Bugün için planlanmış kardiyo varsa tek dokunuşla yüklenir */}
         {planned.length > 0 && (
@@ -193,6 +217,18 @@ const CardioModal = memo(({ isOpen, onClose, onSave, weightKg, existing = [], on
         </div>
 
         {/* Aktivite kütüphanesi yalnızca kullanıcı değiştirmek istediğinde açılır. */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-3.5 space-y-2">
+          <label htmlFor="cardio-note" className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Not (isteğe bağlı)</label>
+          <input
+            id="cardio-note"
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            maxLength={160}
+            placeholder="Parkur, nabız, nasıl hissettin…"
+            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-[11px] text-zinc-200 outline-none focus:border-cyan-600"
+          />
+        </div>
+
         {showActivities && <div className="space-y-3 bg-zinc-950 border border-zinc-800 rounded-2xl p-2.5">
           <div className="relative">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
@@ -266,14 +302,16 @@ const CardioModal = memo(({ isOpen, onClose, onSave, weightKg, existing = [], on
           disabled={!canSave}
           onClick={() => {
             onSave({
-              type, minutes: Number(minutes), effort,
+              ...(editingEntry?.id ? { id: editingEntry.id } : {}),
+              type, minutes: Number(minutes), effort, date, note: note.trim(),
               ...(plan ? { plannedEffort: plan.effort, plannedMinutes: plan.minutes } : {}),
             });
             onClose();
           }}
           className="w-full bg-red-600 active:bg-red-700 disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-bold py-3.5 rounded-xl uppercase text-[11px] tracking-wider flex items-center justify-center gap-2 transition-colors"
         >
-          <Plus size={15} /> {activity?.label} · {minutes} dk · {effortInfo.label}
+          {editingEntry ? <Save size={15} /> : <Plus size={15} />}
+          {editingEntry ? 'Değişiklikleri Kaydet' : `${activity?.label} · ${minutes} dk · ${effortInfo.label}`}
         </button>
       </div>
     </div>

@@ -97,6 +97,7 @@ export default function App() {
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [isCardioOpen, setIsCardioOpen] = useState(false);
+  const [cardioContext, setCardioContext] = useState(null);
   const [isEnergyDetailOpen, setIsEnergyDetailOpen] = useState(false);
   const [isToolsOpen, setIsToolsOpen] = useState(false);
   const [prCelebration, setPrCelebration] = useState(null);
@@ -723,7 +724,9 @@ export default function App() {
       finalDuration = Math.max(1, Math.round(secs / 60));
     }
 
-    const saved = { ...activeWorkout, duration: finalDuration || 45, timer: { status: 'finished' } };
+    const persistableWorkout = Object.fromEntries(Object.entries(activeWorkout)
+      .filter(([key]) => key !== 'isEditingOld' && key !== 'activeExerciseId'));
+    const saved = { ...persistableWorkout, duration: finalDuration || 45, timer: { status: 'finished' } };
 
     setWorkouts(prev => {
       const idx = prev.findIndex(w => w.id === saved.id);
@@ -829,6 +832,39 @@ export default function App() {
   const handleRepeatWorkout = useCallback((workout) => {
     setPreWorkoutModal({ template: workout });
   }, []);
+
+  const handleAddHistoricalWorkout = useCallback((date) => {
+    const id = generateId();
+    setActiveWorkout({
+      id,
+      date,
+      name: 'Geçmiş Antrenman',
+      exercises: [],
+      cardio: [],
+      isEditingOld: true,
+      manualEntry: true,
+      activeExerciseId: null,
+      timer: { status: 'paused', startTime: null, accumulatedSeconds: 0 },
+      rating: 3,
+      notes: '',
+    });
+    setIsExerciseModalOpen(true);
+    showToast(`${formatDay(date, 'short')} için antrenman oluşturuluyor.`);
+  }, [showToast]);
+
+  const handleAddHistoricalNutrition = useCallback((date) => {
+    const existing = nutritionHistory.find(record => record.date === date);
+    setCurrentNutritionForm(mergeNutrition(existing || { id: generateId(), date, manualEntry: true }));
+    setView('nutrition');
+    showToast(existing ? 'Bu günün beslenme kaydı düzenleniyor.' : 'Geçmiş beslenme kaydı oluşturuluyor.');
+  }, [nutritionHistory, showToast]);
+
+  const handleAddHistoricalMetric = useCallback((date) => {
+    handleMetricsDateChange(date);
+    setProgressTab('body');
+    setView('progress');
+    showToast(`${formatDay(date, 'short')} için ölçüm açıldı.`);
+  }, [handleMetricsDateChange, showToast]);
 
   // --- SÜPERSET ---
   // Model olabildiğince basit: bir hareket, kendisinden SONRA gelen hareketle
@@ -1286,6 +1322,67 @@ export default function App() {
     showToast('Kardiyo bugüne kaydedildi.');
   }, [showToast]);
 
+  const handleOpenHistoricalCardio = useCallback((date) => {
+    setCardioContext({ date });
+    setIsCardioOpen(true);
+  }, []);
+
+  const handleEditCardio = useCallback((record) => {
+    setCardioContext({
+      date: record.date,
+      workoutId: record.workoutId,
+      entry: record.cardio,
+    });
+    setIsCardioOpen(true);
+  }, []);
+
+  const handleSaveCardio = useCallback((payload) => {
+    const date = payload.date || cardioContext?.date || getLocalDateString();
+    const entryFields = Object.fromEntries(Object.entries(payload).filter(([key]) => key !== 'date'));
+    const item = {
+      ...cardioContext?.entry,
+      ...entryFields,
+      id: cardioContext?.entry?.id || entryFields.id || generateId(),
+      ...(cardioContext || date !== getLocalDateString() ? { manualEntry: true } : {}),
+    };
+
+    if (!cardioContext && date === getLocalDateString()) {
+      handleAddCardio(item);
+      return;
+    }
+
+    setWorkouts(prev => {
+      const sourceId = cardioContext?.workoutId;
+      const sourceDate = cardioContext?.date;
+      if (sourceId && sourceDate === date) {
+        return prev.map(workout => workout.id === sourceId
+          ? { ...workout, cardio: (workout.cardio || []).map(cardio => cardio.id === item.id ? item : cardio) }
+          : workout);
+      }
+
+      let next = sourceId
+        ? prev
+          .map(workout => workout.id === sourceId
+            ? { ...workout, cardio: (workout.cardio || []).filter(cardio => cardio.id !== item.id) }
+            : workout)
+          .filter(workout => (workout.exercises || []).length > 0 || (workout.cardio || []).length > 0)
+        : [...prev];
+
+      const destination = next.findIndex(workout =>
+        workout.date === date && (workout.exercises || []).length === 0 && Array.isArray(workout.cardio));
+      if (destination >= 0) {
+        next = [...next];
+        next[destination] = { ...next[destination], cardio: [...(next[destination].cardio || []), item] };
+        return next;
+      }
+      return [{
+        id: generateId(), date, name: 'Kardiyo', duration: 0,
+        exercises: [], cardio: [item], manualEntry: true, timer: { status: 'finished' },
+      }, ...next];
+    });
+    showToast(cardioContext?.entry ? 'Kardiyo kaydı güncellendi.' : 'Geçmiş kardiyo kaydedildi.');
+  }, [cardioContext, handleAddCardio, showToast]);
+
   const handleDeleteCardio = useCallback((entryId) => {
     if (activeWorkoutRef.current) {
       setActiveWorkout(prev => prev ? { ...prev, cardio: (prev.cardio || []).filter(c => c.id !== entryId) } : prev);
@@ -1302,10 +1399,15 @@ export default function App() {
 
   // Kardiyo penceresinde listelenecek girişler: aktif seans varsa onunkiler.
   const cardioEntries = useMemo(() => {
+    if (cardioContext?.date) {
+      return workouts
+        .filter(workout => workout.date === cardioContext.date)
+        .flatMap(workout => workout.cardio || []);
+    }
     if (activeWorkout) return activeWorkout.cardio || [];
     const today = getLocalDateString();
     return workouts.find(w => w.date === today && w.cardio)?.cardio || [];
-  }, [activeWorkout, workouts]);
+  }, [activeWorkout, workouts, cardioContext]);
 
   // Bu haftaki toplam kardiyo kalorisi (dinlenme üstü).
   const weeklyCardioKcal = useMemo(() => {
@@ -1602,6 +1704,11 @@ export default function App() {
               handleRepeatWorkout={handleRepeatWorkout}
               handleEditMetric={handleEditMetric}
               handleEditNutrition={handleEditNutrition}
+              onAddWorkout={handleAddHistoricalWorkout}
+              onAddCardio={handleOpenHistoricalCardio}
+              onAddMetric={handleAddHistoricalMetric}
+              onAddNutrition={handleAddHistoricalNutrition}
+              onEditCardio={handleEditCardio}
               handleSaveAsTemplate={handleSaveAsTemplate}
               latestWeight={latestWeight}
               wellness={wellness}
@@ -1876,13 +1983,16 @@ export default function App() {
 
         {/* KARDİYO */}
         <CardioModal
+          key={`${cardioContext?.workoutId || 'new'}-${cardioContext?.entry?.id || cardioContext?.date || 'today'}`}
           isOpen={isCardioOpen}
-          onClose={() => setIsCardioOpen(false)}
-          onSave={handleAddCardio}
+          onClose={() => { setIsCardioOpen(false); setCardioContext(null); }}
+          onSave={handleSaveCardio}
           onDelete={handleDeleteCardio}
           weightKg={latestWeight}
-          existing={cardioEntries}
-          planned={todayPlannedCardio}
+          existing={cardioContext ? [] : cardioEntries}
+          planned={!cardioContext || cardioContext.date === getLocalDateString() ? todayPlannedCardio : []}
+          initialDate={cardioContext?.date || getLocalDateString()}
+          editingEntry={cardioContext?.entry || null}
         />
 
         {/* PLATE CALCULATOR */}
@@ -1993,6 +2103,16 @@ export default function App() {
               </h3>
 
               <div className="space-y-4 mb-6">
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-500 uppercase mb-1">Antrenman Adı</label>
+                  <input value={activeWorkout?.name || ''} onChange={e => setActiveWorkout(p => ({ ...p, name: e.target.value }))} maxLength={60} placeholder="Örn. Push A" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-zinc-200 font-mono text-sm outline-none focus:border-emerald-500 transition-colors" />
+                </div>
+
+                {activeWorkout?.isEditingOld && <div>
+                  <label className="block text-[11px] font-bold text-zinc-500 uppercase mb-1">Kayıt Tarihi</label>
+                  <input type="date" value={activeWorkout?.date || ''} max={getLocalDateString()} onChange={e => setActiveWorkout(p => ({ ...p, date: e.target.value }))} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-cyan-400 font-mono text-sm outline-none focus:border-cyan-500 transition-colors" />
+                </div>}
+
                 <div>
                   <label className="block text-[11px] font-bold text-zinc-500 uppercase mb-1">Toplam Süre (Dakika)</label>
                   <input type="number" inputMode="decimal" value={activeWorkout?.duration || ''} onChange={e => setActiveWorkout(p => ({ ...p, duration: parseNumber(e.target.value) }))} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-emerald-400 font-mono text-sm outline-none focus:border-emerald-500 transition-colors" />

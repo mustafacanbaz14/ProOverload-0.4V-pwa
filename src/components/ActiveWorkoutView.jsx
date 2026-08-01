@@ -48,13 +48,15 @@ const ActiveWorkoutView = memo(({
               {activeWorkout.name || 'Aktif Antrenman'}
             </h2>
             <div className="text-[11px] text-zinc-400 font-mono flex items-center space-x-1">
-              <WorkoutTimer timer={activeWorkout.timer} />
+              {activeWorkout.isEditingOld
+                ? <span>{formatDay(activeWorkout.date, 'medium', { year: true })}</span>
+                : <WorkoutTimer timer={activeWorkout.timer} />}
             </div>
           </div>
         </div>
 
         <div className="flex items-center space-x-2">
-          <button
+          {!activeWorkout.isEditingOld && <button
             onClick={() => {
               setActiveWorkout(prev => {
                 const status = prev.timer?.status === 'running' ? 'paused' : 'running';
@@ -73,13 +75,13 @@ const ActiveWorkoutView = memo(({
             className="p-2 bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-xl active:bg-zinc-800 transition-colors"
           >
             {activeWorkout.timer?.status === 'running' ? <Pause size={14} /> : <Play size={14} />}
-          </button>
+          </button>}
 
           <button
             onClick={() => setIsEndWorkoutModalOpen(true)}
             className="bg-emerald-600 active:bg-emerald-700 text-white font-bold px-3 py-2 rounded-xl text-xs uppercase tracking-wider shadow-lg shadow-emerald-900/30 transition-all flex items-center"
           >
-            <Save size={13} className="mr-1" /> Bitir
+            <Save size={13} className="mr-1" /> {activeWorkout.isEditingOld ? 'Kaydet' : 'Bitir'}
           </button>
         </div>
       </div>

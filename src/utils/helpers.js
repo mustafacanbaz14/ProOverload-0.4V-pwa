@@ -192,7 +192,16 @@ export const mergeWorkout = (data) => ({
   cardio: Array.isArray(data?.cardio)
     ? data.cardio
       .filter(c => c && typeof c.type === 'string')
-      .map(c => ({ id: c.id || generateId(), type: c.type, minutes: Number(c.minutes) || 0 }))
+      .map(c => ({
+        id: c.id || generateId(),
+        type: c.type,
+        minutes: Number(c.minutes) || 0,
+        ...(typeof c.effort === 'string' ? { effort: c.effort } : {}),
+        ...(typeof c.plannedEffort === 'string' ? { plannedEffort: c.plannedEffort } : {}),
+        ...(Number(c.plannedMinutes) > 0 ? { plannedMinutes: Number(c.plannedMinutes) } : {}),
+        ...(typeof c.note === 'string' && c.note.trim() ? { note: c.note } : {}),
+        ...(c.manualEntry ? { manualEntry: true } : {}),
+      }))
     : [],
   // rating ACWR yük hesabına giriyor (App.jsx dashboardStats); düşerse geçmiş
   // yük eğrisi sessizce değişir, bu yüzden varsayılanı oradaki fallback ile aynı.

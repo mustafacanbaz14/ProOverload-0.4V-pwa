@@ -53,6 +53,7 @@ const NutritionView = memo(({
 }) => {
   const safeMeals = Array.isArray(currentNutritionForm.meals) ? currentNutritionForm.meals : [];
   const isDaily = currentNutritionForm.entryMode === 'daily';
+  const isToday = currentNutritionForm.date === getLocalDateString();
   const detailed = settings.interfaceMode === 'detailed';
   const [expandedMeals, setExpandedMeals] = useState(() => new Set());
 
@@ -202,7 +203,7 @@ const NutritionView = memo(({
         <div>
           <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-orange-400">Günlük Takip</span>
           <h2 className="text-xl font-black text-zinc-100 mt-0.5">Beslenme</h2>
-          <p className="text-[10px] font-mono text-zinc-500 mt-1">Önce bugünün özeti, ayrıntılar aşağıda.</p>
+          <p className="text-[10px] font-mono text-zinc-500 mt-1">Önce {isToday ? 'bugünün' : 'seçili günün'} özeti, ayrıntılar aşağıda.</p>
         </div>
         <label className="text-right">
           <span className="text-[9px] font-bold uppercase text-zinc-600 block mb-1">{weekdayName(currentNutritionForm.date)}</span>
@@ -219,7 +220,7 @@ const NutritionView = memo(({
       <section className="bg-gradient-to-br from-orange-950/40 via-zinc-900 to-zinc-900 rounded-3xl border border-orange-900/30 p-4 shadow-lg shadow-black/20">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Bugün Kalan</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">{isToday ? 'Bugün Kalan' : 'O Gün Kalan'}</span>
             {remaining === null ? (
               <span className="text-xl font-bold text-zinc-400 block mt-1">Hedef bekleniyor</span>
             ) : (
@@ -259,7 +260,7 @@ const NutritionView = memo(({
         </div>
         {dayScore?.next?.length > 0 && (
           <p className="text-[9px] font-mono text-zinc-500 mt-2.5">
-            Bugün öncelik: <strong className="text-zinc-300">{dayScore.next.join(' ve ')}</strong>.
+            {isToday ? 'Bugün' : 'Bu gün'} öncelik: <strong className="text-zinc-300">{dayScore.next.join(' ve ')}</strong>.
           </p>
         )}
       </section>
@@ -290,7 +291,7 @@ const NutritionView = memo(({
       <section className="bg-zinc-900 rounded-2xl border border-zinc-800 p-3.5 space-y-3">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h3 className="text-xs font-bold text-zinc-100">Bugünün kaydı</h3>
+            <h3 className="text-xs font-bold text-zinc-100">{isToday ? 'Bugünün kaydı' : 'Geçmiş gün kaydı'}</h3>
             <span className="text-[9px] font-mono text-zinc-500">{safeMeals.length} öğün · {totals.calories} kcal</span>
           </div>
           <div className="flex bg-zinc-950 p-1 rounded-xl border border-zinc-800">
@@ -470,7 +471,7 @@ const NutritionView = memo(({
         onClick={handleSaveNutrition}
         className="w-full bg-orange-600 active:bg-orange-700 text-white font-bold py-3.5 px-4 rounded-2xl flex justify-center items-center text-xs shadow-lg shadow-orange-950/30"
       >
-        <Save size={15} className="mr-2" /> Bugünün Kaydını Kaydet
+        <Save size={15} className="mr-2" /> {isToday ? 'Bugünün Kaydını Kaydet' : 'Geçmiş Kaydı Kaydet'}
       </button>
 
       <DisclosureCard

@@ -4,7 +4,7 @@ import { dayEnergyBreakdown, theoreticalWeek, estimateMacrosForTef } from '../sr
 import { calorieDashboard, deriveGoalSet } from '../src/utils/goals.js';
 import { mergeWellnessDay } from '../src/utils/wellness.js';
 import { migrateWeekPlans, removeTemplateFromPlans } from '../src/utils/planMigration.js';
-import { suggestNextTarget } from '../src/utils/helpers.js';
+import { suggestNextTarget, mergeWorkout } from '../src/utils/helpers.js';
 import { dailyTotals, nutritionDayScore } from '../src/utils/nutritionStats.js';
 import { buildPlateauInsights, buildNutritionPerformanceInsight } from '../src/utils/insights.js';
 import { resolvePlannedCardioMinutes, isActiveRecoveryCardioDay } from '../src/utils/cardio.js';
@@ -202,6 +202,20 @@ test('beslenme performans ilişkisi altı eşleşmeden önce kesin hüküm verme
   const result = buildNutritionPerformanceInsight(workoutsForInsight, nutritionForInsight, 80);
   assert.equal(result.enough, false);
   assert.equal(result.samples, 5);
+});
+
+test('yedekten gelen kardiyo tempo, plan ve not alanlarını korur', () => {
+  const workout = mergeWorkout({
+    date: '2026-07-12',
+    cardio: [{
+      id: 'cardio-1', type: 'zone2', minutes: 42, effort: 'easy',
+      plannedEffort: 'moderate', plannedMinutes: 35, note: 'Parkur', manualEntry: true,
+    }],
+  });
+  assert.deepEqual(workout.cardio[0], {
+    id: 'cardio-1', type: 'zone2', minutes: 42, effort: 'easy',
+    plannedEffort: 'moderate', plannedMinutes: 35, note: 'Parkur', manualEntry: true,
+  });
 });
 
 for (const { name, run } of tests) {
