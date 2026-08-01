@@ -1246,8 +1246,9 @@ export default function App() {
     restSeconds: settings.restSeconds,
     experienceLevel: settings.experienceLevel,
     weightKg: latestWeight,
+    workouts,
   }), [activePlan, settings.restSeconds, settings.experienceLevel,
-    templates, customExercises, latestWeight]);
+    templates, customExercises, latestWeight, workouts]);
 
   const weekPlanDays = weekPlanResult.days;
 
@@ -1257,8 +1258,8 @@ export default function App() {
     // getDay() pazar=0 verirken plan pazartesi ile başlıyor.
     const gunler = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
     const bugun = gunler[new Date().getDay()];
-    return (activePlan?.days?.[bugun] || []).filter(s => s.type === 'cardio');
-  }, [activePlan]);
+    return weekPlanDays.find(day => day.key === bugun)?.cardios || [];
+  }, [weekPlanDays]);
 
   // Aktif antrenman varsa oraya yazılır; yoksa bugünün kardiyo kaydına eklenir
   // (yoksa oluşturulur), böylece basketbol/koşu için seans başlatmak gerekmez.
@@ -1328,6 +1329,7 @@ export default function App() {
     const planDay = weekPlanDays.find(day => day.key === dayKey);
     const workoutTemplate = planDay?.workouts?.[0]?.template || null;
     const planTime = planDay?.workouts?.[0]?.time || '';
+    const activeRest = Boolean(planDay?.isActiveRest);
 
     const nutrition = nutritionHistory.find(day => day.date === date)
       || (currentNutritionForm.date === date ? currentNutritionForm : mergeNutrition({ date }));
@@ -1340,6 +1342,7 @@ export default function App() {
       estimatedMacros: estimatedTefMacros,
       lifting: exercise.lifting,
       cardio: exercise.cardio,
+      activeRecovery: exercise.activeRecovery,
       recovery: exercise.mind,
       manual: nutrition.activeCaloriesOut,
       steps: nutrition.steps,
@@ -1365,23 +1368,29 @@ export default function App() {
 
     const headline = recoveryConcern
       ? 'Bugün performanstan önce toparlanmayı koru.'
-      : workoutTemplate
+      : activeRest
+        ? 'Bugün aktif dinlenme: hareket et, toparlanmayı zorlamadan koru.'
+        : workoutTemplate
         ? `${workoutTemplate.name} için planın hazır.`
         : planDay?.cardios?.length
           ? 'Bugün kardiyo odaklı bir gün planladın.'
           : 'Planında açık gün — serbest çalışabilir veya dinlenebilirsin.';
     const detail = recoveryConcern
       ? 'Yoğunluğu düşür, teknik kalitesini koru ve eklem ağrısı varsa zorlayan hareketi değiştir.'
-      : workoutTemplate
+      : activeRest
+        ? `${planDay.cardioMinutes} dk eğlence temposu · yaklaşık ${planDay.cardioKcal} kcal. Gün off day olarak kalır.`
+        : workoutTemplate
         ? `${planDay.sets} teorik set · yaklaşık ${planDay.minutes} dk · ${planDay.totalKcal} kcal.`
         : 'Hazır oluşluğun iyiyse eksik kas gruplarına kısa bir seans ekleyebilirsin.';
 
     return {
       dateLabel: formatDayRelative(date, 'medium'),
-      status: recoveryConcern ? 'Toparlan' : workoutTemplate ? 'Plan Hazır' : 'Esnek Gün',
+      status: recoveryConcern ? 'Toparlan' : activeRest ? 'Aktif Off Day' : workoutTemplate ? 'Plan Hazır' : 'Esnek Gün',
       tone: recoveryConcern
         ? 'text-amber-300 border-amber-900/50 bg-amber-950/30'
-        : workoutTemplate
+        : activeRest
+          ? 'text-indigo-300 border-indigo-900/50 bg-indigo-950/30'
+          : workoutTemplate
           ? 'text-emerald-300 border-emerald-900/50 bg-emerald-950/30'
           : 'text-cyan-300 border-cyan-900/50 bg-cyan-950/30',
       headline,
@@ -1396,9 +1405,11 @@ export default function App() {
           : `hedef ${Math.round(adjustedTarget)}`
         : 'Veri yok',
       calorieTone: remaining < 0 ? 'text-amber-400' : 'text-emerald-400',
-      planLabel: workoutTemplate?.name || (planDay?.cardios?.length ? 'Kardiyo günü' : 'Off / serbest gün'),
+      planLabel: workoutTemplate?.name || (activeRest ? 'Aktif dinlenme' : planDay?.cardios?.length ? 'Kardiyo günü' : 'Off / serbest gün'),
       planTime,
-      cardioLabel: planDay?.cardios?.map(cardio => `${cardio.activity.label} ${cardio.minutes} dk`).join(' · ') || '',
+      cardioLabel: planDay?.cardios?.map(cardio => `${cardio.activity.label} ${cardio.minutes} dk${cardio.minuteSource === 'history' ? ' (arşiv ort.)' : ''}`).join(' · ') || '',
+      planCalories: planDay?.totalKcal || 0,
+      activeRest,
       workoutTemplate,
     };
   }, [weekPlanDays, nutritionHistory, currentNutritionForm, dayCaloriesFor,
@@ -1478,6 +1489,7 @@ export default function App() {
               todayCoach={todayCoach}
               onOpenEnergy={() => setIsEnergyDetailOpen(true)}
               onOpenWellness={() => { setWellnessTab('sleep'); setIsWellnessOpen(true); }}
+              onOpenCardio={() => setIsCardioOpen(true)}
               weeklyCardioKcal={weeklyCardioKcal}
               showMuscleVolume={settings.showMuscleVolume}
               onToggleMuscleVolume={() => setSettings(prev => ({ ...prev, showMuscleVolume: !prev.showMuscleVolume }))}
@@ -1804,6 +1816,7 @@ export default function App() {
           restSeconds={settings.restSeconds}
           experienceLevel={settings.experienceLevel}
           weightKg={latestWeight}
+          workouts={workouts}
         />
 
         {/* REKOR KUTLAMASI */}

@@ -84,6 +84,7 @@ const NutritionView = memo(({
       macros: recordTotals,
       lifting: workout.lifting,
       cardio: workout.cardio,
+      activeRecovery: workout.activeRecovery,
       recovery,
       manual: record.activeCaloriesOut,
       steps: record.steps,

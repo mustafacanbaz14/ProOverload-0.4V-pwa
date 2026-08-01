@@ -7,6 +7,7 @@ import { migrateWeekPlans, removeTemplateFromPlans } from '../src/utils/planMigr
 import { suggestNextTarget } from '../src/utils/helpers.js';
 import { dailyTotals, nutritionDayScore } from '../src/utils/nutritionStats.js';
 import { buildPlateauInsights, buildNutritionPerformanceInsight } from '../src/utils/insights.js';
+import { resolvePlannedCardioMinutes, isActiveRecoveryCardioDay } from '../src/utils/cardio.js';
 
 const tests = [];
 const test = (name, run) => tests.push({ name, run });
@@ -55,6 +56,36 @@ test('teorik rutin TDEE içindeki ortalama egzersizi ikinci kez saymaz ve kardiy
   assert.equal(result.restDays, 6);
   assert.equal(result.days[0].total, 3000);
   assert.equal(result.restDayKcal, 2691);
+});
+
+test('boş kardiyo süresi aynı aktivitenin arşiv ortalamasından çözülür', () => {
+  const workouts = [
+    { date: '2026-07-20', cardio: [{ type: 'zone2', minutes: 20, effort: 'easy' }] },
+    { date: '2026-07-27', cardio: [{ type: 'zone2', minutes: 40, effort: 'moderate' }] },
+  ];
+  const result = resolvePlannedCardioMinutes({ activity: 'zone2', minutes: '' }, workouts, 80);
+  assert.equal(result.minutes, 30);
+  assert.equal(result.source, 'history');
+});
+
+test('elle girilen plan süresi arşiv ortalamasının önüne geçer', () => {
+  const workouts = [{ date: '2026-07-20', cardio: [{ type: 'zone2', minutes: 20 }] }];
+  const result = resolvePlannedCardioMinutes({ activity: 'zone2', minutes: 55 }, workouts, 80);
+  assert.equal(result.minutes, 55);
+  assert.equal(result.source, 'manual');
+});
+
+test('yalnız eğlence temposu kardiyo aktif off day sayılır ama kalorisi korunur', () => {
+  assert.equal(isActiveRecoveryCardioDay(0, [{ effort: 'fun' }]), true);
+  assert.equal(isActiveRecoveryCardioDay(1, [{ effort: 'fun' }]), false);
+  assert.equal(isActiveRecoveryCardioDay(0, [{ effort: 'fun' }, { effort: 'moderate' }]), false);
+});
+
+test('aktif off day enerji harcamasını korurken dinlenme olarak etiketlenir', () => {
+  const result = dayEnergyBreakdown({ maintenance: 2400, bmr: 1700, cardio: 180, activeRecovery: true });
+  assert.equal(result.cardio, 180);
+  assert.equal(result.isRestDay, true);
+  assert.equal(result.isActiveRest, true);
 });
 
 test('kalori panosu günlük toplamı enerji motorundan kullanır', () => {

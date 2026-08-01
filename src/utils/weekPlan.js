@@ -2,7 +2,8 @@ import { MUSCLE_GROUPS, getVolumeLandmarks, volumeStatusOf, VOLUME_STATUS } from
 import { previewTemplateVolume, estimateDuration } from './templates';
 import {
   estimateLiftingCalories, findActivity, findEffort,
-  estimateCardioCalories, cardioFatigueLoad, DEFAULT_EFFORT,
+  estimateCardioCalories, cardioFatigueLoad, resolvePlannedCardioMinutes,
+  isActiveRecoveryCardioDay, DEFAULT_EFFORT,
 } from './cardio';
 import { parseNumber } from './number';
 import { normalizeDays } from './planMigration';
@@ -44,6 +45,7 @@ export const computeWeekPlan = (plan = {}, templates = [], {
   restSeconds = 120,
   experienceLevel = 'intermediate',
   weightKg = 0,
+  workouts: historyWorkouts = [],
 } = {}) => {
   const byId = new Map(templates.map(t => [t.id, t]));
   const days = normalizeDays(plan?.days || plan);
@@ -65,7 +67,8 @@ export const computeWeekPlan = (plan = {}, templates = [], {
       if (slot.type === 'cardio') {
         const act = findActivity(slot.activity);
         if (!act) return;
-        const dk = Math.max(0, parseNumber(slot.minutes));
+        const resolved = resolvePlannedCardioMinutes(slot, historyWorkouts, weightKg);
+        const dk = Math.max(0, parseNumber(resolved.minutes));
         if (dk <= 0) return;
         const effort = findEffort(slot.effort || DEFAULT_EFFORT);
         const k = estimateCardioCalories(act.met * effort.met, weightKg, dk);
@@ -73,7 +76,15 @@ export const computeWeekPlan = (plan = {}, templates = [], {
         cardioMinutes += dk;
         minutes += dk;
         fatigue += cardioFatigueLoad({ type: slot.activity, minutes: dk, effort: effort.key });
-        cardios.push({ ...slot, activity: act, effortInfo: effort, minutes: dk, kcal: k });
+        cardios.push({
+          ...slot,
+          activity: act,
+          effortInfo: effort,
+          minutes: dk,
+          minuteSource: resolved.source,
+          historyStats: resolved.stats,
+          kcal: k,
+        });
         return;
       }
 
@@ -93,6 +104,12 @@ export const computeWeekPlan = (plan = {}, templates = [], {
       workouts.push({ ...slot, template, sets: totalSets, minutes: sure });
     });
 
+    // Yalnızca eğlence temposundaki kardiyo, kalori harcatsa da toparlanma
+    // takviminde "aktif dinlenme" sayılır. Ağırlık veya daha sert kardiyo varsa
+    // gün normal antrenman günüdür.
+    const isActiveRest = isActiveRecoveryCardioDay(workouts.length, cardios);
+    const isOffDay = slots.length === 0 || isActiveRest;
+
     return {
       ...d,
       slots,
@@ -108,6 +125,8 @@ export const computeWeekPlan = (plan = {}, templates = [], {
       fatigue,
       byMuscle,
       totalKcal: kcal + cardioKcal,
+      isActiveRest,
+      isOffDay,
     };
   });
 
@@ -126,7 +145,8 @@ export const computeWeekPlan = (plan = {}, templates = [], {
     return { muscle, volume, mev, mav, mrv, status: volumeStatusOf(volume, muscle, experienceLevel) };
   });
 
-  const trainingDays = gunler.filter(d => d.slots.length > 0).length;
+  const trainingDays = gunler.filter(d => !d.isOffDay).length;
+  const activeRecoveryDays = gunler.filter(d => d.isActiveRest).length;
 
   return {
     days: gunler,
@@ -134,6 +154,7 @@ export const computeWeekPlan = (plan = {}, templates = [], {
     statuses,
     trainingDays,
     offDays: 7 - trainingDays,
+    activeRecoveryDays,
     totalSets: gunler.reduce((s, d) => s + d.sets, 0),
     totalMinutes: gunler.reduce((s, d) => s + d.minutes, 0),
     totalKcal: gunler.reduce((s, d) => s + d.kcal, 0),

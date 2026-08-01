@@ -28,6 +28,7 @@ const HomeView = memo(({
   todayCoach,
   onOpenEnergy,
   onOpenWellness,
+  onOpenCardio,
 }) => {
   return (
     <div className="p-4 space-y-5 pb-nav h-full overflow-y-auto hide-scrollbar bg-black">
@@ -48,6 +49,7 @@ const HomeView = memo(({
         onStart={handleStartRequest}
         onOpenEnergy={onOpenEnergy}
         onOpenWellness={onOpenWellness}
+        onOpenCardio={onOpenCardio}
       />
 
       {/* Hazır oluşluk eğilimi — üst üste düşük skor hacimden bağımsız bir

@@ -144,6 +144,7 @@ export const dayEnergyBreakdown = ({
   neatManual = 0,
   weightKg = 0,
   neatMultiplier = 1,
+  activeRecovery = false,
 } = {}) => {
   const maint = parseNumber(maintenance);
   const base = parseNumber(bmr);
@@ -222,7 +223,8 @@ export const dayEnergyBreakdown = ({
     eat,
     total,
     parts,
-    isRestDay: eat === 0,
+    isRestDay: eat === 0 || Boolean(activeRecovery),
+    isActiveRest: Boolean(activeRecovery) && eat > 0,
     // Ölçülen TDEE ile karşılaştırma: bu gün ortalamanın altında mı üstünde mi.
     vsMaintenance: maint > 0 ? Math.round(total - maint) : null,
   };
@@ -259,6 +261,7 @@ export const buildEnergySeries = (nutritionHistory = [], {
         estimatedMacros,
         lifting: w.lifting,
         cardio: w.cardio,
+        activeRecovery: w.activeRecovery,
         recovery: w.mind,
         manual: n.activeCaloriesOut,
         // Gün bazlı adım girilmişse o günün kaydından okunur.
@@ -273,6 +276,7 @@ export const buildEnergySeries = (nutritionHistory = [], {
         breakdown: b,
         balance: Math.round(macros.calories - b.total),
         isRestDay: b.isRestDay,
+        isActiveRest: b.isActiveRest,
       };
     })
     .filter(d => d.intake > 0 || d.out > 0)
@@ -355,7 +359,8 @@ export const theoreticalWeek = (planDays = [], {
   const maint = parseNumber(maintenance);
   if (!(maint > 0)) return null;
 
-  const trainingDays = planDays.filter(d => parseNumber(d.kcal) + parseNumber(d.cardioKcal) > 0).length;
+  const trainingDays = planDays.filter(d => !d.isOffDay
+    && parseNumber(d.kcal) + parseNumber(d.cardioKcal) > 0).length;
   const liftingKcal = planDays.reduce((s, d) => s + parseNumber(d.kcal), 0);
   const epoc = Math.round(liftingKcal * EPOC_LIFTING + parseNumber(plannedCardioKcal) * EPOC_CARDIO);
 
@@ -367,13 +372,16 @@ export const theoreticalWeek = (planDays = [], {
     const lifting = parseNumber(day.kcal);
     const cardio = parseNumber(day.cardioKcal);
     const dayEpoc = Math.round(lifting * EPOC_LIFTING + cardio * EPOC_CARDIO);
+    const isActiveRest = Boolean(day.isActiveRest);
+    const isRestDay = Boolean(day.isOffDay) || lifting + cardio === 0;
     return {
       key: day.key,
       label: day.label,
       exercise: Math.round(lifting + cardio),
       epoc: dayEpoc,
       total: Math.round(dailyBase + lifting + cardio + dayEpoc),
-      isRestDay: lifting + cardio === 0,
+      isRestDay,
+      isActiveRest,
     };
   });
   const total = days.reduce((sum, day) => sum + day.total, 0);

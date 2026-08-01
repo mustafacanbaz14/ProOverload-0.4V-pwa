@@ -10,7 +10,7 @@ const Metric = ({ icon, label, value, tone = 'text-zinc-200' }) => (
   </div>
 );
 
-const TodayCoachCard = memo(({ data, onStart, onOpenEnergy, onOpenWellness }) => {
+const TodayCoachCard = memo(({ data, onStart, onOpenEnergy, onOpenWellness, onOpenCardio }) => {
   if (!data) return null;
   const planned = Boolean(data.workoutTemplate);
   return (
@@ -50,14 +50,21 @@ const TodayCoachCard = memo(({ data, onStart, onOpenEnergy, onOpenWellness }) =>
               <HeartPulse size={10} className="mr-1.5 text-red-400" /> {data.cardioLabel}
             </p>
           )}
+          {data.planCalories > 0 && (
+            <p className="text-[9px] font-mono text-zinc-600 flex items-center">
+              <Flame size={10} className="mr-1.5 text-orange-400" /> Planlanan ek harcama ~{data.planCalories} kcal
+            </p>
+          )}
         </div>
 
         <div className="grid grid-cols-[1fr_auto_auto] gap-2">
           <button
-            onClick={() => onStart?.(data.workoutTemplate || null)}
+            onClick={() => data.cardioLabel && !planned
+              ? onOpenCardio?.()
+              : onStart?.(data.workoutTemplate || null)}
             className="bg-cyan-600 active:bg-cyan-700 text-white rounded-xl px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider flex items-center justify-center"
           >
-            {planned ? 'Planlananı Başlat' : 'Serbest Başlat'} <ChevronRight size={12} className="ml-1" />
+            {planned ? 'Planlananı Başlat' : data.cardioLabel ? 'Kardiyoyu Aç' : 'Serbest Başlat'} <ChevronRight size={12} className="ml-1" />
           </button>
           <button onClick={onOpenEnergy} aria-label="Enerji detayını aç" className="bg-zinc-950 border border-zinc-800 text-red-400 rounded-xl p-2.5"><Flame size={15} /></button>
           <button onClick={onOpenWellness} aria-label="Uyku ve toparlanmayı aç" className="bg-zinc-950 border border-zinc-800 text-indigo-400 rounded-xl p-2.5"><Moon size={15} /></button>

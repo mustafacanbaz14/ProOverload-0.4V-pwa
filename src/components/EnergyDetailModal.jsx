@@ -59,6 +59,7 @@ const EnergyDetailModal = memo(({
       macros: dailyTotals(todayForm),
       estimatedMacros,
       lifting: w.lifting, cardio: w.cardio, recovery: w.mind, manual: todayForm.activeCaloriesOut,
+      activeRecovery: w.activeRecovery,
       steps: todayForm.steps,
       ...neatOpts,
     });
@@ -136,7 +137,7 @@ const EnergyDetailModal = memo(({
                     ? 'text-zinc-400 border-zinc-700 bg-zinc-950'
                     : 'text-emerald-400 border-emerald-900/50 bg-emerald-950/30'
                 }`}>
-                  {today.isRestDay ? 'Dinlenme günü' : 'Antrenman günü'}
+                  {today.isActiveRest ? 'Aktif off day' : today.isRestDay ? 'Dinlenme günü' : 'Antrenman günü'}
                 </span>
               </div>
 
@@ -448,7 +449,7 @@ const EnergyDetailModal = memo(({
                       <span>
                         <strong className="text-[11px] text-zinc-200 block">{day.label}</strong>
                         <span className="text-[9px] font-mono text-zinc-600">
-                          {day.isRestDay ? 'Dinlenme günü' : `${day.exercise} egzersiz + ${day.epoc} EPOC`}
+                          {day.isActiveRest ? `Aktif off day · ${day.exercise} kcal hareket` : day.isRestDay ? 'Dinlenme günü' : `${day.exercise} egzersiz + ${day.epoc} EPOC`}
                         </span>
                       </span>
                       <span className={`text-[12px] font-mono font-bold ${day.isRestDay ? 'text-zinc-400' : 'text-emerald-400'}`}>{day.total} kcal</span>

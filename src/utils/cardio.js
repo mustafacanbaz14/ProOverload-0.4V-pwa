@@ -157,6 +157,108 @@ export const effortDelta = (entry, weightKg) => {
   };
 };
 
+/**
+ * Geçmiş kardiyo kayıtlarını tek listeye açar. En yeni kayıt önce gelir.
+ * Haftalık plan, süre boş bırakıldığında aynı aktivitenin kişisel geçmişini
+ * kullanır; böylece sabit ve herkese aynı 30 dk varsayımı yapılmaz.
+ */
+export const cardioHistoryEntries = (workouts = [], activityKey = null) =>
+  (Array.isArray(workouts) ? workouts : [])
+    .flatMap(workout => (workout?.cardio || []).map(entry => ({
+      ...entry,
+      date: workout.date,
+      workoutId: workout.id,
+    })))
+    .filter(entry => !activityKey || entry.type === activityKey)
+    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+
+/** Son kayıtlardan aktiviteye özel, uç değerlere karşı sınırlı kişisel özet. */
+export const cardioHistoryStats = (workouts = [], activityKey, weightKg, limit = 8) => {
+  const all = cardioHistoryEntries(workouts, activityKey)
+    .filter(entry => Number(entry.minutes) > 0);
+  const entries = all.slice(0, Math.max(1, limit));
+  if (entries.length === 0) return {
+    activityKey, count: 0, totalCount: 0, avgMinutes: 0, avgCalories: 0,
+    avgFatigue: 0, usualEffort: DEFAULT_EFFORT, trendMinutes: 0,
+  };
+
+  const average = values => Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
+  const effortCounts = entries.reduce((map, entry) => {
+    const key = entry.effort || DEFAULT_EFFORT;
+    map.set(key, (map.get(key) || 0) + 1);
+    return map;
+  }, new Map());
+  const usualEffort = [...effortCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || DEFAULT_EFFORT;
+  const half = Math.max(1, Math.ceil(entries.length / 2));
+  const recent = entries.slice(0, half);
+  const older = entries.slice(half);
+  const recentAvg = average(recent.map(entry => Number(entry.minutes)));
+  const olderAvg = older.length ? average(older.map(entry => Number(entry.minutes))) : recentAvg;
+
+  return {
+    activityKey,
+    count: entries.length,
+    totalCount: all.length,
+    avgMinutes: average(entries.map(entry => Number(entry.minutes))),
+    avgCalories: weightKg > 0 ? average(entries.map(entry => cardioEntryCalories(entry, weightKg))) : 0,
+    avgFatigue: average(entries.map(cardioFatigueLoad)),
+    usualEffort,
+    trendMinutes: recentAvg - olderAvg,
+  };
+};
+
+/**
+ * Plan süresi önceliği: elle girilen > aynı aktivitenin son 8 kayıt ortalaması
+ * > güvenli başlangıç varsayımı. Kaynak ayrıca arayüzde açıkça gösterilir.
+ */
+export const resolvePlannedCardioMinutes = (slot, workouts = [], weightKg = 0, fallback = 30) => {
+  const manual = Number(slot?.minutes);
+  if (manual > 0) return { minutes: manual, source: 'manual', stats: cardioHistoryStats(workouts, slot?.activity, weightKg) };
+  const stats = cardioHistoryStats(workouts, slot?.activity, weightKg);
+  if (stats.avgMinutes > 0) return { minutes: stats.avgMinutes, source: 'history', stats };
+  return { minutes: fallback, source: 'default', stats };
+};
+
+/** Yalnız eğlence temposu kardiyo bulunan günü aktif dinlenme olarak sınıflar. */
+export const isActiveRecoveryCardioDay = (strengthSessionCount = 0, entries = []) =>
+  Number(strengthSessionCount) === 0
+  && entries.length > 0
+  && entries.every(entry => findEffort(entry?.effort || entry?.effortInfo?.key).key === 'fun');
+
+/** Arşiv kartında tek kaydı aynı aktivitenin kişisel ortalamasıyla kıyaslar. */
+export const evaluateCardioEntry = (entry, workouts = [], weightKg = 0) => {
+  const stats = cardioHistoryStats(workouts, entry?.type, weightKg);
+  const minutes = Number(entry?.minutes) || 0;
+  const calories = cardioEntryCalories(entry, weightKg);
+  const minuteDiff = stats.avgMinutes ? minutes - stats.avgMinutes : 0;
+  const calorieDiff = stats.avgCalories ? calories - stats.avgCalories : 0;
+  const fatigue = cardioFatigueLoad(entry);
+  const loadDiff = stats.avgFatigue ? fatigue - stats.avgFatigue : 0;
+  const tone = Math.abs(loadDiff) <= 2 ? 'usual' : loadDiff > 0 ? 'harder' : 'lighter';
+  return { stats, minutes, calories, fatigue, minuteDiff, calorieDiff, loadDiff, tone };
+};
+
+/** Kardiyo arşivinin üst özetinde kullanılacak toplamlar ve en sık aktiviteler. */
+export const cardioArchiveSummary = (workouts = [], weightKg = 0) => {
+  const entries = cardioHistoryEntries(workouts);
+  const totalMinutes = entries.reduce((sum, entry) => sum + (Number(entry.minutes) || 0), 0);
+  const totalCalories = entries.reduce((sum, entry) => sum + cardioEntryCalories(entry, weightKg), 0);
+  const groups = new Map();
+  entries.forEach(entry => {
+    const current = groups.get(entry.type) || { type: entry.type, count: 0, minutes: 0 };
+    current.count += 1;
+    current.minutes += Number(entry.minutes) || 0;
+    groups.set(entry.type, current);
+  });
+  return {
+    count: entries.length,
+    totalMinutes,
+    totalCalories,
+    avgMinutes: entries.length ? Math.round(totalMinutes / entries.length) : 0,
+    activities: [...groups.values()].sort((a, b) => b.count - a.count || b.minutes - a.minutes).slice(0, 3),
+  };
+};
+
 export const totalCardioCalories = (entries = [], weightKg) =>
   entries.reduce((sum, e) => sum + cardioEntryCalories(e, weightKg), 0);
 
@@ -181,8 +283,14 @@ export const workoutCalories = (workout, weightKg) => {
 /** Belirli bir günün tüm antrenman kayıtlarından toplam yakım. */
 export const dayWorkoutCalories = (workouts = [], dateStr, weightKg) => {
   const same = workouts.filter(w => w.date === dateStr);
-  return same.reduce((acc, w) => {
+  const totals = same.reduce((acc, w) => {
     const c = workoutCalories(w, weightKg);
     return { lifting: acc.lifting + c.lifting, cardio: acc.cardio + c.cardio, total: acc.total + c.total };
   }, { lifting: 0, cardio: 0, total: 0 });
+  const strengthSessionCount = same.filter(workout => (workout.exercises || []).length > 0).length;
+  const cardioEntries = same.flatMap(workout => workout.cardio || []);
+  return {
+    ...totals,
+    activeRecovery: isActiveRecoveryCardioDay(strengthSessionCount, cardioEntries),
+  };
 };

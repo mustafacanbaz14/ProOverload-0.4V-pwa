@@ -1,10 +1,10 @@
 import React, { useState, memo } from 'react';
-import { X, HeartPulse, Flame, Clock, Plus, Trash2, Gauge, CalendarCheck } from 'lucide-react';
+import { X, HeartPulse, Flame, Clock, Plus, Trash2, Gauge, CalendarCheck, ChevronDown, Search } from 'lucide-react';
 import {
   CARDIO_ACTIVITIES, CARDIO_GROUPS, CARDIO_EFFORTS, DEFAULT_EFFORT,
   findActivity, findEffort, estimateCardioCalories, cardioEntryCalories, effortDelta,
 } from '../utils/cardio';
-import { clampNumber, INPUT_LIMITS } from '../utils/helpers';
+import { clampNumber, INPUT_LIMITS, foldForSearch } from '../utils/helpers';
 
 const QUICK_MINUTES = [15, 20, 30, 45, 60];
 
@@ -18,6 +18,8 @@ const CardioModal = memo(({ isOpen, onClose, onSave, weightKg, existing = [], on
   const [type, setType] = useState('zone2');
   const [minutes, setMinutes] = useState(30);
   const [effort, setEffort] = useState(DEFAULT_EFFORT);
+  const [showActivities, setShowActivities] = useState(false);
+  const [activityQuery, setActivityQuery] = useState('');
   // Plandan yüklendiyse planlanan tempo/süre burada tutulur; kayda da yazılır
   // ki sonradan "planladığımdan sert mi geçti" sorusu cevaplanabilsin.
   const [plan, setPlan] = useState(null);
@@ -28,11 +30,17 @@ const CardioModal = memo(({ isOpen, onClose, onSave, weightKg, existing = [], on
   const effortInfo = findEffort(effort);
   const kcal = estimateCardioCalories((activity?.met || 0) * effortInfo.met, weightKg, minutes);
   const canSave = Boolean(activity) && Number(minutes) > 0;
+  const normalizedActivityQuery = foldForSearch(activityQuery).trim();
+  const visibleActivities = normalizedActivityQuery
+    ? CARDIO_ACTIVITIES.filter(item => foldForSearch(`${item.label} ${item.group} ${item.hint || ''}`).includes(normalizedActivityQuery))
+    : CARDIO_ACTIVITIES;
 
   const planiYukle = (slot) => {
-    setType(slot.activity);
+    const activityKey = typeof slot.activity === 'string' ? slot.activity : slot.activity?.key;
+    setType(activityKey);
     setMinutes(slot.minutes);
     setEffort(slot.effort || DEFAULT_EFFORT);
+    setShowActivities(false);
     setPlan({ effort: slot.effort || DEFAULT_EFFORT, minutes: Number(slot.minutes) || 0 });
   };
 
@@ -69,15 +77,30 @@ const CardioModal = memo(({ isOpen, onClose, onSave, weightKg, existing = [], on
               >
                 <span className="text-[11px] font-bold text-zinc-200 truncate">
                   {s.time && <span className="text-zinc-500 font-mono mr-1.5">{s.time}</span>}
-                  {findActivity(s.activity)?.label || s.activity}
+                  {(typeof s.activity === 'string' ? findActivity(s.activity)?.label : s.activity?.label) || 'Kardiyo'}
                 </span>
                 <span className="text-[10px] font-mono text-zinc-500 shrink-0">
                   {s.minutes} dk · {findEffort(s.effort).label}
+                  {s.minuteSource === 'history' && ' · arşiv ort.'}
                 </span>
               </button>
             ))}
           </div>
         )}
+
+        {/* İlk karar tek kartta: uzun aktivite listesi yalnızca değiştirirken açılır. */}
+        <button
+          onClick={() => setShowActivities(value => !value)}
+          className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl p-3.5 flex items-center justify-between gap-3 text-left active:border-red-700"
+          aria-expanded={showActivities}
+        >
+          <span className="min-w-0">
+            <span className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest block">1 · Ne yaptın?</span>
+            <strong className="text-[12px] text-zinc-100 block truncate">{activity?.label}</strong>
+            <span className="text-[9px] font-mono text-zinc-500">{activity?.hint}</span>
+          </span>
+          <span className="text-[9px] font-bold text-red-400 flex items-center shrink-0">Değiştir <ChevronDown size={12} className={`ml-1 transition-transform ${showActivities ? 'rotate-180' : ''}`} /></span>
+        </button>
 
         {/* Kalori tahmini */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 text-center">
@@ -115,7 +138,7 @@ const CardioModal = memo(({ isOpen, onClose, onSave, weightKg, existing = [], on
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-3.5 space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center">
-              <Clock size={12} className="mr-1.5 text-emerald-400" /> Süre
+              <Clock size={12} className="mr-1.5 text-emerald-400" /> 2 · Ne kadar sürdü?
             </span>
             <div className="flex items-center gap-2">
               <input
@@ -149,7 +172,7 @@ const CardioModal = memo(({ isOpen, onClose, onSave, weightKg, existing = [], on
         {/* Tempo / zorluk */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-3.5 space-y-2">
           <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center">
-            <Gauge size={12} className="mr-1.5 text-amber-400" /> Tempo
+            <Gauge size={12} className="mr-1.5 text-amber-400" /> 3 · Tempo nasıldı?
           </span>
           <div className="grid grid-cols-5 gap-1.5">
             {CARDIO_EFFORTS.map(e => (
@@ -169,15 +192,28 @@ const CardioModal = memo(({ isOpen, onClose, onSave, weightKg, existing = [], on
           </p>
         </div>
 
-        {/* Aktivite */}
-        {CARDIO_GROUPS.map(group => (
+        {/* Aktivite kütüphanesi yalnızca kullanıcı değiştirmek istediğinde açılır. */}
+        {showActivities && <div className="space-y-3 bg-zinc-950 border border-zinc-800 rounded-2xl p-2.5">
+          <div className="relative">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
+            <input
+              value={activityQuery}
+              onChange={(event) => setActivityQuery(event.target.value)}
+              placeholder="Koşu, basketbol, yürüyüş…"
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-8 pr-3 py-2.5 text-[11px] text-zinc-200 outline-none focus:border-red-700"
+            />
+          </div>
+          {CARDIO_GROUPS.map(group => {
+            const groupActivities = visibleActivities.filter(a => a.group === group);
+            if (groupActivities.length === 0) return null;
+            return (
           <div key={group} className="space-y-1.5">
             <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">{group}</h4>
             <div className="space-y-1.5">
-              {CARDIO_ACTIVITIES.filter(a => a.group === group).map(a => (
+              {groupActivities.map(a => (
                 <button
                   key={a.key}
-                  onClick={() => setType(a.key)}
+                  onClick={() => { setType(a.key); setShowActivities(false); }}
                   className={`w-full text-left px-3 py-2.5 rounded-xl border transition-colors ${type === a.key ? 'bg-red-950/25 border-red-700' : 'bg-zinc-900 border-zinc-800'}`}
                 >
                   <div className="flex justify-between items-center gap-2">
@@ -194,7 +230,12 @@ const CardioModal = memo(({ isOpen, onClose, onSave, weightKg, existing = [], on
               ))}
             </div>
           </div>
-        ))}
+            );
+          })}
+          {visibleActivities.length === 0 && (
+            <p className="text-center text-[10px] font-mono text-zinc-600 py-5">Eşleşen kardiyo bulunamadı.</p>
+          )}
+        </div>}
 
         {/* Bu seansta eklenenler */}
         {existing.length > 0 && (

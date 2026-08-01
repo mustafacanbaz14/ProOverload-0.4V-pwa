@@ -2,6 +2,25 @@ import React, { memo, useId, useState } from 'react';
 import { Flame, Box } from 'lucide-react';
 import { getVolumeLandmarks, volumeStatusOf, VOLUME_STATUS } from '../utils/constants';
 
+const MUSCLE_LOCATION = {
+  'Göğüs': 'Köprücük kemiğinin altından göğüs kafesinin ortasına uzanan ön bölge.',
+  'Kanat': 'Koltuk altından bele doğru inen, sırtın dış V çizgisini oluşturan bölge.',
+  'Orta Sırt': 'İki kürek kemiğinin arasında, omurganın iki yanında kalan bölge.',
+  'Trapez': 'Boyun tabanından omuzlara ve kürek kemiklerinin üstüne yayılan bölge.',
+  'Ön Omuz': 'Omuz başının öne bakan kısmı.',
+  'Yan Omuz': 'Omuz başının dış yan kısmı; omuz genişliğini belirginleştirir.',
+  'Arka Omuz': 'Omuz başının arkaya bakan, sırtla birleşen kısmı.',
+  'Biseps': 'Üst kolun ön yüzü.',
+  'Triseps': 'Üst kolun arka yüzü.',
+  'Önkol': 'Dirsek ile el bileği arasındaki bölüm.',
+  'Quadriceps': 'Uyluğun ön yüzü.',
+  'Hamstring': 'Uyluğun arka yüzü.',
+  'Kalça': 'Leğen kemiğinin arkasındaki kalça kasları.',
+  'Baldır': 'Diz ile ayak bileği arasındaki arka alt bacak.',
+  'Karın': 'Göğüs kafesi ile leğen kemiği arasındaki ön merkez.',
+  'Bel': 'Alt sırtta omurganın iki yanında kalan erektör bölgesi.',
+};
+
 // Eşikler hem kasa hem deneyim seviyesine özeldir; seviye parametre olarak
 // geçirilir (modül düzeyinde tutulsaydı render saf olmazdı).
 function getMuscleColor(count, muscle, level) {
@@ -30,6 +49,8 @@ const MuscleHeatmap = memo(({
 
   const vol = (m) => muscleVolume[m] || 0;
   const activeCount = vol(selected);
+  const activeLandmarks = getVolumeLandmarks(selected, experienceLevel);
+  const activeProgress = Math.min(100, Math.round(activeCount / activeLandmarks.mrv * 100));
 
   // Her bölge tek yerden tanımlanır; renk ve seçim davranışı ortaklaşır.
   const region = (muscle) => ({
@@ -44,9 +65,9 @@ const MuscleHeatmap = memo(({
     role: 'button',
     tabIndex: 0,
     'aria-label': `${muscle}: ${vol(muscle)} etkili set`,
-    className: 'cursor-pointer transition-all duration-300',
-    stroke: selected === muscle ? '#22d3ee' : 'transparent',
-    strokeWidth: selected === muscle ? 1.5 : 0,
+    className: 'cursor-pointer transition-all duration-300 hover:brightness-110',
+    stroke: selected === muscle ? '#22d3ee' : '#18181b',
+    strokeWidth: selected === muscle ? 1.8 : 0.8,
     strokeLinejoin: 'round',
     strokeLinecap: 'round',
     vectorEffect: 'non-scaling-stroke',
@@ -68,7 +89,12 @@ const MuscleHeatmap = memo(({
       </div>
 
       <div className="p-4 space-y-3">
-        <div className="flex justify-around items-start bg-zinc-950 py-4 rounded-xl border border-zinc-800/80">
+        <div className="bg-zinc-950 rounded-xl border border-zinc-800/80 overflow-hidden">
+          <div className="px-3 pt-2.5 flex items-center justify-between">
+            <span className="text-[9px] font-mono text-zinc-600">Bölgeye dokun · anatomik sınırı gör</span>
+            <span className="text-[9px] font-mono text-cyan-600">{selected}</span>
+          </div>
+          <div className="flex justify-around items-start py-2.5">
 
           {/* --- ÖN CEPHE --- */}
           <div className="flex flex-col items-center">
@@ -80,6 +106,7 @@ const MuscleHeatmap = memo(({
               </defs>
               <circle cx="55" cy="15" r="9" fill={depthMode ? `url(#${filterId}-head-front)` : '#3f3f46'} />
               <rect x="51" y="24" width="8" height="5" fill="#3f3f46" />
+              <path d="M42 29 Q31 31 25 39 L22 91 L31 94 L40 84 L42 130 L41 161 L52 161 L55 105 L58 161 L69 161 L68 130 L70 84 L79 94 L88 91 L85 39 Q79 31 68 29 Z" fill="#27272a" stroke="#3f3f46" strokeWidth="0.7" />
 
               {/* Trapez — boyun yanları, önden görünen üst kısım */}
               <path d="M 43 30 L 55 27 L 67 30 L 62 37 L 48 37 Z" {...region('Trapez')} />
@@ -93,7 +120,8 @@ const MuscleHeatmap = memo(({
               <path d="M 85 38 Q 89 45 86 51 L 81 48 Q 83 43 81 39 Z" {...region('Yan Omuz')} />
 
               {/* Göğüs */}
-              <path d="M 41 38 L 69 38 L 66 56 L 44 56 Z" {...region('Göğüs')} />
+              <path d="M 41 38 L 54 38 L 54 56 L 44 56 Z" {...region('Göğüs')} />
+              <path d="M 56 38 L 69 38 L 66 56 L 56 56 Z" {...region('Göğüs')} />
 
               {/* Biseps */}
               <rect x="24" y="53" width="8" height="20" rx="4" {...region('Biseps')} />
@@ -104,7 +132,8 @@ const MuscleHeatmap = memo(({
               <rect x="81" y="75" width="7" height="19" rx="3.5" {...region('Önkol')} />
 
               {/* Karın */}
-              <path d="M 46 58 L 64 58 L 62 86 L 48 86 Z" {...region('Karın')} />
+              <path d="M 47 58 L 54 58 L 54 86 L 49 86 Z" {...region('Karın')} />
+              <path d="M 56 58 L 63 58 L 61 86 L 56 86 Z" {...region('Karın')} />
 
               {/* Quadriceps */}
               <path d="M 43 90 L 53 90 L 51 130 L 42 130 Z" {...region('Quadriceps')} />
@@ -126,9 +155,10 @@ const MuscleHeatmap = memo(({
               </defs>
               <circle cx="55" cy="15" r="9" fill={depthMode ? `url(#${filterId}-head-back)` : '#3f3f46'} />
               <rect x="51" y="24" width="8" height="5" fill="#3f3f46" />
+              <path d="M42 29 Q31 31 25 39 L22 91 L31 94 L40 84 L42 130 L41 161 L52 161 L55 105 L58 161 L69 161 L68 130 L70 84 L79 94 L88 91 L85 39 Q79 31 68 29 Z" fill="#27272a" stroke="#3f3f46" strokeWidth="0.7" />
 
               {/* Trapez — üst sırt, arkadan baskın */}
-              <path d="M 41 29 L 55 26 L 69 29 L 66 45 L 44 45 Z" {...region('Trapez')} />
+              <path d="M 42 29 L 55 26 L 68 29 L 64 45 L 55 40 L 46 45 Z" {...region('Trapez')} />
 
               {/* Arka deltoid */}
               <ellipse cx="33" cy="42" rx="8" ry="7" {...region('Arka Omuz')} />
@@ -136,14 +166,18 @@ const MuscleHeatmap = memo(({
 
               {/* Kanatlar merkezde üst üste bindirilmez. Eski üçgenler x=55 çizgisini
                   paylaşınca özellikle iOS ölçeklemesinde dikiş/taşma oluşturuyordu. */}
-              <path d="M 43 45 C 39 49 39 58 43 64 C 45 68 48 72 51 75 L 53 62 L 52 47 Z" {...region('Kanat')} />
-              <path d="M 67 45 C 71 49 71 58 67 64 C 65 68 62 72 59 75 L 57 62 L 58 47 Z" {...region('Kanat')} />
+              <path d="M 43 45 C 37 48 35 58 38 68 C 40 73 44 78 49 81 L 51 66 L 50 48 Z" {...region('Kanat')} />
+              <path d="M 67 45 C 73 48 75 58 72 68 C 70 73 66 78 61 81 L 59 66 L 60 48 Z" {...region('Kanat')} />
 
-              {/* Orta sırt (romboid) — kürek kemikleri arası */}
-              <rect x="48" y="47" width="14" height="14" rx="2" {...region('Orta Sırt')} />
+              {/* Orta sırt iki romboid yüzeydir; dıştaki geniş kanat yüzeyinden
+                  merkez boşluğu ve eğik sınırlarla ayrılır. */}
+              <path d="M 49 47 L 54 50 L 54 66 L 47 60 Z" {...region('Orta Sırt')} />
+              <path d="M 61 47 L 56 50 L 56 66 L 63 60 Z" {...region('Orta Sırt')} />
+              <line x1="55" y1="43" x2="55" y2="86" stroke="#52525b" strokeWidth="0.55" strokeDasharray="1.5 2" />
 
               {/* Bel (erektörler) */}
-              <path d="M 47 73 L 63 73 L 62 86 L 48 86 Z" {...region('Bel')} />
+              <path d="M 48 68 L 54 68 L 53 86 L 48 86 Z" {...region('Bel')} />
+              <path d="M 56 68 L 62 68 L 62 86 L 57 86 Z" {...region('Bel')} />
 
               {/* Triseps */}
               <rect x="24" y="53" width="8" height="20" rx="4" {...region('Triseps')} />
@@ -166,18 +200,22 @@ const MuscleHeatmap = memo(({
             </svg>
           </div>
         </div>
+        </div>
 
         {/* Seçili bölge özeti */}
         <button
           onClick={() => onSelectMuscle?.(selected)}
           className="w-full bg-zinc-950 px-4 py-3 rounded-xl border border-zinc-800 flex items-center justify-between active:bg-zinc-900 transition-colors text-left"
         >
-          <div>
+          <div className="min-w-0 pr-3">
             <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest block">Seçili Bölge</span>
             <span className="text-sm font-bold text-zinc-100">{selected}</span>
             {onSelectMuscle && (
               <span className="text-[10px] font-mono text-cyan-500 block mt-0.5">Detay için dokun →</span>
             )}
+            <span className="text-[9px] font-mono text-zinc-600 block mt-1 leading-relaxed">
+              {MUSCLE_LOCATION[selected]}
+            </span>
           </div>
           <div className="text-right">
             <span className="text-lg font-mono font-bold" style={{ color: getMuscleColor(activeCount, selected, experienceLevel) }}>
@@ -186,6 +224,20 @@ const MuscleHeatmap = memo(({
             <span className="text-[10px] font-mono text-zinc-500 block">{getMuscleStatus(activeCount, selected, experienceLevel)}</span>
           </div>
         </button>
+
+        <div className="bg-zinc-950 px-3 py-2.5 rounded-xl border border-zinc-800 space-y-2">
+          <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all"
+              style={{ width: `${activeProgress}%`, backgroundColor: getMuscleColor(activeCount, selected, experienceLevel) }}
+            />
+          </div>
+          <div className="grid grid-cols-3 gap-1 text-center text-[9px] font-mono">
+            <span className="text-amber-400">MEV {activeLandmarks.mev}</span>
+            <span className="text-emerald-400">MAV {activeLandmarks.mav}</span>
+            <span className="text-red-400">MRV {activeLandmarks.mrv}</span>
+          </div>
+        </div>
 
         {/* Gösterge doğrudan VOLUME_STATUS'tan üretilir — haritadaki renklerle
             ayrı düşemez. */}

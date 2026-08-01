@@ -10,6 +10,9 @@ import { analyzeDayConflicts, activityImpact } from '../utils/interference';
 import { generateId, clampNumber } from '../utils/helpers';
 
 const kucukAlan = 'bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-zinc-200 outline-none font-mono text-[11px] focus:border-cyan-500 transition-colors';
+const formatPlanDuration = (minutes) => minutes < 60
+  ? `${minutes} dk`
+  : `${Math.round(minutes / 60 * 10) / 10} sa`;
 
 /**
  * Haftalık programlar.
@@ -34,6 +37,7 @@ const WeeklyPlanModal = memo(({
   restSeconds = 120,
   experienceLevel = 'intermediate',
   weightKg = 0,
+  workouts = [],
 }) => {
   const [editingDay, setEditingDay] = useState(null);
   const [renaming, setRenaming] = useState(null);
@@ -44,8 +48,8 @@ const WeeklyPlanModal = memo(({
   const plan = plans.find(p => p.id === seciliPlanId) || plans.find(p => p.id === activePlanId) || plans[0] || null;
 
   const result = useMemo(
-    () => computeWeekPlan(plan || {}, templates, { customExercises, restSeconds, experienceLevel, weightKg }),
-    [plan, templates, customExercises, restSeconds, experienceLevel, weightKg]);
+    () => computeWeekPlan(plan || {}, templates, { customExercises, restSeconds, experienceLevel, weightKg, workouts }),
+    [plan, templates, customExercises, restSeconds, experienceLevel, weightKg, workouts]);
 
   const cakismalar = useMemo(
     () => result.days.map(d => ({ key: d.key, analysis: analyzeDayConflicts(d) })),
@@ -92,7 +96,7 @@ const WeeklyPlanModal = memo(({
   const slotEkle = (dayKey, type) => {
     const slot = type === 'workout'
       ? { id: generateId(), type: 'workout', templateId: templates[0]?.id || '', time: '' }
-      : { id: generateId(), type: 'cardio', activity: 'zone2', minutes: 30, effort: DEFAULT_EFFORT, time: '' };
+      : { id: generateId(), type: 'cardio', activity: 'zone2', minutes: '', effort: DEFAULT_EFFORT, time: '' };
     gunGuncelle(dayKey, [...(plan.days[dayKey] || []), slot]);
   };
 
@@ -208,7 +212,7 @@ const WeeklyPlanModal = memo(({
           {[
             { icon: <CalendarRange size={13} className="text-cyan-400" />, value: result.trainingDays, label: 'Gün' },
             { icon: <Layers size={13} className="text-emerald-400" />, value: result.totalSets, label: 'Set' },
-            { icon: <Clock size={13} className="text-amber-400" />, value: `${Math.round(result.totalMinutes / 60 * 10) / 10}s`, label: 'Süre' },
+            { icon: <Clock size={13} className="text-amber-400" />, value: formatPlanDuration(result.totalMinutes), label: 'Süre' },
             {
               icon: <Flame size={13} className="text-red-400" />,
               value: weightKg > 0 ? result.totalKcal + result.totalCardioKcal : '—',
@@ -222,6 +226,13 @@ const WeeklyPlanModal = memo(({
             </div>
           ))}
         </div>
+
+        {result.activeRecoveryDays > 0 && (
+          <div className="bg-indigo-950/20 border border-indigo-900/40 rounded-xl px-3 py-2 flex items-center justify-between gap-2">
+            <span className="text-[10px] font-bold text-indigo-300">Aktif off day</span>
+            <span className="text-[9px] font-mono text-zinc-500">{result.activeRecoveryDays} gün · yalnızca eğlence temposu</span>
+          </div>
+        )}
 
         {weightKg > 0 ? (
           <p className="text-[9px] font-mono text-zinc-600 leading-relaxed px-1">
@@ -266,7 +277,11 @@ const WeeklyPlanModal = memo(({
                             <span key={c.id} className="text-[11px] font-bold text-red-400 truncate block">
                               {c.time && <span className="text-zinc-500 font-mono mr-1.5">{c.time}</span>}
                               {c.activity.label}
-                              <span className="text-zinc-500 font-mono font-normal"> · {c.minutes} dk · {c.effortInfo.label}</span>
+                              <span className="text-zinc-500 font-mono font-normal">
+                                {' '}· {c.minutes} dk · {c.effortInfo.label}
+                                {c.minuteSource === 'history' && ' · arşiv ort.'}
+                                {c.minuteSource === 'default' && ' · başlangıç tahmini'}
+                              </span>
                             </span>
                           ))}
                         </span>
@@ -275,6 +290,7 @@ const WeeklyPlanModal = memo(({
                     <span className="shrink-0 text-right">
                       {d.slots.length > 0 ? (
                         <span className="text-[10px] font-mono text-zinc-500">
+                          {d.isActiveRest && <span className="text-indigo-400 block font-bold">Aktif Off Day</span>}
                           {d.sets > 0 && <>{d.sets} set · </>}~{d.minutes} dk
                           {weightKg > 0 && <span className="text-zinc-600 block">{d.totalKcal} kcal</span>}
                           {cakisma && cakisma.level.key !== 'none' && cakisma.items.length > 0 && (
@@ -348,7 +364,7 @@ const WeeklyPlanModal = memo(({
                                 onBlur={(e) => slotGuncelle(d.key, slot.id, {
                                   minutes: e.target.value === '' ? '' : clampNumber(e.target.value, 0, 300),
                                 })}
-                                placeholder={slot.type === 'workout' ? 'oto' : '30'}
+                                placeholder={slot.type === 'workout' ? 'oto' : 'arşiv'}
                                 className={`${kucukAlan} w-full text-center`}
                               />
                             </label>
@@ -369,10 +385,14 @@ const WeeklyPlanModal = memo(({
                           {slot.type === 'cardio' && (() => {
                             const etki = activityImpact(slot.activity);
                             const tempo = CARDIO_EFFORTS.find(x => x.key === (slot.effort || DEFAULT_EFFORT));
+                            const hesaplanan = d.cardios.find(cardio => cardio.id === slot.id);
                             return (
                               <p className="text-[9px] font-mono text-zinc-500 leading-relaxed">
                                 {tempo?.hint}
                                 {etki?.hint ? ` · ${etki.label}: ${etki.hint}` : ''}
+                                {hesaplanan?.minuteSource === 'history' && ` · Süre boş: son ${hesaplanan.historyStats.count} kaydın ortalaması ${hesaplanan.minutes} dk kullanılıyor.`}
+                                {hesaplanan?.minuteSource === 'default' && ` · Geçmiş yok: geçici ${hesaplanan.minutes} dk tahmini kullanılıyor.`}
+                                {hesaplanan?.effortInfo.key === 'fun' && ' · O gün başka antrenman yoksa aktif off day sayılır.'}
                               </p>
                             );
                           })()}

@@ -1,7 +1,10 @@
 import React, { memo, useMemo, useState } from 'react';
-import { Trash2, Calendar, Scale, Beef, Pencil, Copy, BookmarkPlus, HeartPulse, Search } from 'lucide-react';
+import { Trash2, Calendar, Scale, Beef, Pencil, Copy, BookmarkPlus, HeartPulse, Search, Timer, Flame, Activity } from 'lucide-react';
 import { calcTonnage, calcEffectiveSets, isWorkingSet, foldForSearch } from '../utils/helpers';
-import { findActivity, findEffort, effortDelta, cardioEntryCalories, totalCardioCalories, dayWorkoutCalories } from '../utils/cardio';
+import {
+  findActivity, findEffort, effortDelta, cardioEntryCalories, totalCardioCalories,
+  dayWorkoutCalories, cardioArchiveSummary, evaluateCardioEntry,
+} from '../utils/cardio';
 import { dailyTotals } from '../utils/nutritionStats';
 import { parseNumber, clampNumber } from '../utils/helpers';
 import { formatDay, weekdayName } from '../utils/dates';
@@ -41,6 +44,9 @@ const HistoryView = memo(({
     foldForSearch(`${m.date} ${m.weight} ${m.bodyFat || ''}`).includes(q)), [metricsHistory, q]);
   const filteredNutrition = useMemo(() => !q ? nutritionHistory : nutritionHistory.filter(n =>
     foldForSearch(`${n.date} ${(n.meals || []).map(meal => meal.name).join(' ')}`).includes(q)), [nutritionHistory, q]);
+  const cardioSummary = useMemo(
+    () => cardioArchiveSummary(workouts, latestWeight),
+    [workouts, latestWeight]);
 
   return (
     <div className="p-4 space-y-4 pb-nav h-full overflow-y-auto hide-scrollbar bg-black">
@@ -212,6 +218,38 @@ const HistoryView = memo(({
 
       {historyTab === 'cardio' && (
         <div className="space-y-3">
+          {cardioSummary.count > 0 && (
+            <section className="bg-gradient-to-br from-red-950/35 to-zinc-900 rounded-2xl border border-red-900/35 p-3.5 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <span className="text-[9px] font-mono text-red-400 uppercase tracking-widest">Kardiyo Özeti</span>
+                  <h3 className="text-[12px] font-bold text-zinc-100">Kişisel arşiv ortalamaların</h3>
+                </div>
+                <Activity size={18} className="text-red-400" />
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                {[
+                  [<HeartPulse key="sessions" size={11} />, 'Kayıt', cardioSummary.count],
+                  [<Timer key="minutes" size={11} />, 'Toplam', `${cardioSummary.totalMinutes} dk`],
+                  [<Flame key="calories" size={11} />, 'Yakım', latestWeight > 0 ? `${cardioSummary.totalCalories} kcal` : '—'],
+                ].map(([icon, label, value]) => (
+                  <div key={label} className="bg-zinc-950/80 border border-zinc-800 rounded-xl py-2">
+                    <span className="flex justify-center text-red-400 mb-0.5">{icon}</span>
+                    <strong className="text-[11px] font-mono text-zinc-100 block">{value}</strong>
+                    <span className="text-[8px] font-mono text-zinc-600 uppercase">{label}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-1">
+                {cardioSummary.activities.map(item => (
+                  <div key={item.type} className="flex justify-between text-[9px] font-mono text-zinc-500">
+                    <span>{findActivity(item.type)?.label || item.type}</span>
+                    <span>{item.count} kayıt · ort. {Math.round(item.minutes / item.count)} dk</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
           {filteredCardio.length === 0 ? (
             <div className="text-center py-12 text-zinc-600 text-xs font-mono">Henüz kardiyo kaydı yok</div>
           ) : filteredCardio.map(record => {
@@ -219,6 +257,7 @@ const HistoryView = memo(({
             const effort = findEffort(record.cardio.effort);
             const calories = cardioEntryCalories(record.cardio, latestWeight);
             const deviation = effortDelta(record.cardio, latestWeight);
+            const evaluation = evaluateCardioEntry(record.cardio, workouts, latestWeight);
             return (
               <div key={`${record.workoutId}-${record.cardio.id}`} className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 space-y-2.5">
                 <div className="flex justify-between items-start gap-2">
@@ -235,6 +274,26 @@ const HistoryView = memo(({
                     ['Yakım', latestWeight > 0 ? `${calories} kcal` : '—'],
                   ].map(([label, value]) => <div key={label} className="bg-zinc-950 border border-zinc-800 rounded-xl py-2"><span className="text-[8px] font-mono text-zinc-600 uppercase block">{label}</span><strong className="text-[10px] font-mono text-zinc-200">{value}</strong></div>)}
                 </div>
+                {evaluation.stats.count > 1 && (
+                  <div className={`rounded-xl border px-3 py-2 ${evaluation.tone === 'harder'
+                    ? 'border-amber-900/40 bg-amber-950/15'
+                    : evaluation.tone === 'lighter'
+                      ? 'border-cyan-900/40 bg-cyan-950/15'
+                      : 'border-zinc-800 bg-zinc-950/60'}`}>
+                    <p className="text-[9px] font-mono text-zinc-400 leading-relaxed">
+                      Bu aktivitedeki son {evaluation.stats.count} kayıt ortalaman:
+                      {' '}<strong className="text-zinc-200">{evaluation.stats.avgMinutes} dk</strong>
+                      {latestWeight > 0 && <> · <strong className="text-zinc-200">{evaluation.stats.avgCalories} kcal</strong></>}
+                      . Bu kayıt süre olarak {evaluation.minuteDiff === 0 ? 'ortalamanla aynı' : `${Math.abs(evaluation.minuteDiff)} dk ${evaluation.minuteDiff > 0 ? 'uzun' : 'kısa'}`}
+                      {evaluation.tone === 'harder' ? ' ve normalden daha yorucu.' : evaluation.tone === 'lighter' ? ' ve daha hafif.' : '.'}
+                    </p>
+                  </div>
+                )}
+                {record.cardio.effort === 'fun' && (
+                  <span className="inline-flex text-[9px] font-bold text-indigo-300 border border-indigo-900/40 bg-indigo-950/20 rounded-lg px-2 py-1">
+                    Aktif toparlanma temposu
+                  </span>
+                )}
                 {deviation && <p className={`text-[9px] font-mono ${deviation.harder ? 'text-amber-400' : 'text-cyan-400'}`}>Plan {deviation.planned.label} → gerçekleşen {deviation.actual.label} · {deviation.kcalDiff > 0 ? '+' : ''}{deviation.kcalDiff} kcal</p>}
               </div>
             );
