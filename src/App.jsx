@@ -14,7 +14,7 @@ import { totalCardioCalories, dayWorkoutCalories } from './utils/cardio';
 import { computeWeekPlan, findPlan } from './utils/weekPlan';
 import { removeTemplateFromPlans } from './utils/planMigration';
 import { buildPersonalVolumeGuidance } from './utils/personalization';
-import { averageDailyExercise, dayEnergyBreakdown } from './utils/energyModel';
+import { averageDailyExercise, dayEnergyBreakdown, ACTIVITY_LEVELS, estimateMacrosForTef, thermicEffect } from './utils/energyModel';
 import { recommendedCalories } from './utils/goals';
 import { caloriesFromMacros, dailyTotals } from './utils/nutritionStats';
 import { DEFAULT_READINESS, READINESS_FIELDS, computeReadiness, readinessTrend } from './utils/readiness';
@@ -1114,6 +1114,18 @@ export default function App() {
       return;
     }
 
+    if (type === 'cardio') {
+      const [workoutId, cardioId] = String(id).split('::');
+      setWorkouts(prev => prev
+        .map(workout => workout.id === workoutId
+          ? { ...workout, cardio: (workout.cardio || []).filter(item => item.id !== cardioId) }
+          : workout)
+        .filter(workout => (workout.exercises || []).length > 0 || (workout.cardio || []).length > 0));
+      setDeleteConfirm({ isOpen: false, type: null, id: null });
+      showToast('Kardiyo kaydı silindi.');
+      return;
+    }
+
     if (type === 'workout') setWorkouts(prev => prev.filter(w => w.id !== id));
     else if (type === 'metric') setMetricsHistory(prev => prev.filter(m => m.id !== id));
     else if (type === 'nutrition') setNutritionHistory(prev => prev.filter(n => n.id !== id));
@@ -1121,13 +1133,6 @@ export default function App() {
     setDeleteConfirm({ isOpen: false, type: null, id: null });
     showToast('Kayıt silindi.');
   };
-
-  // Korunum kalorisi: gerçek TDEE varsa o, yoksa BMR tahmini. Geçmiş enerji
-  // dengesi de bu değere göre hesaplanır.
-  const maintenanceCalories = useMemo(() => {
-    if (adaptiveTDEE?.tdee > 0) return Math.round(adaptiveTDEE.tdee);
-    return Math.round(parseNumber(computedComp?.bmr) * 1.5) || 0;
-  }, [adaptiveTDEE, computedComp]);
 
   // Geçmiş bir beslenme kaydının tek alanını günceller (yakılan kalori gibi).
   // Kaydın tamamını forma yüklemeye gerek kalmıyor.
@@ -1192,6 +1197,33 @@ export default function App() {
   // dusulmezse antrenman kalorisi iki kez sayilir.
   const avgDailyExercise = useMemo(
     () => averageDailyExercise(dayCaloriesFor, 28), [dayCaloriesFor]);
+
+  // Adaptif TDEE yokken sabit BMR×1.5 kullanmak günlük hareketi gereksiz
+  // şişiriyordu. Seçilen yaşam seviyesi + ortalama egzersiz + son makro
+  // dağılımından türetilen TEF ile daha tutarlı bir başlangıç tahmini üretir.
+  // üzerinden çözülür; adaptif TDEE oluştuğu anda yerini gerçek veriye bırakır.
+  const maintenanceCalories = useMemo(() => {
+    if (adaptiveTDEE?.tdee > 0) return Math.round(adaptiveTDEE.tdee);
+    const bmr = parseNumber(computedComp?.bmr);
+    if (!(bmr > 0)) return 0;
+    const level = ACTIVITY_LEVELS.find(item => item.key === settings.activityLevel) || ACTIVITY_LEVELS[1];
+    const neat = settings.neatMode === 'manual' && parseNumber(settings.neatManual) > 0
+      ? parseNumber(settings.neatManual)
+      : bmr * level.factor;
+    const core = bmr + neat + avgDailyExercise;
+    const estimatedMacros = estimateMacrosForTef(nutritionHistory, core);
+    const macroCalories = parseNumber(estimatedMacros.protein) * 4
+      + parseNumber(estimatedMacros.carbs) * 4 + parseNumber(estimatedMacros.fats) * 9;
+    const tefRate = macroCalories > 0
+      ? Math.min(0.2, thermicEffect(estimatedMacros).total / macroCalories)
+      : 0.1;
+    return Math.round(core / (1 - tefRate));
+  }, [adaptiveTDEE, computedComp, settings.activityLevel, settings.neatMode,
+    settings.neatManual, avgDailyExercise, nutritionHistory]);
+
+  const estimatedTefMacros = useMemo(
+    () => estimateMacrosForTef(nutritionHistory, maintenanceCalories),
+    [nutritionHistory, maintenanceCalories]);
 
   const neatOpts = useMemo(() => ({
     avgDailyExercise,
@@ -1305,6 +1337,7 @@ export default function App() {
       maintenance: maintenanceCalories,
       bmr: parseNumber(computedComp?.bmr),
       macros,
+      estimatedMacros: estimatedTefMacros,
       lifting: exercise.lifting,
       cardio: exercise.cardio,
       recovery: exercise.mind,
@@ -1369,7 +1402,7 @@ export default function App() {
       workoutTemplate,
     };
   }, [weekPlanDays, nutritionHistory, currentNutritionForm, dayCaloriesFor,
-    maintenanceCalories, computedComp, neatOpts, settings.nutritionGoal,
+    maintenanceCalories, computedComp, neatOpts, estimatedTefMacros, settings.nutritionGoal,
     settings.paceRate, latestWeight, wellness, readiness]);
 
   const needsBackup = useMemo(() => {
@@ -1823,6 +1856,9 @@ export default function App() {
           planDays={weekPlanDays}
           plannedCardioKcal={weekPlanResult.totalCardioKcal || weeklyCardioKcal}
           cardioIsPlanned={weekPlanResult.totalCardioKcal > 0}
+          avgDailyExercise={avgDailyExercise}
+          estimatedMacros={estimatedTefMacros}
+          maintenanceEstimated={!(adaptiveTDEE?.tdee > 0)}
         />
 
         {/* KARDİYO */}

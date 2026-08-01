@@ -29,8 +29,14 @@ const HistoryView = memo(({
 }) => {
   const [query, setQuery] = useState('');
   const q = foldForSearch(query).trim();
-  const filteredWorkouts = useMemo(() => !q ? workouts : workouts.filter(w =>
-    foldForSearch(`${w.name || ''} ${w.date} ${(w.exercises || []).map(ex => ex.name).join(' ')}`).includes(q)), [workouts, q]);
+  const strengthWorkouts = useMemo(() => workouts.filter(w => (w.exercises || []).length > 0), [workouts]);
+  const cardioRecords = useMemo(() => workouts.flatMap(workout => (workout.cardio || []).map(cardio => ({
+    workoutId: workout.id, date: workout.date, workoutName: workout.name, cardio,
+  }))), [workouts]);
+  const filteredWorkouts = useMemo(() => !q ? strengthWorkouts : strengthWorkouts.filter(w =>
+    foldForSearch(`${w.name || ''} ${w.date} ${(w.exercises || []).map(ex => ex.name).join(' ')}`).includes(q)), [strengthWorkouts, q]);
+  const filteredCardio = useMemo(() => !q ? cardioRecords : cardioRecords.filter(record =>
+    foldForSearch(`${record.date} ${findActivity(record.cardio.type)?.label || record.cardio.type} ${record.workoutName || ''}`).includes(q)), [cardioRecords, q]);
   const filteredMetrics = useMemo(() => !q ? metricsHistory : metricsHistory.filter(m =>
     foldForSearch(`${m.date} ${m.weight} ${m.bodyFat || ''}`).includes(q)), [metricsHistory, q]);
   const filteredNutrition = useMemo(() => !q ? nutritionHistory : nutritionHistory.filter(n =>
@@ -42,24 +48,30 @@ const HistoryView = memo(({
         <span className="text-[10px] font-mono text-cyan-500 uppercase tracking-widest">Kayıt Arşivi</span>
         <h2 className="text-xl font-black text-zinc-100 mt-0.5">Geçmiş</h2>
       </div>
-      <div className="flex bg-zinc-900 p-1 rounded-2xl border border-zinc-800">
+      <div className="grid grid-cols-4 bg-zinc-900 p-1 rounded-2xl border border-zinc-800">
         <button
           onClick={() => setHistoryTab('workouts')}
-          className={`flex-1 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-colors ${historyTab === 'workouts' ? 'bg-cyan-600 text-white' : 'text-zinc-500'}`}
+          className={`py-2 rounded-xl text-[9px] font-bold uppercase tracking-wide transition-colors ${historyTab === 'workouts' ? 'bg-cyan-600 text-white' : 'text-zinc-500'}`}
         >
-          Antrenmanlar ({workouts.length})
+          Ağırlık ({strengthWorkouts.length})
+        </button>
+        <button
+          onClick={() => setHistoryTab('cardio')}
+          className={`py-2 rounded-xl text-[9px] font-bold uppercase tracking-wide transition-colors ${historyTab === 'cardio' ? 'bg-red-600 text-white' : 'text-zinc-500'}`}
+        >
+          Kardiyo ({cardioRecords.length})
         </button>
         <button
           onClick={() => setHistoryTab('metrics')}
-          className={`flex-1 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-colors ${historyTab === 'metrics' ? 'bg-cyan-600 text-white' : 'text-zinc-500'}`}
+          className={`py-2 rounded-xl text-[9px] font-bold uppercase tracking-wide transition-colors ${historyTab === 'metrics' ? 'bg-cyan-600 text-white' : 'text-zinc-500'}`}
         >
-          Ölçümler ({metricsHistory.length})
+          Ölçüm ({metricsHistory.length})
         </button>
         <button
           onClick={() => setHistoryTab('nutrition')}
-          className={`flex-1 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-colors ${historyTab === 'nutrition' ? 'bg-cyan-600 text-white' : 'text-zinc-500'}`}
+          className={`py-2 rounded-xl text-[9px] font-bold uppercase tracking-wide transition-colors ${historyTab === 'nutrition' ? 'bg-cyan-600 text-white' : 'text-zinc-500'}`}
         >
-          Beslenme ({nutritionHistory.length})
+          Besin ({nutritionHistory.length})
         </button>
       </div>
 
@@ -195,6 +207,38 @@ const HistoryView = memo(({
               );
             })
           )}
+        </div>
+      )}
+
+      {historyTab === 'cardio' && (
+        <div className="space-y-3">
+          {filteredCardio.length === 0 ? (
+            <div className="text-center py-12 text-zinc-600 text-xs font-mono">Henüz kardiyo kaydı yok</div>
+          ) : filteredCardio.map(record => {
+            const activity = findActivity(record.cardio.type);
+            const effort = findEffort(record.cardio.effort);
+            const calories = cardioEntryCalories(record.cardio, latestWeight);
+            const deviation = effortDelta(record.cardio, latestWeight);
+            return (
+              <div key={`${record.workoutId}-${record.cardio.id}`} className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 space-y-2.5">
+                <div className="flex justify-between items-start gap-2">
+                  <div>
+                    <h4 className="text-sm font-bold text-red-400 flex items-center"><HeartPulse size={14} className="mr-1.5" />{activity?.label || record.cardio.type}</h4>
+                    <span className="text-[10px] font-mono text-zinc-500">{formatDay(record.date, 'medium', { year: true })}</span>
+                  </div>
+                  <button onClick={() => setDeleteConfirm({ isOpen: true, type: 'cardio', id: `${record.workoutId}::${record.cardio.id}` })} aria-label="Kardiyo kaydını sil" className="p-2 text-zinc-600 active:text-red-500"><Trash2 size={14} /></button>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  {[
+                    ['Süre', `${record.cardio.minutes} dk`],
+                    ['Tempo', effort?.label || 'Orta'],
+                    ['Yakım', latestWeight > 0 ? `${calories} kcal` : '—'],
+                  ].map(([label, value]) => <div key={label} className="bg-zinc-950 border border-zinc-800 rounded-xl py-2"><span className="text-[8px] font-mono text-zinc-600 uppercase block">{label}</span><strong className="text-[10px] font-mono text-zinc-200">{value}</strong></div>)}
+                </div>
+                {deviation && <p className={`text-[9px] font-mono ${deviation.harder ? 'text-amber-400' : 'text-cyan-400'}`}>Plan {deviation.planned.label} → gerçekleşen {deviation.actual.label} · {deviation.kcalDiff > 0 ? '+' : ''}{deviation.kcalDiff} kcal</p>}
+              </div>
+            );
+          })}
         </div>
       )}
 

@@ -64,6 +64,7 @@ const MetricsView = memo(({
   embedded = false,
 }) => {
   const form = currentMetricsForm;
+  const [guideType, setGuideType] = useState('tape');
 
   const updateField = (field, value) =>
     setCurrentMetricsForm(prev => ({ ...prev, [field]: value }));
@@ -84,6 +85,20 @@ const MetricsView = memo(({
       ...prev,
       skinfolds: { ...(prev.skinfolds || {}), [field]: value }
     }));
+
+  const updateGoal = (collection, field, value) => setSettings(prev => ({
+    ...prev,
+    [collection]: { ...(prev[collection] || {}), [field]: value },
+  }));
+
+  const toggleGuide = (type) => {
+    if (isMeasurementGuideOpen && guideType === type) {
+      setIsMeasurementGuideOpen(false);
+      return;
+    }
+    setGuideType(type);
+    setIsMeasurementGuideOpen(true);
+  };
 
   // Son kaydedilen ölçümün tüm değerlerini forma taşır, tarihi korur.
   const fillFromLatest = () => {
@@ -179,7 +194,13 @@ const MetricsView = memo(({
       </Section>
 
       {/* --- YAĞ ORANI YÖNTEMİ --- */}
-      <Section icon={<Droplet size={13} />} title="Yağ Oranı Kaynağı" defaultOpen={settings.interfaceMode === 'detailed'}>
+      <Section
+        icon={<Droplet size={13} />}
+        title="Yağ Oranı & Kaliper"
+        defaultOpen={settings.interfaceMode === 'detailed'}
+        action={<button onClick={() => toggleGuide('skinfold')} className="text-[9px] text-cyan-400 border border-cyan-900/50 rounded-lg px-2 py-1">Kaliper Rehberi</button>}
+      >
+        {isMeasurementGuideOpen && guideType === 'skinfold' && <MeasurementGuide type="skinfold" />}
         <div className="grid grid-cols-4 gap-2">
           {fatOptions.map(opt => {
             const selected = form.fatPreference === opt.key;
@@ -226,10 +247,13 @@ const MetricsView = memo(({
             ))}
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 gap-2">
+            <div className="grid grid-cols-[1fr_70px_70px] gap-2 px-1 text-[8px] font-mono text-zinc-600 uppercase">
+              <span>Nokta</span><span className="text-center">Şu an</span><span className="text-center">Hedef</span>
+            </div>
             {visibleSites.map(site => (
-              <div key={site.key}>
-                <label className="text-[10px] font-mono text-zinc-500 uppercase block mb-1">{site.label}</label>
+              <div key={site.key} className="grid grid-cols-[1fr_70px_70px] gap-2 items-center bg-zinc-950 border border-zinc-800 rounded-xl p-2">
+                <label className="text-[10px] font-mono text-zinc-400">{site.label}</label>
                 <input
                   type="number" inputMode="decimal" step="0.5"
                   min={INPUT_LIMITS.skinfold.min} max={INPUT_LIMITS.skinfold.max}
@@ -237,8 +261,14 @@ const MetricsView = memo(({
                   onChange={(e) => updateSkinfold(site.key, e.target.value)}
                   onBlur={(e) => updateSkinfold(site.key, clampNumber(e.target.value, INPUT_LIMITS.skinfold.min, INPUT_LIMITS.skinfold.max))}
                   placeholder="mm"
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-zinc-200 font-mono text-xs text-center outline-none focus:border-cyan-600 transition-colors"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-zinc-200 font-mono text-xs text-center outline-none focus:border-cyan-600"
                 />
+                <input type="number" inputMode="decimal" step="0.5" min={0} max={100}
+                  value={settings.goalSkinfolds?.[site.key] || ''}
+                  onChange={(e) => updateGoal('goalSkinfolds', site.key, e.target.value)}
+                  onBlur={(e) => updateGoal('goalSkinfolds', site.key, e.target.value === '' ? '' : clampNumber(e.target.value, 0, 100))}
+                  placeholder="mm" aria-label={`${site.label} kaliper hedefi`}
+                  className="w-full bg-cyan-950/20 border border-cyan-900/50 rounded-lg p-2 text-cyan-400 font-mono text-xs text-center outline-none focus:border-cyan-500" />
               </div>
             ))}
           </div>
@@ -294,6 +324,27 @@ const MetricsView = memo(({
           <div className="flex justify-between"><span>Bel/boy oranı</span> <strong className={parseNumber(computedComp.whtr) > 0.5 ? 'text-orange-400' : 'text-emerald-400'}>{computedComp.whtr}</strong></div>
         </div>
 
+        {(() => {
+          const shoulder = parseNumber(form.measurements?.shoulder);
+          const waist = parseNumber(form.measurements?.waist);
+          const ratio = shoulder > 0 && waist > 0 ? shoulder / waist : 0;
+          const goalShoulder = parseNumber(settings.goalMeasurements?.shoulder);
+          const goalWaist = parseNumber(settings.goalMeasurements?.waist);
+          const target = goalShoulder > 0 && goalWaist > 0 ? goalShoulder / goalWaist : 0;
+          return (
+            <div className="bg-purple-950/15 border border-purple-900/35 p-3 rounded-xl">
+              <div className="flex justify-between items-baseline gap-2">
+                <span className="text-[10px] font-bold text-purple-300 uppercase tracking-wider">Omuz / Bel Oranı</span>
+                <strong className="text-lg font-mono text-purple-300">{ratio ? ratio.toFixed(2) : '—'}</strong>
+              </div>
+              <p className="text-[9px] font-mono text-zinc-500 leading-relaxed mt-1">
+                Omuz çevresi ÷ bel çevresi. Sayı yükseldikçe V görünümü belirginleşir; sağlık tanısı değildir ve ölçüm tekniğinden etkilenir.
+                {target > 0 && ` Hedef ölçülerinin oranı ${target.toFixed(2)}.`}
+              </p>
+            </div>
+          );
+        })()}
+
         <div className="bg-cyan-950/20 border border-cyan-900/30 p-3 rounded-xl space-y-1">
           <span className="text-cyan-400 font-bold uppercase block text-[10px] tracking-wider">Tavsiye</span>
           <p className="text-zinc-300 leading-relaxed text-[10px] font-mono">{computedComp.trainingAdvice}</p>
@@ -317,18 +368,21 @@ const MetricsView = memo(({
         defaultOpen={settings.interfaceMode === 'detailed'}
         action={
           <button
-            onClick={() => setIsMeasurementGuideOpen(!isMeasurementGuideOpen)}
+            onClick={() => toggleGuide('tape')}
             className="text-[10px] text-cyan-400 flex items-center font-mono border border-cyan-900/50 rounded-lg px-2 py-1"
           >
-            <Info size={10} className="mr-1" /> Rehber
+            <Info size={10} className="mr-1" /> Mezura Rehberi
           </button>
         }
       >
-        {isMeasurementGuideOpen && <MeasurementGuide />}
+        {isMeasurementGuideOpen && guideType === 'tape' && <MeasurementGuide type="tape" />}
 
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-[1fr_62px_62px] gap-2 px-1 text-[8px] font-mono text-zinc-600 uppercase">
+          <span>Bölge</span><span className="text-center">Şu an</span><span className="text-center">Hedef</span>
+        </div>
+        <div className="space-y-2">
           {BODY_METRICS.filter(m => m.key !== 'weight').map(m => (
-            <div key={m.key} className="bg-zinc-950 px-2.5 py-2 rounded-xl border border-zinc-800 flex justify-between items-center">
+            <div key={m.key} className="bg-zinc-950 px-2.5 py-2 rounded-xl border border-zinc-800 grid grid-cols-[1fr_62px_62px] gap-2 items-center">
               <span className="text-[11px] font-mono text-zinc-400">{m.label}</span>
               <input
                 type="number" inputMode="decimal" step="0.5"
@@ -339,6 +393,12 @@ const MetricsView = memo(({
                 placeholder="0"
                 className="w-14 bg-zinc-900 border border-zinc-800 rounded-lg py-1 font-mono text-xs text-center text-cyan-400 outline-none focus:border-cyan-600 transition-colors"
               />
+              <input type="number" inputMode="decimal" step="0.5" min={0} max={300}
+                value={settings.goalMeasurements?.[m.key] || ''}
+                onChange={(e) => updateGoal('goalMeasurements', m.key, e.target.value)}
+                onBlur={(e) => updateGoal('goalMeasurements', m.key, e.target.value === '' ? '' : clampNumber(e.target.value, 0, 300))}
+                placeholder="—" aria-label={`${m.label} hedefi`}
+                className="w-full bg-cyan-950/20 border border-cyan-900/50 rounded-lg py-1 font-mono text-xs text-center text-cyan-400 outline-none focus:border-cyan-500" />
             </div>
           ))}
         </div>

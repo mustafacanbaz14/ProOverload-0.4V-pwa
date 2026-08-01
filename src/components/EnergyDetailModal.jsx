@@ -36,6 +36,9 @@ const EnergyDetailModal = memo(({
   plannedCardioKcal = 0,
   // Kardiyo kalorisi plandan mı geldi yoksa gerçekleşenden mi — etiket buna göre.
   cardioIsPlanned = false,
+  avgDailyExercise = 0,
+  estimatedMacros = {},
+  maintenanceEstimated = false,
 }) => {
   const [tab, setTab] = useState('today');
   // Tabloda açılan gün — geçmiş günün dökümünü satır altında gösterir.
@@ -43,8 +46,8 @@ const EnergyDetailModal = memo(({
   const bmr = parseNumber(computedComp?.bmr);
 
   const series = useMemo(
-    () => buildEnergySeries(nutritionHistory, { maintenance, bmr, dayCalories, days: 60, neatOpts }),
-    [nutritionHistory, maintenance, bmr, dayCalories, neatOpts]);
+    () => buildEnergySeries(nutritionHistory, { maintenance, bmr, dayCalories, days: 60, neatOpts, estimatedMacros }),
+    [nutritionHistory, maintenance, bmr, dayCalories, neatOpts, estimatedMacros]);
 
   const weeks = useMemo(() => groupByWeek(series), [series]);
 
@@ -54,21 +57,22 @@ const EnergyDetailModal = memo(({
     return dayEnergyBreakdown({
       maintenance, bmr,
       macros: dailyTotals(todayForm),
-      lifting: w.lifting, cardio: w.cardio, manual: todayForm.activeCaloriesOut,
+      estimatedMacros,
+      lifting: w.lifting, cardio: w.cardio, recovery: w.mind, manual: todayForm.activeCaloriesOut,
       steps: todayForm.steps,
       ...neatOpts,
     });
-  }, [todayForm, maintenance, bmr, dayCalories, neatOpts]);
+  }, [todayForm, maintenance, bmr, dayCalories, neatOpts, estimatedMacros]);
 
   const plan = useMemo(
-    () => theoreticalWeek(planDays, { maintenance, plannedCardioKcal }),
-    [planDays, maintenance, plannedCardioKcal]);
+    () => theoreticalWeek(planDays, { maintenance, plannedCardioKcal, avgDailyExercise }),
+    [planDays, maintenance, plannedCardioKcal, avgDailyExercise]);
 
   // Teorik hesap tek başına "programı uyguladım mı" sorusunu cevaplamıyor;
   // son haftanın gerçekleşeni plandaki karşılığıyla yan yana konuyor.
   const karsilastirma = useMemo(
-    () => planVsActual(planDays, series, { maintenance, days: 7 }),
-    [planDays, series, maintenance]);
+    () => planVsActual(planDays, series, { maintenance, days: 7, avgDailyExercise }),
+    [planDays, series, maintenance, avgDailyExercise]);
 
   if (!isOpen) return null;
 
@@ -116,6 +120,11 @@ const EnergyDetailModal = memo(({
         {/* --- BUGÜN --- */}
         {tab === 'today' && today?.ready && (
           <>
+            {maintenanceEstimated && (
+              <div className="bg-cyan-950/20 border border-cyan-900/40 rounded-2xl p-3 text-[10px] font-mono text-cyan-200 leading-relaxed">
+                Adaptif TDEE için yeterli kilo/beslenme geçmişi yok. Günlük harcama şimdilik seçtiğin hareket seviyesi ve mevcut ölçümlerinden <strong>tahmini</strong> hesaplanıyor.
+              </div>
+            )}
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
               <div className="flex items-baseline justify-between mb-3">
                 <div>
@@ -157,6 +166,12 @@ const EnergyDetailModal = memo(({
               </div>
             </div>
 
+            {today.tefEstimated && (
+              <p className="text-[9px] font-mono text-amber-500/90 leading-relaxed px-1">
+                Termik harcama henüz bugünün besinlerinden gelmiyor; son 14 günlük makro ortalaman kullanıldı. Geçmiş yoksa dengeli geçici makro dağılımı kullanılır. Besin girince otomatik olarak gerçek makrolara döner.
+              </p>
+            )}
+
             {/* NEAT detayı: hangi yöntem, hangi formül, alternatifler ne verirdi */}
             {today.neat !== null && (() => {
               const yontemler = neatMethodComparison({
@@ -191,7 +206,7 @@ const EnergyDetailModal = memo(({
                       >
                         <div className="flex justify-between items-center gap-2">
                           <span className={`text-[11px] font-bold ${secili ? 'text-cyan-300' : 'text-zinc-300'}`}>
-                            {y.label}{secili && ' · kullanılan'}
+                            {y.label}{maintenanceEstimated && y.key === 'auto' ? ' · tahmini' : ''}{secili && ' · kullanılan'}
                           </span>
                           <span className={`text-[12px] font-mono font-bold shrink-0 ${y.value === null ? 'text-zinc-600' : secili ? 'text-cyan-400' : 'text-zinc-400'}`}>
                             {y.value === null ? '—' : `${y.value} kcal`}
@@ -240,9 +255,9 @@ const EnergyDetailModal = memo(({
             </div>
 
             <p className="text-[9px] font-mono text-zinc-600 leading-relaxed px-1">
-              Günlük hareket, korunum kalorisinden bazal ve sindirim payı düşülerek
-              bulunur. Korunum gerçek kilo trendinden ölçüldüğü için belirsizlik
-              uydurma bir katsayıya değil bu artığa yüklenir.
+              {maintenanceEstimated
+                ? 'Henüz gerçek TDEE olmadığı için günlük hareket, seçtiğin yaşam seviyesiyle kuruluyor. Kilo ve beslenme trendi yeterli olduğunda otomatik olarak kişisel artık yöntemine geçer.'
+                : 'Günlük hareket, gerçek korunum kalorisinden bazal, sindirim ve ortalama egzersiz payı düşülerek bulunur; bugünkü egzersiz daha sonra ayrıca eklenir.'}
             </p>
           </>
         )}
@@ -397,7 +412,7 @@ const EnergyDetailModal = memo(({
 
                 <div className="space-y-1.5 text-[10px] font-mono">
                   {[
-                    { l: `Bazal + günlük hareket (7 gün)`, v: plan.baseKcal, c: 'text-zinc-300' },
+                    { l: 'Egzersiz dışı temel harcama (7 gün)', v: plan.baseKcal, c: 'text-zinc-300' },
                     { l: `Ağırlık antrenmanı (${plan.trainingDays} gün)`, v: plan.liftingKcal, c: 'text-emerald-400' },
                     { l: cardioIsPlanned ? 'Kardiyo (plandaki)' : 'Kardiyo (bu haftaki gerçekleşen)', v: plan.cardioKcal, c: 'text-red-400' },
                     { l: 'Toparlanma (EPOC)', v: plan.epoc, c: 'text-orange-400' },
@@ -420,6 +435,25 @@ const EnergyDetailModal = memo(({
                   <Moon size={13} className="text-zinc-500 mx-auto mb-1" />
                   <span className="text-sm font-mono font-bold text-zinc-100 block">{plan.restDayKcal}</span>
                   <span className="text-[9px] font-mono text-zinc-500 uppercase">Dinlenme günü</span>
+                </div>
+              </div>
+
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+                <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-950/60">
+                  <h4 className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest">Rutine Göre Günlük Harcama</h4>
+                </div>
+                <div className="divide-y divide-zinc-800/70">
+                  {plan.days.map(day => (
+                    <div key={day.key} className="px-4 py-2.5 flex justify-between items-center gap-3">
+                      <span>
+                        <strong className="text-[11px] text-zinc-200 block">{day.label}</strong>
+                        <span className="text-[9px] font-mono text-zinc-600">
+                          {day.isRestDay ? 'Dinlenme günü' : `${day.exercise} egzersiz + ${day.epoc} EPOC`}
+                        </span>
+                      </span>
+                      <span className={`text-[12px] font-mono font-bold ${day.isRestDay ? 'text-zinc-400' : 'text-emerald-400'}`}>{day.total} kcal</span>
+                    </div>
+                  ))}
                 </div>
               </div>
 

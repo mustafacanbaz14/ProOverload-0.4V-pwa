@@ -1,5 +1,5 @@
-import React, { memo, useState } from 'react';
-import { Flame } from 'lucide-react';
+import React, { memo, useId, useState } from 'react';
+import { Flame, Box } from 'lucide-react';
 import { getVolumeLandmarks, volumeStatusOf, VOLUME_STATUS } from '../utils/constants';
 
 // Eşikler hem kasa hem deneyim seviyesine özeldir; seviye parametre olarak
@@ -25,6 +25,8 @@ const MuscleHeatmap = memo(({
   subtitle = 'Bu Hafta',
 }) => {
   const [selected, setSelected] = useState('Göğüs');
+  const [depthMode, setDepthMode] = useState(true);
+  const filterId = `${useId().replace(/:/g, '')}-muscle-depth`;
 
   const vol = (m) => muscleVolume[m] || 0;
   const activeCount = vol(selected);
@@ -48,6 +50,7 @@ const MuscleHeatmap = memo(({
     strokeLinejoin: 'round',
     strokeLinecap: 'round',
     vectorEffect: 'non-scaling-stroke',
+    filter: depthMode ? `url(#${filterId})` : undefined,
   });
 
   return (
@@ -56,7 +59,12 @@ const MuscleHeatmap = memo(({
         <h3 className="text-[11px] font-bold text-zinc-100 uppercase tracking-wider flex items-center">
           <Flame size={14} className="mr-2 text-orange-500" /> {title}
         </h3>
-        <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">{subtitle}</span>
+        <span className="flex items-center gap-2">
+          <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">{subtitle}</span>
+          <button onClick={() => setDepthMode(value => !value)} aria-pressed={depthMode} className={`px-2 py-1 rounded-lg border text-[9px] font-mono flex items-center gap-1 ${depthMode ? 'border-cyan-700 bg-cyan-950/30 text-cyan-400' : 'border-zinc-800 text-zinc-600'}`}>
+            <Box size={10} /> 3B
+          </button>
+        </span>
       </div>
 
       <div className="p-4 space-y-3">
@@ -65,8 +73,12 @@ const MuscleHeatmap = memo(({
           {/* --- ÖN CEPHE --- */}
           <div className="flex flex-col items-center">
             <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-1.5">Ön</span>
-            <svg viewBox="0 0 110 180" className="w-28 h-44" role="img" aria-label="Ön kas bölgeleri">
-              <circle cx="55" cy="15" r="9" fill="#3f3f46" />
+            <svg viewBox="0 0 110 180" className="w-28 h-44 transition-transform duration-300" style={depthMode ? { transform: 'perspective(360px) rotateY(8deg) rotateX(2deg)', filter: 'drop-shadow(4px 5px 5px rgb(0 0 0 / 0.35))' } : undefined} role="img" aria-label="Ön kas bölgeleri">
+              <defs>
+                <filter id={filterId} x="-25%" y="-25%" width="150%" height="150%"><feDropShadow dx="1" dy="1.5" stdDeviation="0.8" floodColor="#000" floodOpacity="0.55" /></filter>
+                <radialGradient id={`${filterId}-head-front`} cx="35%" cy="30%"><stop offset="0" stopColor="#71717a" /><stop offset="1" stopColor="#27272a" /></radialGradient>
+              </defs>
+              <circle cx="55" cy="15" r="9" fill={depthMode ? `url(#${filterId}-head-front)` : '#3f3f46'} />
               <rect x="51" y="24" width="8" height="5" fill="#3f3f46" />
 
               {/* Trapez — boyun yanları, önden görünen üst kısım */}
@@ -107,8 +119,12 @@ const MuscleHeatmap = memo(({
           {/* --- ARKA CEPHE --- */}
           <div className="flex flex-col items-center">
             <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-1.5">Arka</span>
-            <svg viewBox="0 0 110 180" className="w-28 h-44" role="img" aria-label="Arka kas bölgeleri">
-              <circle cx="55" cy="15" r="9" fill="#3f3f46" />
+            <svg viewBox="0 0 110 180" className="w-28 h-44 transition-transform duration-300" style={depthMode ? { transform: 'perspective(360px) rotateY(-8deg) rotateX(2deg)', filter: 'drop-shadow(-4px 5px 5px rgb(0 0 0 / 0.35))' } : undefined} role="img" aria-label="Arka kas bölgeleri">
+              <defs>
+                <filter id={`${filterId}-back`} x="-25%" y="-25%" width="150%" height="150%"><feDropShadow dx="-1" dy="1.5" stdDeviation="0.8" floodColor="#000" floodOpacity="0.55" /></filter>
+                <radialGradient id={`${filterId}-head-back`} cx="65%" cy="30%"><stop offset="0" stopColor="#71717a" /><stop offset="1" stopColor="#27272a" /></radialGradient>
+              </defs>
+              <circle cx="55" cy="15" r="9" fill={depthMode ? `url(#${filterId}-head-back)` : '#3f3f46'} />
               <rect x="51" y="24" width="8" height="5" fill="#3f3f46" />
 
               {/* Trapez — üst sırt, arkadan baskın */}

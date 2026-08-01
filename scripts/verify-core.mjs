@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { computeReadiness } from '../src/utils/readiness.js';
-import { dayEnergyBreakdown } from '../src/utils/energyModel.js';
+import { dayEnergyBreakdown, theoreticalWeek, estimateMacrosForTef } from '../src/utils/energyModel.js';
 import { calorieDashboard, deriveGoalSet } from '../src/utils/goals.js';
 import { mergeWellnessDay } from '../src/utils/wellness.js';
 import { migrateWeekPlans, removeTemplateFromPlans } from '../src/utils/planMigration.js';
@@ -30,11 +30,31 @@ test('adaptif TDEE içindeki ortalama egzersiz iki kez sayılmaz', () => {
     maintenance: 3000,
     bmr: 1900,
     lifting: 300,
-    avgDailyExercise: 300,
+    // Ortalama egzersiz EPOC dahil 321; bugünkü 300 + 21 EPOC bunun yerini alır.
+    avgDailyExercise: 321,
     neatMode: 'auto',
   });
-  assert.equal(result.neat, 800);
-  assert.equal(result.total, 3021); // 3000 + yalnızca %7 EPOC farkı
+  assert.equal(result.neat, 779);
+  assert.equal(result.total, 3000);
+});
+
+test('besin girilmediyse termik etki tahmini olarak işaretlenir', () => {
+  const estimated = estimateMacrosForTef([], 2500);
+  const result = dayEnergyBreakdown({ maintenance: 2500, bmr: 1700, estimatedMacros: estimated });
+  assert.equal(result.tefEstimated, true);
+  assert.ok(result.tef.total > 0);
+  assert.ok(result.parts.find(part => part.key === 'tef').label.includes('Tahmini'));
+});
+
+test('teorik rutin TDEE içindeki ortalama egzersizi ikinci kez saymaz ve kardiyoyu gün sayar', () => {
+  const result = theoreticalWeek([
+    { key: 'mon', label: 'Pazartesi', kcal: 0, cardioKcal: 300 },
+    ...['tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map(key => ({ key, label: key, kcal: 0, cardioKcal: 0 })),
+  ], { maintenance: 3000, plannedCardioKcal: 300, avgDailyExercise: 309 });
+  assert.equal(result.trainingDays, 1);
+  assert.equal(result.restDays, 6);
+  assert.equal(result.days[0].total, 3000);
+  assert.equal(result.restDayKcal, 2691);
 });
 
 test('kalori panosu günlük toplamı enerji motorundan kullanır', () => {

@@ -54,6 +54,36 @@ export const thermicEffect = (macros = {}) => {
   };
 };
 
+/** Son kayıtların ortalama makroları; kayıt yoksa dengeli bir geçici dağılım. */
+export const estimateMacrosForTef = (nutritionHistory = [], fallbackCalories = 0, days = 14) => {
+  const records = [...nutritionHistory]
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .map(dailyTotals)
+    .filter(total => total.calories > 0)
+    .slice(0, days);
+  if (records.length > 0) {
+    const sum = records.reduce((acc, item) => ({
+      protein: acc.protein + item.protein,
+      carbs: acc.carbs + item.carbs,
+      fats: acc.fats + item.fats,
+    }), { protein: 0, carbs: 0, fats: 0 });
+    return {
+      protein: sum.protein / records.length,
+      carbs: sum.carbs / records.length,
+      fats: sum.fats / records.length,
+      source: 'history',
+    };
+  }
+  const calories = parseNumber(fallbackCalories);
+  return calories > 0 ? {
+    // Geçici dağılım: %25 protein, %45 karbonhidrat, %30 yağ.
+    protein: calories * 0.25 / 4,
+    carbs: calories * 0.45 / 4,
+    fats: calories * 0.30 / 9,
+    source: 'default',
+  } : { protein: 0, carbs: 0, fats: 0, source: 'none' };
+};
+
 /** Günlük hareket (NEAT) için aktivite seviyesi seçenekleri — BMR'ın katı. */
 export const ACTIVITY_LEVELS = [
   { key: 'sedentary', label: 'Masa Başı', factor: 0.15, hint: 'Gün boyu oturarak; az yürüyüş' },
@@ -102,6 +132,7 @@ export const dayEnergyBreakdown = ({
   maintenance = 0,
   bmr = 0,
   macros = {},
+  estimatedMacros = {},
   lifting = 0,
   cardio = 0,
   recovery = 0,
@@ -120,7 +151,10 @@ export const dayEnergyBreakdown = ({
   const eatCardio = parseNumber(cardio);
   const eatRecovery = parseNumber(recovery);
   const eatManual = parseNumber(manual);
-  const tef = thermicEffect(macros);
+  const macroEnergy = parseNumber(macros.protein) * 4
+    + parseNumber(macros.carbs) * 4 + parseNumber(macros.fats) * 9;
+  const tefEstimated = macroEnergy <= 0;
+  const tef = thermicEffect(tefEstimated ? estimatedMacros : macros);
 
   const epoc = Math.round(eatLifting * EPOC_LIFTING + eatCardio * EPOC_CARDIO);
   const eat = eatLifting + eatCardio + eatRecovery + eatManual;
@@ -165,7 +199,7 @@ export const dayEnergyBreakdown = ({
   const parts = [
     { key: 'bmr', label: 'Bazal Metabolizma', value: base, color: 'bg-zinc-500', hint: 'Hiçbir şey yapmasan da yakılan' },
     { key: 'neat', label: 'Günlük Hareket', value: neat ?? 0, color: 'bg-cyan-500', hint: 'Yürüme, ayakta durma, iş' },
-    { key: 'tef', label: 'Sindirim (Termik)', value: tef.total, color: 'bg-amber-500', hint: 'Besinleri işlemek için harcanan' },
+    { key: 'tef', label: `Sindirim (Termik)${tefEstimated ? ' · Tahmini' : ''}`, value: tef.total, color: 'bg-amber-500', hint: tefEstimated ? 'Besin girilene kadar son ortalamadan hesaplanır' : 'Girdiğin makrolardan hesaplandı' },
     { key: 'lifting', label: 'Ağırlık Antrenmanı', value: eatLifting, color: 'bg-emerald-500', hint: 'Seans süresi × şiddet' },
     { key: 'cardio', label: 'Kardiyo', value: eatCardio, color: 'bg-red-500', hint: 'Aktiviteye göre MET değeri' },
     { key: 'recovery', label: 'Meditasyon & Esneme', value: eatRecovery, color: 'bg-violet-500', hint: 'Dinlenmenin üstündeki küçük hareket katkısı' },
@@ -179,6 +213,7 @@ export const dayEnergyBreakdown = ({
     neat,
     neatSource,
     tef,
+    tefEstimated,
     lifting: eatLifting,
     cardio: eatCardio,
     recovery: eatRecovery,
@@ -206,6 +241,7 @@ export const buildEnergySeries = (nutritionHistory = [], {
   dayCalories,          // (dateStr) => { lifting, cardio, total }
   days = 30,
   neatOpts = {},        // dayEnergyBreakdown'a geçirilen NEAT ayarları
+  estimatedMacros = {},
 } = {}) => {
   const cutoff = new Date();
   cutoff.setHours(0, 0, 0, 0);
@@ -220,6 +256,7 @@ export const buildEnergySeries = (nutritionHistory = [], {
         maintenance,
         bmr,
         macros,
+        estimatedMacros,
         lifting: w.lifting,
         cardio: w.cardio,
         recovery: w.mind,
@@ -253,13 +290,18 @@ export const averageDailyExercise = (dayCalories, days = 28) => {
   if (!dayCalories || days <= 0) return 0;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const dayMs = 24 * 60 * 60 * 1000;
-
   let toplam = 0;
   for (let i = 0; i < days; i += 1) {
-    const d = new Date(today.getTime() - i * dayMs);
-    const c = dayCalories(d.toISOString().split('T')[0]);
-    toplam += parseNumber(c?.total);
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    // toISOString() yerel geceyi UTC'ye çevirip Türkiye'de önceki güne
+    // kaydırabilir. Yerel takvim parçalarıyla anahtar üretilir.
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const c = dayCalories(key);
+    const gross = parseNumber(c?.total);
+    const epoc = Math.round(parseNumber(c?.lifting) * EPOC_LIFTING
+      + parseNumber(c?.cardio) * EPOC_CARDIO);
+    toplam += gross + epoc;
   }
   return Math.round(toplam / days);
 };
@@ -308,16 +350,33 @@ export const groupByWeek = (series = []) => {
 export const theoreticalWeek = (planDays = [], {
   maintenance = 0,
   plannedCardioKcal = 0,
+  avgDailyExercise = 0,
 } = {}) => {
   const maint = parseNumber(maintenance);
   if (!(maint > 0)) return null;
 
-  const trainingDays = planDays.filter(d => d.template).length;
+  const trainingDays = planDays.filter(d => parseNumber(d.kcal) + parseNumber(d.cardioKcal) > 0).length;
   const liftingKcal = planDays.reduce((s, d) => s + parseNumber(d.kcal), 0);
   const epoc = Math.round(liftingKcal * EPOC_LIFTING + parseNumber(plannedCardioKcal) * EPOC_CARDIO);
 
-  const base = maint * 7;
-  const total = Math.round(base + liftingKcal + parseNumber(plannedCardioKcal) + epoc);
+  // Ölçülen TDEE ortalama egzersizi zaten içerir. Önce bu ortalamayı çıkarıp
+  // plandaki gerçek gün dağılımını ekleriz; aksi halde egzersiz iki kez sayılır.
+  const dailyBase = Math.max(0, maint - parseNumber(avgDailyExercise));
+  const base = dailyBase * 7;
+  const days = planDays.map(day => {
+    const lifting = parseNumber(day.kcal);
+    const cardio = parseNumber(day.cardioKcal);
+    const dayEpoc = Math.round(lifting * EPOC_LIFTING + cardio * EPOC_CARDIO);
+    return {
+      key: day.key,
+      label: day.label,
+      exercise: Math.round(lifting + cardio),
+      epoc: dayEpoc,
+      total: Math.round(dailyBase + lifting + cardio + dayEpoc),
+      isRestDay: lifting + cardio === 0,
+    };
+  });
+  const total = days.reduce((sum, day) => sum + day.total, 0);
 
   return {
     trainingDays,
@@ -328,10 +387,12 @@ export const theoreticalWeek = (planDays = [], {
     baseKcal: Math.round(base),
     total,
     // Dinlenme günü harcaması antrenman gününden ne kadar düşük.
-    restDayKcal: Math.round(maint),
+    days,
+    dailyBase: Math.round(dailyBase),
+    restDayKcal: Math.round(dailyBase),
     trainingDayKcal: trainingDays > 0
-      ? Math.round(maint + (liftingKcal + parseNumber(plannedCardioKcal) + epoc) / trainingDays)
-      : Math.round(maint),
+      ? Math.round(days.filter(day => !day.isRestDay).reduce((sum, day) => sum + day.total, 0) / trainingDays)
+      : Math.round(dailyBase),
   };
 };
 
@@ -347,7 +408,7 @@ export const theoreticalWeek = (planDays = [], {
  * @param planDays computeWeekPlan'ın günleri (kcal + cardioKcal taşır)
  * @param series   buildEnergySeries çıktısı (en yeni önce)
  */
-export const planVsActual = (planDays = [], series = [], { maintenance = 0, days = 7 } = {}) => {
+export const planVsActual = (planDays = [], series = [], { maintenance = 0, days = 7, avgDailyExercise = 0 } = {}) => {
   const maint = parseNumber(maintenance);
   if (!(maint > 0) || planDays.length === 0) return null;
 
@@ -363,7 +424,7 @@ export const planVsActual = (planDays = [], series = [], { maintenance = 0, days
     const p = planByKey.get(gunKey);
     const planEgzersiz = p ? parseNumber(p.kcal) + parseNumber(p.cardioKcal) : 0;
     const planEpoc = p ? Math.round(parseNumber(p.kcal) * EPOC_LIFTING + parseNumber(p.cardioKcal) * EPOC_CARDIO) : 0;
-    const planToplam = Math.round(maint + planEgzersiz + planEpoc);
+    const planToplam = Math.round(Math.max(0, maint - parseNumber(avgDailyExercise)) + planEgzersiz + planEpoc);
 
     // Gerçekleşen egzersiz: bazal ve sindirim dışındaki kısım.
     const b = g.breakdown || {};

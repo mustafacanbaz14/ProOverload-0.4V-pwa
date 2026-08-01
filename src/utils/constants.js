@@ -33,6 +33,10 @@ export const DEFAULT_SETTINGS = {
   goalBodyFat: '',
   goalFFM: '',
   goalFFMI: '',
+  // Çevre ve kaliper hedefleri ölçüm kayıtlarından ayrı tutulur; geçmiş kayıt
+  // düzenlenirken hedef yanlışlıkla geçmiş güne yazılmaz.
+  goalMeasurements: {},
+  goalSkinfolds: {},
   // Haftalık kayıp/alım hızı tercihi (goals.js CUT_RATES / BULK_RATES anahtarı).
   // Boş = döneme göre varsayılan ("Ölçülü") kullanılır.
   paceRate: '',
@@ -62,7 +66,8 @@ export const DEFAULT_SETTINGS = {
 
 export const DELETE_LABELS = {
   workout: 'Antrenman kaydı', metric: 'Ölçüm kaydı', nutrition: 'Beslenme kaydı',
-  template: 'Antrenman şablonu', mealTemplate: 'Öğün şablonu', dayTemplate: 'Beslenme şablonu'
+  template: 'Antrenman şablonu', mealTemplate: 'Öğün şablonu', dayTemplate: 'Beslenme şablonu',
+  cardio: 'Kardiyo kaydı'
 };
 
 export const BACKUP_KEYS = ['workouts', 'templates', 'customExercises', 'metricsHistory', 'nutritionHistory', 'mealTemplates', 'dayTemplates', 'wellness', 'settings'];
