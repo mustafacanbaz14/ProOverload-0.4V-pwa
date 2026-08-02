@@ -7,7 +7,7 @@ import {
   requestWakeLock, playRestAlert, vibrateAlert
 } from './lockScreen';
 
-import { DEFAULT_EXERCISES, MUSCLE_GROUPS, getVolumeLandmarks, ACWR_MIN_DAYS } from './utils/constants';
+import { DEFAULT_EXERCISES, MUSCLE_GROUPS, BODY_METRICS, getVolumeLandmarks, ACWR_MIN_DAYS } from './utils/constants';
 import { migrateCustomExercises } from './utils/migrations';
 import { computeAdaptiveTDEE } from './utils/tdee';
 import { totalCardioCalories, dayWorkoutCalories } from './utils/cardio';
@@ -69,6 +69,7 @@ import GlobalSearchModal from './components/GlobalSearchModal';
 import OnboardingModal from './components/OnboardingModal';
 import { formatDay, formatDayRelative } from './utils/dates';
 import { emptyWellnessDay, mergeWellnessDay, dayMindCalories, computeSleepScore } from './utils/wellness';
+import { buildCycleSummary, emptyCycleDay, mergeCycleDay } from './utils/cycle';
 
 export default function App() {
   const [initial] = useState(loadPersistedState);
@@ -133,6 +134,7 @@ export default function App() {
   const [settings, setSettings] = useState(initial.settings);
   // Uyku ve meditasyon/esneme: tarih başına tek kayıt.
   const [wellness, setWellness] = useState(initial.wellness);
+  const [cycleHistory, setCycleHistory] = useState(initial.cycleHistory);
   const [metricsHistory, setMetricsHistory] = useState(initial.metricsHistory);
   const [currentMetricsForm, setCurrentMetricsForm] = useState(initial.currentMetricsForm);
 
@@ -169,7 +171,7 @@ export default function App() {
 
   useAppPersistence({
     workouts, templates, customExercises, customFoods, recentFoods,
-    activeWorkout, metricsHistory, nutritionHistory, wellness, settings,
+    activeWorkout, metricsHistory, nutritionHistory, wellness, cycleHistory, settings,
   }, showToast);
   useDisplayPreferences(settings);
   useDeferredPwaUpdate(activeWorkout, showToast);
@@ -274,6 +276,13 @@ export default function App() {
   const sortedWorkouts = useMemo(() => sortByDateDesc(workouts), [workouts]);
   const sortedMetrics = useMemo(() => sortByDateDesc(metricsHistory), [metricsHistory]);
   const sortedNutrition = useMemo(() => sortByDateDesc(nutritionHistory), [nutritionHistory]);
+  const profileGender = sortedMetrics[0]?.gender || currentMetricsForm.gender || 'male';
+  const todayCycleSummary = useMemo(
+    () => profileGender === 'female'
+      ? buildCycleSummary(cycleHistory, getLocalDateString(), settings.cycleConfig)
+      : null,
+    [profileGender, cycleHistory, settings.cycleConfig],
+  );
 
   const personalRecords = useMemo(() => {
     return buildPersonalRecords(workouts, activeWorkout?.id);
@@ -324,6 +333,18 @@ export default function App() {
       f.key,
       trendRate(noktalar.map(p => ({ date: p.date, value: p.values[f.key] })), 42),
     ]));
+    const measurementTrends = Object.fromEntries(
+      BODY_METRICS.filter(metric => metric.key !== 'weight').map(metric => [
+        metric.key,
+        trendRate(sortedMetrics.map(m => ({ date: m.date, value: m.measurements?.[metric.key] })), 42),
+      ]),
+    );
+    const skinfoldTrends = Object.fromEntries(
+      ['chest', 'abdomen', 'thigh', 'triceps', 'suprailiac', 'axilla', 'subscapular'].map(key => [
+        key,
+        trendRate(sortedMetrics.map(m => ({ date: m.date, value: m.skinfolds?.[key] })), 42),
+      ]),
+    );
 
     return {
       current: shape(currentMetricsForm, computedComp),
@@ -331,6 +352,8 @@ export default function App() {
         ? shape(earliestMetrics, computeComposition(earliestMetrics))
         : {},
       trends,
+      measurementTrends,
+      skinfoldTrends,
     };
   }, [currentMetricsForm, computedComp, earliestMetrics, sortedMetrics]);
 
@@ -1064,13 +1087,29 @@ export default function App() {
     });
   }, []);
 
+  const handleUpdateCycleDay = useCallback((date, updater) => {
+    setCycleHistory(prev => {
+      const existing = prev.find(record => record.date === date);
+      const base = existing || emptyCycleDay(date, generateId);
+      const next = mergeCycleDay(updater(base), generateId);
+      return existing
+        ? prev.map(record => record.date === date ? next : record)
+        : [...prev, next];
+    });
+  }, []);
+
+  const handleDeleteCycleDay = useCallback((date) => {
+    setCycleHistory(prev => prev.filter(record => record.date !== date));
+    showToast('Döngü kaydı silindi.');
+  }, [showToast]);
+
   const handleExportData = () => {
     const backup = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       version: pkg.version,
       exportedAt: new Date().toISOString(),
       workouts, templates, customExercises, customFoods, recentFoods,
-      metricsHistory, nutritionHistory, wellness, settings
+      metricsHistory, nutritionHistory, wellness, cycleHistory, settings
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -1136,6 +1175,11 @@ export default function App() {
     if (Array.isArray(data.wellness)) {
       setWellness(data.wellness
         .map(day => mergeWellnessDay(day, generateId))
+        .filter(day => day.date));
+    }
+    if (Array.isArray(data.cycleHistory)) {
+      setCycleHistory(data.cycleHistory
+        .map(day => mergeCycleDay(day, generateId))
         .filter(day => day.date));
     }
     // Eski yedekler eksik/bozuk ayar taşıyabilir; aynı birleştirme kuralından geçirilir.
@@ -1643,10 +1687,13 @@ export default function App() {
       plateaus: plateauInsights,
       deload,
       deloadSuggestion,
+      gender: profileGender,
+      cycle: todayCycleSummary,
     });
   }, [readiness, todayCoach, sortedWorkouts, sortedMetrics, computedComp,
     settings.nutritionGoal, settings.proteinPerFfmBulk, settings.proteinPerFfmCut,
-    settings.experienceLevel, dashboardStats, plateauInsights, deload, deloadSuggestion]);
+    settings.experienceLevel, dashboardStats, plateauInsights, deload, deloadSuggestion,
+    profileGender, todayCycleSummary]);
 
   const needsBackup = useMemo(() => {
     if (!lastBackupDate) return true;
@@ -1730,10 +1777,14 @@ export default function App() {
                 metrics: () => { setProgressTab('body'); handleChangeView('progress'); },
                 analysis: () => { setProgressTab('analysis'); handleChangeView('progress'); },
                 plan: () => setIsWeekPlanOpen(true),
+                cycle: () => { setProgressTab('cycle'); handleChangeView('progress'); },
               })[hedef]?.()}
               onOpenEnergy={() => setIsEnergyDetailOpen(true)}
               onOpenWellness={() => { setWellnessTab('sleep'); setIsWellnessOpen(true); }}
               onOpenCardio={() => setIsCardioOpen(true)}
+              gender={profileGender}
+              cycleSummary={todayCycleSummary}
+              onOpenCycle={() => { setProgressTab('cycle'); handleChangeView('progress'); }}
               weeklyCardioKcal={weeklyCardioKcal}
               showMuscleVolume={settings.showMuscleVolume}
               onToggleMuscleVolume={() => setSettings(prev => ({ ...prev, showMuscleVolume: !prev.showMuscleVolume }))}
@@ -1794,6 +1845,14 @@ export default function App() {
             <ProgressHubView
               tab={progressTab}
               setTab={setProgressTab}
+              gender={profileGender}
+              cycleProps={{
+                records: cycleHistory,
+                settings,
+                setSettings,
+                onUpdateDay: handleUpdateCycleDay,
+                onDeleteDay: handleDeleteCycleDay,
+              }}
               metricsProps={{
                 currentMetricsForm,
                 setCurrentMetricsForm,
@@ -1809,6 +1868,9 @@ export default function App() {
                 setSettings,
                 goalValues,
                 weeklyKg: adaptiveTDEE?.insufficient ? 0 : (adaptiveTDEE?.weightChangePerWeek || 0),
+                allExerciseNames: allExercisesNames,
+                personalRecords,
+                workouts,
               }}
               analyticsProps={{
                 analysisType,
@@ -1945,7 +2007,7 @@ export default function App() {
         <QRCodeModal
           isOpen={isQRModalOpen}
           onClose={() => setIsQRModalOpen(false)}
-          fullData={{ schemaVersion: 2, version: pkg.version, workouts, templates, customExercises, customFoods, recentFoods, metricsHistory, nutritionHistory, wellness, settings }}
+          fullData={{ schemaVersion: 3, version: pkg.version, workouts, templates, customExercises, customFoods, recentFoods, metricsHistory, nutritionHistory, wellness, cycleHistory, settings }}
           onImportData={handleImportData}
         />
 
@@ -2003,6 +2065,7 @@ export default function App() {
           restSeconds={settings.restSeconds}
           experienceLevel={settings.experienceLevel}
           weightKg={latestWeight}
+          gender={profileGender}
           onStart={(t) => handleStartRequest(t)}
         />
 
@@ -2069,6 +2132,7 @@ export default function App() {
           experienceLevel={settings.experienceLevel}
           weightKg={latestWeight}
           workouts={workouts}
+          gender={profileGender}
         />
 
         {/* DELOAD */}
@@ -2112,6 +2176,7 @@ export default function App() {
         <ToolsModal
           isOpen={isToolsOpen}
           onClose={() => setIsToolsOpen(false)}
+          showCycle={profileGender === 'female'}
           onSelect={(key) => {
             const ac = {
               library: () => setIsLibraryOpen(true),
@@ -2126,6 +2191,7 @@ export default function App() {
               sleep: () => { setWellnessTab('sleep'); setIsWellnessOpen(true); },
               deload: () => setIsDeloadOpen(true),
               mind: () => { setWellnessTab('mind'); setIsWellnessOpen(true); },
+              cycle: () => { setProgressTab('cycle'); handleChangeView('progress'); },
             }[key];
             ac?.();
           }}

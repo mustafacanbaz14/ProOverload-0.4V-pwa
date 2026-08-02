@@ -102,6 +102,20 @@ export const LIFTING_MET = 4.5;
 
 export const CARDIO_GROUPS = [...new Set(CARDIO_ACTIVITIES.map(a => a.group))];
 
+// Seçici iki farklı kavramı tek "kardiyo" listesinde gösteriyordu. Koşu ve
+// kondisyon çalışmaları ayrı, spor/günlük hareketler ayrı başlıkta görünür;
+// hesaplama modeli değişmez, hepsi MET tabanlı aktivite kaydıdır.
+export const CARDIO_SECTIONS = [
+  { key: 'cardio', label: 'Kardiyo & Kondisyon', groups: ['Koşu & Yürüyüş', 'Yüksek Şiddet', 'Makine'] },
+  { key: 'activities', label: 'Spor & Aktiviteler', groups: ['Spor'] },
+  { key: 'daily', label: 'Günlük Aktiviteler', groups: ['Günlük'] },
+];
+
+export const activitySectionOf = (activityKey) => {
+  const group = CARDIO_ACTIVITIES.find(activity => activity.key === activityKey)?.group;
+  return CARDIO_SECTIONS.find(section => section.groups.includes(group)) || CARDIO_SECTIONS[0];
+};
+
 export const findActivity = (key) => CARDIO_ACTIVITIES.find(a => a.key === key) || null;
 
 /**

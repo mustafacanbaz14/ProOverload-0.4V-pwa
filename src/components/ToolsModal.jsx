@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import {
   X, Wrench, Brain, Dumbbell, CalendarPlus, CalendarRange, HeartPulse,
-  Trophy, Flame, Calculator, ArrowRightLeft, Ruler, Moon, BatteryLow,
+  Trophy, Flame, Calculator, ArrowRightLeft, Ruler, Moon, BatteryLow, CalendarDays,
 } from 'lucide-react';
 
 /**
@@ -29,7 +29,7 @@ const GROUPS = [
   {
     title: 'Enerji & Beslenme',
     items: [
-      { key: 'cardio', label: 'Kardiyo Ekle', hint: '37 aktivite, MET tabanlı kalori', icon: HeartPulse, color: 'text-red-400' },
+      { key: 'cardio', label: 'Kardiyo / Aktivite Ekle', hint: 'Kondisyon, spor ve günlük aktiviteler', icon: HeartPulse, color: 'text-red-400' },
       { key: 'energy', label: 'Kalori Detayı', hint: 'Gün gün, hafta hafta harcama dökümü', icon: Flame, color: 'text-red-400' },
     ],
   },
@@ -50,7 +50,7 @@ const GROUPS = [
   },
 ];
 
-const ToolsModal = memo(({ isOpen, onClose, onSelect }) => {
+const ToolsModal = memo(({ isOpen, onClose, onSelect, showCycle = false }) => {
   if (!isOpen) return null;
 
   return (
@@ -69,7 +69,9 @@ const ToolsModal = memo(({ isOpen, onClose, onSelect }) => {
           <div key={group.title} className="space-y-1.5">
             <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">{group.title}</h4>
             <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden divide-y divide-zinc-800">
-              {group.items.map(item => {
+              {(showCycle && group.title === 'Toparlanma'
+                ? [...group.items, { key: 'cycle', label: 'Döngü & Performans', hint: 'Belirti odaklı antrenman, kardiyo ve beslenme desteği', icon: CalendarDays, color: 'text-rose-400' }]
+                : group.items).map(item => {
                 const Icon = item.icon;
                 return (
                   <button

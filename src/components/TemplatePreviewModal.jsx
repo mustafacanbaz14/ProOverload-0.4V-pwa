@@ -5,6 +5,7 @@ import { previewTemplateVolume, estimateDuration } from '../utils/templates';
 import { isWorkingSet } from '../utils/helpers';
 import { estimateLiftingCalories } from '../utils/cardio';
 import MuscleHeatmap from './MuscleHeatmap';
+import TemplateAssistantCard from './TemplateAssistantCard';
 
 const TemplatePreviewModal = memo(({
   isOpen,
@@ -15,6 +16,7 @@ const TemplatePreviewModal = memo(({
   onStart,
   experienceLevel = 'intermediate',
   weightKg = 0,
+  gender = 'male',
 }) => {
   if (!isOpen || !template) return null;
 
@@ -70,7 +72,10 @@ const TemplatePreviewModal = memo(({
             experienceLevel={experienceLevel}
             title="Bu Şablonun Isı Haritası"
             subtitle="Teorik"
+            gender={gender}
           />
+
+          <TemplateAssistantCard exercises={template.exercises || []} customExercises={customExercises} />
 
           {/* Kas dağılımı */}
           <div>

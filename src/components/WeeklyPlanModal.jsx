@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import MuscleHeatmap from './MuscleHeatmap';
 import { WEEKDAYS, computeWeekPlan, STATUS_LABEL, STATUS_COLOR, emptyPlan } from '../utils/weekPlan';
-import { CARDIO_ACTIVITIES, CARDIO_GROUPS, CARDIO_EFFORTS, DEFAULT_EFFORT } from '../utils/cardio';
+import { CARDIO_ACTIVITIES, CARDIO_SECTIONS, CARDIO_EFFORTS, DEFAULT_EFFORT } from '../utils/cardio';
 import { analyzeDayConflicts, activityImpact } from '../utils/interference';
 import { generateId, clampNumber } from '../utils/helpers';
 
@@ -38,6 +38,7 @@ const WeeklyPlanModal = memo(({
   experienceLevel = 'intermediate',
   weightKg = 0,
   workouts = [],
+  gender = 'male',
 }) => {
   const [editingDay, setEditingDay] = useState(null);
   const [renaming, setRenaming] = useState(null);
@@ -328,13 +329,13 @@ const WeeklyPlanModal = memo(({
                                 onChange={(e) => slotGuncelle(d.key, slot.id, { activity: e.target.value })}
                                 className={`${kucukAlan} flex-1 min-w-0`}
                               >
-                                {CARDIO_GROUPS.map(g => (
-                                  <optgroup key={g} label={g}>
-                                    {CARDIO_ACTIVITIES.filter(a => a.group === g).map(a => (
+                                {CARDIO_SECTIONS.flatMap(section => section.groups.map(group => (
+                                  <optgroup key={`${section.key}-${group}`} label={`${section.label} — ${group}`}>
+                                    {CARDIO_ACTIVITIES.filter(a => a.group === group).map(a => (
                                       <option key={a.key} value={a.key}>{a.label}</option>
                                     ))}
                                   </optgroup>
-                                ))}
+                                )))}
                               </select>
                             )}
                             <button
@@ -476,6 +477,7 @@ const WeeklyPlanModal = memo(({
           experienceLevel={experienceLevel}
           title="Haftanın Isı Haritası"
           subtitle="Teorik"
+          gender={gender}
         />
 
         {/* Uyarılar */}

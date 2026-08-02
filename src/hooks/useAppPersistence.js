@@ -13,6 +13,7 @@ export const useAppPersistence = ({
   metricsHistory,
   nutritionHistory,
   wellness,
+  cycleHistory,
   settings,
 }, showToast) => {
   const notifyPersistError = useMemo(
@@ -32,5 +33,6 @@ export const useAppPersistence = ({
   useEffect(() => { persist('metrics', metricsHistory); }, [metricsHistory, persist]);
   useEffect(() => { persist('nutrition', nutritionHistory); }, [nutritionHistory, persist]);
   useEffect(() => { persist('wellness', wellness); }, [wellness, persist]);
+  useEffect(() => { persist('cycle', cycleHistory); }, [cycleHistory, persist]);
   useEffect(() => { persist('settings', settings); }, [settings, persist]);
 };

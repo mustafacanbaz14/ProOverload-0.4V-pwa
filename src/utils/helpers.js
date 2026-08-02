@@ -6,6 +6,7 @@ import { migrateCustomExercises, normalizeMuscleName } from './migrations.js';
 import { migrateWeekPlans } from './planMigration.js';
 import { parseNumber } from './number.js';
 import { mergeWellnessDay } from './wellness.js';
+import { DEFAULT_CYCLE_CONFIG, mergeCycleDay } from './cycle.js';
 
 /** Yazma daima en yeni sürüm anahtarına yapılır. */
 export const storageKey = (name) => `po_${name}${STORAGE_VERSION}`;
@@ -398,7 +399,7 @@ const TRUTHY_SETTINGS = [
 ];
 
 // Dizi olması gereken alanlar; kayıt bozuksa varsayılana dönülür.
-const ARRAY_SETTINGS = ['hiddenExercises', 'pinnedExercises', 'hidden1RMExercises', 'favoriteFoods'];
+const ARRAY_SETTINGS = ['hiddenExercises', 'pinnedExercises', 'hidden1RMExercises', 'favoriteFoods', 'strengthGoals'];
 
 /**
  * Kaydedilmiş ayarları varsayılanların ÜSTÜNE serer.
@@ -412,6 +413,10 @@ export const mergeSettings = (saved = {}) => {
   const merged = { ...DEFAULT_SETTINGS, ...(saved && typeof saved === 'object' ? saved : {}) };
   TRUTHY_SETTINGS.forEach(k => { if (!merged[k]) merged[k] = DEFAULT_SETTINGS[k]; });
   ARRAY_SETTINGS.forEach(k => { if (!Array.isArray(merged[k])) merged[k] = []; });
+  merged.cycleConfig = {
+    ...DEFAULT_CYCLE_CONFIG,
+    ...(merged.cycleConfig && typeof merged.cycleConfig === 'object' ? merged.cycleConfig : {}),
+  };
   if (!merged.weekPlan || typeof merged.weekPlan !== 'object') merged.weekPlan = {};
   // Tek programdan çoklu program listesine göç. Idempotent: yeni biçim aynen
   // geçer, eski `weekPlan` nesnesi ilk programa dönüşür.
@@ -458,6 +463,12 @@ export const loadPersistedState = () => {
       const raw = loadWithFallback(keys('wellness'), []);
       return Array.isArray(raw)
         ? raw.map(day => mergeWellnessDay(day, generateId)).filter(day => day.date)
+        : [];
+    })(),
+    cycleHistory: (() => {
+      const raw = loadWithFallback(keys('cycle'), []);
+      return Array.isArray(raw)
+        ? raw.map(day => mergeCycleDay(day, generateId)).filter(day => day.date)
         : [];
     })(),
     metricsHistory,

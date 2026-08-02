@@ -1,4 +1,4 @@
-import { detectMuscleGroup, isWorkingSet, parseNumber } from './helpers';
+import { detectMuscleGroup, isWorkingSet, parseNumber } from './helpers.js';
 
 // Bir çalışma setinin kaba süresi: kaldırma + hazırlık.
 // 8-12 tekrarlık bir set ~30-45 sn sürer; ağırlık değiştirme ve yerleşme dahil 45 sn alınır.

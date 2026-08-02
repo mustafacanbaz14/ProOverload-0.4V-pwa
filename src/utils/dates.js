@@ -198,6 +198,38 @@ export const groupIntoWeeks = (items = [], getDate = (x) => x?.date) => {
   });
 };
 
+/**
+ * Hafta gruplarını ay başlıkları altında toplar.
+ *
+ * Ay değiştiren bir hafta (örn. 27 Tem–2 Ağu), başladığı aya yazılır. Böylece
+ * aynı hafta iki ayın altında kopyalanmaz ve pazartesi–pazar bütünlüğü korunur.
+ */
+export const groupWeeksIntoMonths = (weekGroups = []) => {
+  const months = [];
+  const index = new Map();
+
+  weekGroups.forEach(week => {
+    const start = toLocalDate(week.weekStart);
+    if (!gecerli(start)) return;
+    const key = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}`;
+    let month = index.get(key);
+    if (!month) {
+      month = {
+        key,
+        label: `${MONTH_LONG[start.getMonth()]} ${start.getFullYear()}`,
+        weeks: [],
+        itemCount: 0,
+      };
+      index.set(key, month);
+      months.push(month);
+    }
+    month.weeks.push(week);
+    month.itemCount += week.items.length;
+  });
+
+  return months;
+};
+
 /** Bugün/dün gibi göreli ifade; değilse tarih + gün adı. */
 export const formatDayRelative = (value, style = 'medium') => {
   const d = toLocalDate(value);

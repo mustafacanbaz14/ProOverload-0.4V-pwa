@@ -42,6 +42,7 @@ const MuscleHeatmap = memo(({
   // Şablon ve haftalık plan önizlemelerinde de kullanılıyor; başlık oradan gelir.
   title = 'Kas Isı Haritası',
   subtitle = 'Bu Hafta',
+  gender = 'male',
 }) => {
   const [selected, setSelected] = useState('Göğüs');
   const [depthMode, setDepthMode] = useState(true);
@@ -51,6 +52,9 @@ const MuscleHeatmap = memo(({
   const activeCount = vol(selected);
   const activeLandmarks = getVolumeLandmarks(selected, experienceLevel);
   const activeProgress = Math.min(100, Math.round(activeCount / activeLandmarks.mrv * 100));
+  const bodyPath = gender === 'female'
+    ? 'M44 29 Q35 31 29 39 L25 91 L34 94 L42 83 Q39 96 40 108 L42 130 L41 161 L52 161 L55 106 L58 161 L69 161 L68 130 L70 108 Q71 96 68 83 L76 94 L85 91 L81 39 Q75 31 66 29 Z'
+    : 'M42 29 Q31 31 25 39 L22 91 L31 94 L40 84 L42 130 L41 161 L52 161 L55 105 L58 161 L69 161 L68 130 L70 84 L79 94 L88 91 L85 39 Q79 31 68 29 Z';
 
   // Her bölge tek yerden tanımlanır; renk ve seçim davranışı ortaklaşır.
   const region = (muscle) => ({
@@ -91,7 +95,7 @@ const MuscleHeatmap = memo(({
       <div className="p-4 space-y-3">
         <div className="bg-zinc-950 rounded-xl border border-zinc-800/80 overflow-hidden">
           <div className="px-3 pt-2.5 flex items-center justify-between">
-            <span className="text-[9px] font-mono text-zinc-600">Bölgeye dokun · anatomik sınırı gör</span>
+            <span className="text-[9px] font-mono text-zinc-600">Bölgeye dokun · {gender === 'female' ? 'kadın' : 'erkek'} görünümü</span>
             <span className="text-[9px] font-mono text-cyan-600">{selected}</span>
           </div>
           <div className="flex justify-around items-start py-2.5">
@@ -106,7 +110,7 @@ const MuscleHeatmap = memo(({
               </defs>
               <circle cx="55" cy="15" r="9" fill={depthMode ? `url(#${filterId}-head-front)` : '#3f3f46'} />
               <rect x="51" y="24" width="8" height="5" fill="#3f3f46" />
-              <path d="M42 29 Q31 31 25 39 L22 91 L31 94 L40 84 L42 130 L41 161 L52 161 L55 105 L58 161 L69 161 L68 130 L70 84 L79 94 L88 91 L85 39 Q79 31 68 29 Z" fill="#27272a" stroke="#3f3f46" strokeWidth="0.7" />
+              <path d={bodyPath} fill="#27272a" stroke="#3f3f46" strokeWidth="0.7" />
 
               {/* Trapez — boyun yanları, önden görünen üst kısım */}
               <path d="M 43 30 L 55 27 L 67 30 L 62 37 L 48 37 Z" {...region('Trapez')} />
@@ -120,8 +124,8 @@ const MuscleHeatmap = memo(({
               <path d="M 85 38 Q 89 45 86 51 L 81 48 Q 83 43 81 39 Z" {...region('Yan Omuz')} />
 
               {/* Göğüs */}
-              <path d="M 41 38 L 54 38 L 54 56 L 44 56 Z" {...region('Göğüs')} />
-              <path d="M 56 38 L 69 38 L 66 56 L 56 56 Z" {...region('Göğüs')} />
+              <path d={gender === 'female' ? 'M 41 38 L 54 38 L 54 56 Q 47 59 43 54 Z' : 'M 41 38 L 54 38 L 54 56 L 44 56 Z'} {...region('Göğüs')} />
+              <path d={gender === 'female' ? 'M 56 38 L 69 38 L 67 54 Q 63 59 56 56 Z' : 'M 56 38 L 69 38 L 66 56 L 56 56 Z'} {...region('Göğüs')} />
 
               {/* Biseps */}
               <rect x="24" y="53" width="8" height="20" rx="4" {...region('Biseps')} />
@@ -155,7 +159,7 @@ const MuscleHeatmap = memo(({
               </defs>
               <circle cx="55" cy="15" r="9" fill={depthMode ? `url(#${filterId}-head-back)` : '#3f3f46'} />
               <rect x="51" y="24" width="8" height="5" fill="#3f3f46" />
-              <path d="M42 29 Q31 31 25 39 L22 91 L31 94 L40 84 L42 130 L41 161 L52 161 L55 105 L58 161 L69 161 L68 130 L70 84 L79 94 L88 91 L85 39 Q79 31 68 29 Z" fill="#27272a" stroke="#3f3f46" strokeWidth="0.7" />
+              <path d={bodyPath} fill="#27272a" stroke="#3f3f46" strokeWidth="0.7" />
 
               {/* Trapez — üst sırt, arkadan baskın */}
               <path d="M 42 29 L 55 26 L 68 29 L 64 45 L 55 40 L 46 45 Z" {...region('Trapez')} />
@@ -188,7 +192,7 @@ const MuscleHeatmap = memo(({
               <rect x="81" y="75" width="7" height="19" rx="3.5" {...region('Önkol')} />
 
               {/* Kalça */}
-              <path d="M 44 88 L 66 88 L 65 104 L 45 104 Z" {...region('Kalça')} />
+              <path d={gender === 'female' ? 'M 41 88 Q 55 84 69 88 L 67 104 Q 55 109 43 104 Z' : 'M 44 88 L 66 88 L 65 104 L 45 104 Z'} {...region('Kalça')} />
 
               {/* Hamstring */}
               <path d="M 43 106 L 53 106 L 51 130 L 42 130 Z" {...region('Hamstring')} />

@@ -4,6 +4,7 @@ import { MUSCLE_SECTIONS, getVolumeLandmarks, volumeStatusOf, VOLUME_STATUS, acw
 import { previewTemplateVolume, estimateDuration } from '../utils/templates';
 import MuscleHeatmap from './MuscleHeatmap';
 import TodayCoachCard from './TodayCoachCard';
+import CycleSummaryCard from './CycleSummaryCard';
 
 const HomeView = memo(({
   needsBackup,
@@ -31,6 +32,9 @@ const HomeView = memo(({
   onOpenEnergy,
   onOpenWellness,
   onOpenCardio,
+  gender = 'male',
+  cycleSummary,
+  onOpenCycle,
 }) => {
   return (
     <div className="p-4 space-y-5 pb-nav h-full overflow-y-auto hide-scrollbar bg-black">
@@ -55,6 +59,10 @@ const HomeView = memo(({
         onOpenWellness={onOpenWellness}
         onOpenCardio={onOpenCardio}
       />
+
+      {gender === 'female' && (
+        <CycleSummaryCard summary={cycleSummary} onOpen={onOpenCycle} />
+      )}
 
       {/* Hazır oluşluk eğilimi — üst üste düşük skor hacimden bağımsız bir
           deload sinyali; hacim tavanı aşılmasa da toparlanamama gösterir. */}
@@ -118,7 +126,7 @@ const HomeView = memo(({
       </div>
 
       {/* İnteraktif Kas Isı Haritası */}
-      <MuscleHeatmap muscleVolume={dashboardStats.muscleVolume} onSelectMuscle={onSelectMuscle} experienceLevel={experienceLevel} />
+      <MuscleHeatmap muscleVolume={dashboardStats.muscleVolume} onSelectMuscle={onSelectMuscle} experienceLevel={experienceLevel} gender={gender} />
 
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-zinc-900 p-4 rounded-2xl border border-zinc-800">

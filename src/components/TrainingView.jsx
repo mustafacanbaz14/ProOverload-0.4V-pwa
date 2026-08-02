@@ -35,7 +35,7 @@ const TrainingView = memo(({
         { label: 'Hareketler', hint: 'Kütüphane & ince ayar', icon: Library, action: onLibrary },
         { label: 'Programlar', hint: 'Haftalık plan', icon: CalendarRange, action: onWeekPlan },
         { label: 'Şablon Oluştur', hint: 'Gün gün planla', icon: BookmarkPlus, action: onBuilder },
-        { label: 'Kardiyo Ekle', hint: 'Tempo & kalori', icon: HeartPulse, action: onCardio },
+        { label: 'Kardiyo / Aktivite', hint: 'Kondisyon, spor & günlük hareket', icon: HeartPulse, action: onCardio },
       ].map(item => {
         const Icon = item.icon;
         return (

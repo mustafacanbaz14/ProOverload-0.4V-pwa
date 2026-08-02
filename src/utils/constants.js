@@ -37,6 +37,12 @@ export const DEFAULT_SETTINGS = {
   // düzenlenirken hedef yanlışlıkla geçmiş güne yazılmaz.
   goalMeasurements: {},
   goalSkinfolds: {},
+  // Hareket performans hedefleri: örn. Bench Press 150 kg × 1 tekrar.
+  // Ölçüm hedefleri gibi ayarlarda tutulur; geçmiş antrenman kayıtları değişmez.
+  strengthGoals: [],
+  // Kadın profillerinde döngü takibinin takvim varsayımları. Günlük belirtiler
+  // ayrı `cycle` localStorage anahtarında tutulur.
+  cycleConfig: { cycleLength: 28, periodLength: 5, hormonalContraception: false },
   // Haftalık kayıp/alım hızı tercihi (goals.js CUT_RATES / BULK_RATES anahtarı).
   // Boş = döneme göre varsayılan ("Ölçülü") kullanılır.
   paceRate: '',
@@ -73,7 +79,7 @@ export const DELETE_LABELS = {
   cardio: 'Kardiyo kaydı'
 };
 
-export const BACKUP_KEYS = ['workouts', 'templates', 'customExercises', 'metricsHistory', 'nutritionHistory', 'mealTemplates', 'dayTemplates', 'wellness', 'settings'];
+export const BACKUP_KEYS = ['workouts', 'templates', 'customExercises', 'metricsHistory', 'nutritionHistory', 'mealTemplates', 'dayTemplates', 'wellness', 'cycleHistory', 'settings'];
 
 export const DEFAULT_EXERCISES = [
   "Barbell Back Squat", "Barbell Front Squat", "Zercher Squat", "Hack Squat", "Bulgarian Split Squat", "Leg Press", "Walking Lunges",

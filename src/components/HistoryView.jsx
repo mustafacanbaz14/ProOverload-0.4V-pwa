@@ -1,5 +1,5 @@
 import React, { memo, useMemo, useState } from 'react';
-import { Trash2, Calendar, Scale, Beef, Pencil, Copy, BookmarkPlus, HeartPulse, Search, Timer, Flame, Activity, Plus, Dumbbell, X } from 'lucide-react';
+import { Trash2, Calendar, Scale, Beef, Pencil, Copy, BookmarkPlus, HeartPulse, Search, Timer, Flame, Activity, Plus, Dumbbell, X, ChevronDown, FolderArchive } from 'lucide-react';
 import { calcTonnage, calcEffectiveSets, isWorkingSet, foldForSearch, getLocalDateString } from '../utils/helpers';
 import {
   findActivity, findEffort, effortDelta, cardioEntryCalories, totalCardioCalories,
@@ -7,7 +7,7 @@ import {
 } from '../utils/cardio';
 import { dailyTotals } from '../utils/nutritionStats';
 import { parseNumber, clampNumber } from '../utils/helpers';
-import { formatDay, weekdayName, groupIntoWeeks } from '../utils/dates';
+import { formatDay, weekdayName, groupIntoWeeks, groupWeeksIntoMonths } from '../utils/dates';
 import { dayMindCalories } from '../utils/wellness';
 
 /**
@@ -18,30 +18,74 @@ import { dayMindCalories } from '../utils/wellness';
  * Hafta pazartesi–pazar; veri sınırıyla kesilen haftalar ayrıca işaretleniyor
  * ki eksik bir hafta tam haftayla kıyaslanıp yanlış okunmasın.
  */
-const WeekGroups = ({ items, getDate, children }) => (
-  <>
-    {groupIntoWeeks(items, getDate).map(group => (
-      <div key={group.key} className="space-y-3">
-        <div className="flex items-center gap-2 pt-1">
-          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest shrink-0">
-            {group.label}
-          </span>
-          {group.partial && (
-            <span
-              title={`Tam hafta: ${group.fullLabel}`}
-              className="text-[8px] font-mono text-amber-400 border border-amber-900/50 bg-amber-950/20 rounded px-1 py-0.5 shrink-0"
+const WeekGroups = ({ items, getDate, children, expandAll = false }) => {
+  const months = useMemo(
+    () => groupWeeksIntoMonths(groupIntoWeeks(items, getDate)),
+    [items, getDate],
+  );
+  // Arşiv ilk açıldığında yalnız en yeni ayın başlığı açık, haftalar kapalıdır.
+  // Böylece uzun geçmiş tek ekrana yığılmaz; arama sırasında eşleşmeler otomatik açılır.
+  const [openMonths, setOpenMonths] = useState(() => new Set(months[0] ? [months[0].key] : []));
+  const [openWeeks, setOpenWeeks] = useState(() => new Set());
+  const toggle = (setter, key) => setter(prev => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  });
+
+  return (
+    <div className="space-y-2.5">
+      {months.map(month => {
+        const monthOpen = expandAll || openMonths.has(month.key);
+        return (
+          <section key={month.key} className="bg-zinc-900/65 border border-zinc-800 rounded-2xl overflow-hidden">
+            <button
+              onClick={() => toggle(setOpenMonths, month.key)}
+              aria-expanded={monthOpen}
+              className="w-full px-3.5 py-3 flex items-center justify-between gap-3 text-left active:bg-zinc-800"
             >
-              kısmi
-            </span>
-          )}
-          <span className="h-px flex-1 bg-zinc-800" />
-          <span className="text-[9px] font-mono text-zinc-600 shrink-0">{group.items.length} kayıt</span>
-        </div>
-        {group.items.map(children)}
-      </div>
-    ))}
-  </>
-);
+              <span className="flex items-center gap-2 min-w-0">
+                <FolderArchive size={14} className="text-cyan-500 shrink-0" />
+                <span>
+                  <strong className="text-[11px] text-zinc-200 uppercase tracking-wider block">{month.label}</strong>
+                  <span className="text-[8px] font-mono text-zinc-600">{month.weeks.length} hafta · {month.itemCount} kayıt</span>
+                </span>
+              </span>
+              <ChevronDown size={15} className={`text-zinc-600 transition-transform ${monthOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {monthOpen && (
+              <div className="border-t border-zinc-800 p-2 space-y-2 bg-black/20">
+                {month.weeks.map(group => {
+                  const weekOpen = expandAll || openWeeks.has(group.key);
+                  return (
+                    <div key={group.key} className="bg-zinc-950/70 border border-zinc-800 rounded-xl overflow-hidden">
+                      <button
+                        onClick={() => toggle(setOpenWeeks, group.key)}
+                        aria-expanded={weekOpen}
+                        className="w-full px-3 py-2.5 flex items-center gap-2 text-left active:bg-zinc-900"
+                      >
+                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest shrink-0">{group.label}</span>
+                        {group.partial && (
+                          <span title={`Tam hafta: ${group.fullLabel}`} className="text-[8px] font-mono text-amber-400 border border-amber-900/50 bg-amber-950/20 rounded px-1 py-0.5 shrink-0">kısmi</span>
+                        )}
+                        <span className="h-px flex-1 bg-zinc-800" />
+                        <span className="text-[9px] font-mono text-zinc-600 shrink-0">{group.items.length}</span>
+                        <ChevronDown size={13} className={`text-zinc-700 transition-transform ${weekOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                      {weekOpen && <div className="p-2.5 space-y-2.5 border-t border-zinc-800">{group.items.map(children)}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        );
+      })}
+    </div>
+  );
+};
 
 // Listeler App tarafından tarihe göre azalan sırada verilir (en yeni en üstte).
 // Burada tekrar sıralama veya ters çevirme yapılmaz.
@@ -122,7 +166,7 @@ const HistoryView = memo(({
             <div className="grid grid-cols-2 gap-2">
               {[
                 { key: 'workout', label: 'Antrenman', icon: Dumbbell, tone: 'text-cyan-400 border-cyan-900/50', action: onAddWorkout },
-                { key: 'cardio', label: 'Kardiyo', icon: HeartPulse, tone: 'text-red-400 border-red-900/50', action: onAddCardio },
+                { key: 'cardio', label: 'Kardiyo / Aktivite', icon: HeartPulse, tone: 'text-red-400 border-red-900/50', action: onAddCardio },
                 { key: 'nutrition', label: 'Beslenme', icon: Beef, tone: 'text-emerald-400 border-emerald-900/50', action: onAddNutrition },
                 { key: 'metric', label: 'Vücut Ölçümü', icon: Scale, tone: 'text-purple-400 border-purple-900/50', action: onAddMetric },
               ].map(item => (
@@ -146,7 +190,7 @@ const HistoryView = memo(({
           onClick={() => setHistoryTab('cardio')}
           className={`py-2 rounded-xl text-[9px] font-bold uppercase tracking-wide transition-colors ${historyTab === 'cardio' ? 'bg-red-600 text-white' : 'text-zinc-500'}`}
         >
-          Kardiyo ({cardioRecords.length})
+          Aktivite ({cardioRecords.length})
         </button>
         <button
           onClick={() => setHistoryTab('metrics')}
@@ -172,7 +216,7 @@ const HistoryView = memo(({
           {filteredWorkouts.length === 0 ? (
             <div className="text-center py-12 text-zinc-600 text-xs font-mono">Henüz antrenman kaydı yok</div>
           ) : (
-            <WeekGroups items={filteredWorkouts}>{w => {
+            <WeekGroups key="workouts" items={filteredWorkouts} expandAll={Boolean(q)}>{w => {
               const tonnage = calcTonnage(w.exercises);
               const effectiveSets = calcEffectiveSets(w.exercises);
               const cardio = w.cardio || [];
@@ -303,7 +347,7 @@ const HistoryView = memo(({
             <section className="bg-gradient-to-br from-red-950/35 to-zinc-900 rounded-2xl border border-red-900/35 p-3.5 space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <div>
-                  <span className="text-[9px] font-mono text-red-400 uppercase tracking-widest">Kardiyo Özeti</span>
+                  <span className="text-[9px] font-mono text-red-400 uppercase tracking-widest">Kardiyo & Aktivite Özeti</span>
                   <h3 className="text-[12px] font-bold text-zinc-100">Kişisel arşiv ortalamaların</h3>
                 </div>
                 <Activity size={18} className="text-red-400" />
@@ -332,8 +376,8 @@ const HistoryView = memo(({
             </section>
           )}
           {filteredCardio.length === 0 ? (
-            <div className="text-center py-12 text-zinc-600 text-xs font-mono">Henüz kardiyo kaydı yok</div>
-          ) : <WeekGroups items={filteredCardio}>{record => {
+            <div className="text-center py-12 text-zinc-600 text-xs font-mono">Henüz kardiyo veya aktivite kaydı yok</div>
+          ) : <WeekGroups key="cardio" items={filteredCardio} expandAll={Boolean(q)}>{record => {
             const activity = findActivity(record.cardio.type);
             const effort = findEffort(record.cardio.effort);
             const calories = cardioEntryCalories(record.cardio, latestWeight);
@@ -391,7 +435,7 @@ const HistoryView = memo(({
           {filteredMetrics.length === 0 ? (
             <div className="text-center py-12 text-zinc-600 text-xs font-mono">Henüz ölçüm kaydı yok</div>
           ) : (
-            <WeekGroups items={filteredMetrics}>{m => (
+            <WeekGroups key="metrics" items={filteredMetrics} expandAll={Boolean(q)}>{m => (
               <div key={m.id} className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 space-y-2">
                 <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
                   <div className="flex items-center space-x-2">
@@ -426,7 +470,7 @@ const HistoryView = memo(({
           {filteredNutrition.length === 0 ? (
             <div className="text-center py-12 text-zinc-600 text-xs font-mono">Henüz beslenme kaydı yok</div>
           ) : (
-            <WeekGroups items={filteredNutrition}>{n => {
+            <WeekGroups key="nutrition" items={filteredNutrition} expandAll={Boolean(q)}>{n => {
               // Toplamlar öğünlerden hesaplanır. Eskiden kayıttaki üst düzey
               // caloriesIn/protein/carbs/fats alanları okunuyordu ama bu alanlar
               // hiçbir zaman doldurulmuyordu; veri girilmiş günler bile 0 görünüyordu.

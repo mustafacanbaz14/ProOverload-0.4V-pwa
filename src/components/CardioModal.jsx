@@ -1,7 +1,7 @@
 import React, { useState, memo } from 'react';
 import { X, HeartPulse, Flame, Clock, Plus, Trash2, Gauge, CalendarCheck, ChevronDown, Search, Save, CalendarDays } from 'lucide-react';
 import {
-  CARDIO_ACTIVITIES, CARDIO_GROUPS, CARDIO_EFFORTS, DEFAULT_EFFORT,
+  CARDIO_ACTIVITIES, CARDIO_SECTIONS, CARDIO_EFFORTS, DEFAULT_EFFORT,
   findActivity, findEffort, estimateCardioCalories, cardioEntryCalories, effortDelta,
 } from '../utils/cardio';
 import { clampNumber, INPUT_LIMITS, foldForSearch, getLocalDateString } from '../utils/helpers';
@@ -90,7 +90,7 @@ const CardioModal = memo(({
 
       <div className="px-4 py-3 border-b border-zinc-800 flex justify-between items-center bg-zinc-900 shrink-0 pt-safe">
         <h3 className="text-[12px] font-bold text-zinc-100 uppercase tracking-wider flex items-center">
-          <HeartPulse size={15} className="mr-2 text-red-400" /> {editingEntry ? 'Kardiyo Düzenle' : 'Kardiyo Ekle'}
+          <HeartPulse size={15} className="mr-2 text-red-400" /> {editingEntry ? 'Kardiyo / Aktivite Düzenle' : 'Kardiyo / Aktivite Ekle'}
         </h3>
         <button onClick={onClose} className="text-zinc-400 active:text-zinc-100 p-2 -mr-1" aria-label="Kapat">
           <X size={20} />
@@ -272,13 +272,22 @@ const CardioModal = memo(({
               className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-8 pr-3 py-2.5 text-[11px] text-zinc-200 outline-none focus:border-red-700"
             />
           </div>
-          {CARDIO_GROUPS.map(group => {
-            const groupActivities = visibleActivities.filter(a => a.group === group);
-            if (groupActivities.length === 0) return null;
+          {CARDIO_SECTIONS.map(section => {
+            const sectionActivities = visibleActivities.filter(a => section.groups.includes(a.group));
+            if (sectionActivities.length === 0) return null;
             return (
-          <div key={group} className="space-y-1.5">
-            <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">{group}</h4>
-            <div className="space-y-1.5">
+          <section key={section.key} className="space-y-2.5">
+            <div className="flex items-center gap-2 px-1 pt-1">
+              <h4 className={`text-[10px] font-bold uppercase tracking-widest ${section.key === 'cardio' ? 'text-red-400' : section.key === 'activities' ? 'text-purple-400' : 'text-emerald-400'}`}>{section.label}</h4>
+              <span className="h-px flex-1 bg-zinc-800" />
+              <span className="text-[8px] font-mono text-zinc-700">{sectionActivities.length}</span>
+            </div>
+            {section.groups.map(group => {
+              const groupActivities = sectionActivities.filter(a => a.group === group);
+              if (groupActivities.length === 0) return null;
+              return <div key={group} className="space-y-1.5">
+              <h5 className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest px-1">{group}</h5>
+              <div className="space-y-1.5">
               {groupActivities.map(a => (
                 <button
                   key={a.key}
@@ -298,12 +307,14 @@ const CardioModal = memo(({
                   {a.activeRecovery && <span className="text-[8px] font-bold text-indigo-400 block mt-0.5">Aktif toparlanma · off day korunur</span>}
                 </button>
               ))}
-            </div>
-          </div>
+              </div>
+              </div>;
+            })}
+          </section>
             );
           })}
           {visibleActivities.length === 0 && (
-            <p className="text-center text-[10px] font-mono text-zinc-600 py-5">Eşleşen kardiyo bulunamadı.</p>
+            <p className="text-center text-[10px] font-mono text-zinc-600 py-5">Eşleşen kardiyo veya aktivite bulunamadı.</p>
           )}
         </div>}
 

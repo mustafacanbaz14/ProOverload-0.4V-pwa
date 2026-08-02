@@ -22,8 +22,8 @@ export const createQRDataString = (backupData) => {
     return JSON.stringify({
       // Aktarım formatının sürümü — uygulama sürümünden (package.json) bağımsızdır,
       // yalnızca bu metin kodunun yapısı değiştiğinde artar.
-      version: '0.6.0',
-      schema: 2,
+      version: '0.7.0',
+      schema: 3,
       exportedAt: new Date().toISOString(),
       workouts: backupData.workouts || [],
       templates: backupData.templates || [],
@@ -33,6 +33,7 @@ export const createQRDataString = (backupData) => {
       metricsHistory: backupData.metricsHistory || [],
       nutritionHistory: backupData.nutritionHistory || [],
       wellness: backupData.wellness || [],
+      cycleHistory: backupData.cycleHistory || [],
       settings: backupData.settings || {},
     });
   } catch {

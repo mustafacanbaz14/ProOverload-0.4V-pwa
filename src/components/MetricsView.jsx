@@ -4,7 +4,8 @@ import { BODY_METRICS, FAT_METHOD_LABELS } from '../utils/constants';
 import { parseNumber, clampNumber, INPUT_LIMITS } from '../utils/helpers';
 import MeasurementGuide from './MeasurementGuide';
 import GoalsCard from './GoalsCard';
-import { computeBMI, BMI_STATUS_COLOR } from '../utils/goals';
+import StrengthGoalsCard from './StrengthGoalsCard';
+import { computeBMI, BMI_STATUS_COLOR, goalEta } from '../utils/goals';
 import { formatDay } from '../utils/dates';
 
 // Kaliper ölçüm noktaları. 3 bölge yöntemi cinsiyete göre farklı noktalar kullanır,
@@ -46,6 +47,16 @@ const Field = ({ label, children }) => (
 
 const inputClass = 'w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-200 font-mono text-sm outline-none focus:border-cyan-600 transition-colors';
 
+const GoalEtaLine = ({ current, target, trend, unit }) => {
+  if (!(parseNumber(current) > 0) || !(parseNumber(target) > 0)) return null;
+  if (!trend) return <p className="text-[8px] font-mono text-zinc-600 px-1">Tahmin için en az 3 ölçüm gerekir.</p>;
+  const eta = goalEta(current, target, trend.perWeek, { minRate: unit === 'mm' ? 0.05 : 0.02 });
+  if (!eta || eta.reached) return <p className="text-[8px] font-mono text-emerald-400 px-1">Hedefe ulaşıldı.</p>;
+  if (eta.wrongDirection) return <p className="text-[8px] font-mono text-amber-400 px-1">Eğilim hedefin ters yönünde.</p>;
+  if (eta.stalled || eta.tooFar) return <p className="text-[8px] font-mono text-zinc-600 px-1">Mevcut hızla güvenilir tarih hesaplanamıyor.</p>;
+  return <p className="text-[8px] font-mono text-cyan-500 px-1">Tahmini ~{eta.weeks} hafta · {formatDay(eta.date, 'medium', { year: true })}</p>;
+};
+
 const MetricsView = memo(({
   currentMetricsForm,
   setCurrentMetricsForm,
@@ -60,6 +71,9 @@ const MetricsView = memo(({
   setSettings,
   goalValues = {},
   weeklyKg = 0,
+  allExerciseNames = [],
+  personalRecords,
+  workouts = [],
   onDateChange,
   embedded = false,
 }) => {
@@ -252,7 +266,8 @@ const MetricsView = memo(({
               <span>Nokta</span><span className="text-center">Şu an</span><span className="text-center">Hedef</span>
             </div>
             {visibleSites.map(site => (
-              <div key={site.key} className="grid grid-cols-[1fr_70px_70px] gap-2 items-center bg-zinc-950 border border-zinc-800 rounded-xl p-2">
+              <div key={site.key} className="bg-zinc-950 border border-zinc-800 rounded-xl p-2 space-y-1">
+              <div className="grid grid-cols-[1fr_70px_70px] gap-2 items-center">
                 <label className="text-[10px] font-mono text-zinc-400">{site.label}</label>
                 <input
                   type="number" inputMode="decimal" step="0.5"
@@ -269,6 +284,8 @@ const MetricsView = memo(({
                   onBlur={(e) => updateGoal('goalSkinfolds', site.key, e.target.value === '' ? '' : clampNumber(e.target.value, 0, 100))}
                   placeholder="mm" aria-label={`${site.label} kaliper hedefi`}
                   className="w-full bg-cyan-950/20 border border-cyan-900/50 rounded-lg p-2 text-cyan-400 font-mono text-xs text-center outline-none focus:border-cyan-500" />
+              </div>
+              <GoalEtaLine current={form.skinfolds?.[site.key]} target={settings.goalSkinfolds?.[site.key]} trend={goalValues.skinfoldTrends?.[site.key]} unit="mm" />
               </div>
             ))}
           </div>
@@ -363,6 +380,14 @@ const MetricsView = memo(({
         trends={goalValues.trends}
       />
 
+      <StrengthGoalsCard
+        settings={settings}
+        setSettings={setSettings}
+        allExerciseNames={allExerciseNames}
+        personalRecords={personalRecords}
+        workouts={workouts}
+      />
+
       {/* --- ÇEVRE ÖLÇÜLERİ --- */}
       <Section icon={<Ruler size={13} />}
         title="Çevre Ölçüleri (cm)"
@@ -383,7 +408,8 @@ const MetricsView = memo(({
         </div>
         <div className="space-y-2">
           {BODY_METRICS.filter(m => m.key !== 'weight').map(m => (
-            <div key={m.key} className="bg-zinc-950 px-2.5 py-2 rounded-xl border border-zinc-800 grid grid-cols-[1fr_62px_62px] gap-2 items-center">
+            <div key={m.key} className="bg-zinc-950 px-2.5 py-2 rounded-xl border border-zinc-800 space-y-1">
+            <div className="grid grid-cols-[1fr_62px_62px] gap-2 items-center">
               <span className="text-[11px] font-mono text-zinc-400">{m.label}</span>
               <input
                 type="number" inputMode="decimal" step="0.5"
@@ -400,6 +426,8 @@ const MetricsView = memo(({
                 onBlur={(e) => updateGoal('goalMeasurements', m.key, e.target.value === '' ? '' : clampNumber(e.target.value, 0, 300))}
                 placeholder="—" aria-label={`${m.label} hedefi`}
                 className="w-full bg-cyan-950/20 border border-cyan-900/50 rounded-lg py-1 font-mono text-xs text-center text-cyan-400 outline-none focus:border-cyan-500" />
+            </div>
+            <GoalEtaLine current={form.measurements?.[m.key]} target={settings.goalMeasurements?.[m.key]} trend={goalValues.measurementTrends?.[m.key]} unit="cm" />
             </div>
           ))}
         </div>

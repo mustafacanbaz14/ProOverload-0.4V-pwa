@@ -52,7 +52,7 @@ export const buildCoachActions = (ctx = {}) => {
     macros = {}, targetProtein = 0, calorieRemaining = null,
     muscleVolume = {}, experienceLevel = 'intermediate',
     acwr, daysSinceMetric = null, plateaus = [],
-    deload = null, deloadSuggestion = null,
+    deload = null, deloadSuggestion = null, gender = 'male', cycle = null,
   } = ctx;
 
   const items = [];
@@ -98,6 +98,22 @@ export const buildCoachActions = (ctx = {}) => {
       detail: sleep.asleep < 360
         ? 'Altı saatin altındaki uykuda maksimal güç ve teknik ölçülebilir şekilde düşer. Bugün rekor deneme; hedef tekrar aralığının alt sınırında çalış.'
         : 'Uyku kalitesi düşük. Şiddeti koru ama set sayısını azalt, son sette zorlamayı bırak.',
+    });
+  }
+
+  // Döngü fazı tek başına performans düşüşü varsayımı değildir. Yalnızca o gün
+  // kaydedilen ağrı/enerji/belirti yükü yüksekse planı değiştiren sinyal üretir.
+  if (gender === 'female' && cycle?.severity === 'high') {
+    ekle({
+      key: 'cycle', priority: 1, tone: TONES.warn, action: 'cycle',
+      title: 'Döngü belirtileri bugün yüksek',
+      detail: cycle.advice.training,
+    });
+  } else if (gender === 'female' && cycle?.severity === 'moderate') {
+    ekle({
+      key: 'cycle', priority: 2, tone: TONES.info, action: 'cycle',
+      title: 'Bugünkü belirtilere göre kontrol seti yap',
+      detail: cycle.advice.training,
     });
   }
 

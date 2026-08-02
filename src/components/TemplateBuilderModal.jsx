@@ -5,6 +5,7 @@ import { previewTemplateVolume, estimateDuration } from '../utils/templates';
 import { generateId } from '../utils/helpers';
 import { estimateLiftingCalories } from '../utils/cardio';
 import ExerciseLibraryModal from './ExerciseLibraryModal';
+import TemplateAssistantCard from './TemplateAssistantCard';
 
 const DAY_NAMES = ['1. Gün', '2. Gün', '3. Gün', '4. Gün', '5. Gün', '6. Gün', '7. Gün'];
 
@@ -59,9 +60,10 @@ const TemplateBuilderModal = memo(({
     sets: Array.from({ length: ex.sets }, () => ({ weight: '', reps: '', rir: 2, setType: 'normal' })),
   }));
 
-  const { byMuscle, totalSets } = previewTemplateVolume(toExercises(day), customExercises);
+  const dayExercises = toExercises(day);
+  const { byMuscle, totalSets } = previewTemplateVolume(dayExercises, customExercises);
   // Boş günde "~1 dk" saçma görünüyor; süre ancak set varsa anlamlı.
-  const minutes = totalSets > 0 ? estimateDuration(toExercises(day), restSeconds) : 0;
+  const minutes = totalSets > 0 ? estimateDuration(dayExercises, restSeconds) : 0;
   const kcal = estimateLiftingCalories(minutes, weightKg);
   const ranked = Object.entries(byMuscle).sort((a, b) => b[1] - a[1]);
   const maxVol = ranked.length ? ranked[0][1] : 1;
@@ -76,6 +78,11 @@ const TemplateBuilderModal = memo(({
   };
   const setExerciseSets = (uid, n) => updateDay({
     exercises: day.exercises.map(ex => ex.uid === uid ? { ...ex, sets: Math.max(1, Math.min(12, n)) } : ex)
+  });
+  const addSuggested = (name) => updateDay({
+    exercises: day.exercises.some(ex => ex.name === name)
+      ? day.exercises.map(ex => ex.name === name ? { ...ex, sets: Math.min(12, ex.sets + 2) } : ex)
+      : [...day.exercises, { uid: generateId(), name, sets: 3 }],
   });
 
   const canSave = programName.trim() && days.some(d => d.exercises.length > 0);
@@ -156,6 +163,12 @@ const TemplateBuilderModal = memo(({
             </span>
           </div>
         </div>
+
+        <TemplateAssistantCard
+          exercises={dayExercises}
+          customExercises={customExercises}
+          onAddSuggested={addSuggested}
+        />
 
         {/* Hareketler */}
         <div className="space-y-2">

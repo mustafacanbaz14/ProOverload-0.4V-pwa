@@ -8,8 +8,10 @@ import { suggestNextTarget, mergeWorkout } from '../src/utils/helpers.js';
 import { dailyTotals, nutritionDayScore } from '../src/utils/nutritionStats.js';
 import { buildPlateauInsights, buildNutritionPerformanceInsight } from '../src/utils/insights.js';
 import { resolvePlannedCardioMinutes, isActiveRecoveryCardioDay, isActiveRecoveryEntry } from '../src/utils/cardio.js';
-import { groupIntoWeeks } from '../src/utils/dates.js';
+import { groupIntoWeeks, groupWeeksIntoMonths } from '../src/utils/dates.js';
 import { deloadState } from '../src/utils/deload.js';
+import { buildCycleSummary, mergeCycleDay } from '../src/utils/cycle.js';
+import { analyzeTemplate } from '../src/utils/templateAssistant.js';
 
 const tests = [];
 const test = (name, run) => tests.push({ name, run });
@@ -250,6 +252,42 @@ test('ilk kısmi hafta ilk kayıttan pazar gününe kadar etiketlenir', () => {
   const energyWeeks = groupByWeek(rows);
   assert.ok(energyWeeks[0].rangeLabel.includes('21'));
   assert.ok(energyWeeks[0].rangeLabel.includes('26'));
+});
+
+test('arşiv haftaları başlangıç ayına tek kez yerleşir', () => {
+  const weeks = groupIntoWeeks([
+    { date: '2026-08-02' },
+    { date: '2026-07-27' },
+    { date: '2026-07-20' },
+  ]);
+  const months = groupWeeksIntoMonths(weeks);
+  assert.equal(months.length, 1);
+  assert.equal(months[0].key, '2026-07');
+  assert.equal(months[0].weeks.length, 2);
+  assert.equal(months[0].itemCount, 3);
+});
+
+test('döngü tavsiyesi takvim fazından değil günlük belirti yükünden değişir', () => {
+  const empty = buildCycleSummary([], '2026-08-03');
+  assert.equal(empty.severity, 'none');
+  assert.equal(empty.hasEntry, false);
+  const records = [
+    mergeCycleDay({ date: '2026-07-28', bleeding: 'medium', pain: 2, energy: 7 }, () => 'a'),
+    mergeCycleDay({ date: '2026-08-03', pain: 8, energy: 2, symptoms: ['fatigue'] }, () => 'b'),
+  ];
+  const summary = buildCycleSummary(records, '2026-08-03', { cycleLength: 28, periodLength: 5 });
+  assert.equal(summary.hasData, true);
+  assert.equal(summary.severity, 'high');
+  assert.ok(summary.advice.training.includes('%20'));
+});
+
+test('şablon asistanı çekiş günündeki bölgesel boşluğu yakalar', () => {
+  const result = analyzeTemplate([
+    { name: 'Lat Pulldown', sets: Array.from({ length: 4 }, (_, index) => ({ id: index, setType: 'normal' })) },
+    { name: 'Barbell Curl', sets: Array.from({ length: 3 }, (_, index) => ({ id: index, setType: 'normal' })) },
+  ]);
+  assert.equal(result.focusKey, 'pull');
+  assert.ok(result.additions.some(item => item.muscle === 'Orta Sırt'));
 });
 
 test('deload süresi gün gün ilerler ve süresi dolunca hesaplarda kapanır', () => {
