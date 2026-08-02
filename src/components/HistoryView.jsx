@@ -7,8 +7,41 @@ import {
 } from '../utils/cardio';
 import { dailyTotals } from '../utils/nutritionStats';
 import { parseNumber, clampNumber } from '../utils/helpers';
-import { formatDay, weekdayName } from '../utils/dates';
+import { formatDay, weekdayName, groupIntoWeeks } from '../utils/dates';
 import { dayMindCalories } from '../utils/wellness';
+
+/**
+ * Listeyi haftalara bölüp araya başlık koyar.
+ *
+ * Uzun bir geçmiş listesinde tek tek tarihler birbirine karışıyor; hafta
+ * sınırları "bu hafta ne yaptım" sorusunu gözle cevaplanır hale getiriyor.
+ * Hafta pazartesi–pazar; veri sınırıyla kesilen haftalar ayrıca işaretleniyor
+ * ki eksik bir hafta tam haftayla kıyaslanıp yanlış okunmasın.
+ */
+const WeekGroups = ({ items, getDate, children }) => (
+  <>
+    {groupIntoWeeks(items, getDate).map(group => (
+      <div key={group.key} className="space-y-3">
+        <div className="flex items-center gap-2 pt-1">
+          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest shrink-0">
+            {group.label}
+          </span>
+          {group.partial && (
+            <span
+              title={`Tam hafta: ${group.fullLabel}`}
+              className="text-[8px] font-mono text-amber-400 border border-amber-900/50 bg-amber-950/20 rounded px-1 py-0.5 shrink-0"
+            >
+              kısmi
+            </span>
+          )}
+          <span className="h-px flex-1 bg-zinc-800" />
+          <span className="text-[9px] font-mono text-zinc-600 shrink-0">{group.items.length} kayıt</span>
+        </div>
+        {group.items.map(children)}
+      </div>
+    ))}
+  </>
+);
 
 // Listeler App tarafından tarihe göre azalan sırada verilir (en yeni en üstte).
 // Burada tekrar sıralama veya ters çevirme yapılmaz.
@@ -139,7 +172,7 @@ const HistoryView = memo(({
           {filteredWorkouts.length === 0 ? (
             <div className="text-center py-12 text-zinc-600 text-xs font-mono">Henüz antrenman kaydı yok</div>
           ) : (
-            filteredWorkouts.map(w => {
+            <WeekGroups items={filteredWorkouts}>{w => {
               const tonnage = calcTonnage(w.exercises);
               const effectiveSets = calcEffectiveSets(w.exercises);
               const cardio = w.cardio || [];
@@ -227,7 +260,7 @@ const HistoryView = memo(({
                               <span className="font-bold text-zinc-200 truncate pr-2">{findActivity(c.type)?.label || c.type}</span>
                               <span className="text-zinc-400 text-[10px] shrink-0">
                                 {c.minutes} dk
-                                {c.effort && ` · ${findEffort(c.effort).label}`}
+                                {c.effort && ` · ${findEffort(c.effort).fullLabel}`}
                                 {latestWeight > 0 && ` · ${cardioEntryCalories(c, latestWeight)} kcal`}
                               </span>
                             </div>
@@ -259,7 +292,7 @@ const HistoryView = memo(({
                   </div>
                 </div>
               );
-            })
+            }}</WeekGroups>
           )}
         </div>
       )}
@@ -300,7 +333,7 @@ const HistoryView = memo(({
           )}
           {filteredCardio.length === 0 ? (
             <div className="text-center py-12 text-zinc-600 text-xs font-mono">Henüz kardiyo kaydı yok</div>
-          ) : filteredCardio.map(record => {
+          ) : <WeekGroups items={filteredCardio}>{record => {
             const activity = findActivity(record.cardio.type);
             const effort = findEffort(record.cardio.effort);
             const calories = cardioEntryCalories(record.cardio, latestWeight);
@@ -349,7 +382,7 @@ const HistoryView = memo(({
                 {deviation && <p className={`text-[9px] font-mono ${deviation.harder ? 'text-amber-400' : 'text-cyan-400'}`}>Plan {deviation.planned.label} → gerçekleşen {deviation.actual.label} · {deviation.kcalDiff > 0 ? '+' : ''}{deviation.kcalDiff} kcal</p>}
               </div>
             );
-          })}
+          }}</WeekGroups>}
         </div>
       )}
 
@@ -358,7 +391,7 @@ const HistoryView = memo(({
           {filteredMetrics.length === 0 ? (
             <div className="text-center py-12 text-zinc-600 text-xs font-mono">Henüz ölçüm kaydı yok</div>
           ) : (
-            filteredMetrics.map(m => (
+            <WeekGroups items={filteredMetrics}>{m => (
               <div key={m.id} className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 space-y-2">
                 <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
                   <div className="flex items-center space-x-2">
@@ -383,7 +416,7 @@ const HistoryView = memo(({
                   <div>Uyluk: <strong className="text-zinc-200">{m.measurements?.thigh || '-'} cm</strong></div>
                 </div>
               </div>
-            ))
+            )}</WeekGroups>
           )}
         </div>
       )}
@@ -393,7 +426,7 @@ const HistoryView = memo(({
           {filteredNutrition.length === 0 ? (
             <div className="text-center py-12 text-zinc-600 text-xs font-mono">Henüz beslenme kaydı yok</div>
           ) : (
-            filteredNutrition.map(n => {
+            <WeekGroups items={filteredNutrition}>{n => {
               // Toplamlar öğünlerden hesaplanır. Eskiden kayıttaki üst düzey
               // caloriesIn/protein/carbs/fats alanları okunuyordu ama bu alanlar
               // hiçbir zaman doldurulmuyordu; veri girilmiş günler bile 0 görünüyordu.
@@ -499,7 +532,7 @@ const HistoryView = memo(({
                   })()}
                 </div>
               );
-            })
+            }}</WeekGroups>
           )}
         </div>
       )}

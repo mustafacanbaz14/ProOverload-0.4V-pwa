@@ -48,6 +48,10 @@ export const computeWeekPlan = (plan = {}, templates = [], {
   workouts: historyWorkouts = [],
 } = {}) => {
   const byId = new Map(templates.map(t => [t.id, t]));
+  // Kas -> haftanın tamamındaki katkı satırları (hangi gün, hangi şablon,
+  // hangi hareket, kaç set). Gün döngüsünün dışında duruyor çünkü aynı kas
+  // birden fazla günden besleniyor.
+  const muscleDetail = {};
   const days = normalizeDays(plan?.days || plan);
 
   const gunler = WEEKDAYS.map(d => {
@@ -90,7 +94,7 @@ export const computeWeekPlan = (plan = {}, templates = [], {
 
       const template = byId.get(slot.templateId);
       if (!template) return;
-      const { totalSets, byMuscle: m } = previewTemplateVolume(template.exercises, customExercises);
+      const { totalSets, byMuscle: m, detailByMuscle } = previewTemplateVolume(template.exercises, customExercises);
       const tahmin = totalSets > 0 ? estimateDuration(template.exercises, restSeconds) : 0;
       // Slotta süre elle verilmişse (saatli plan) o kullanılır.
       const sure = parseNumber(slot.minutes) > 0 ? parseNumber(slot.minutes) : tahmin;
@@ -101,6 +105,14 @@ export const computeWeekPlan = (plan = {}, templates = [], {
       // bile dinlenmeyle geçen dakikalar toparlanmayı zorlamıyor.
       fatigue += Math.round(totalSets * 1.5);
       Object.entries(m).forEach(([kas, vol]) => { byMuscle[kas] = (byMuscle[kas] || 0) + vol; });
+      // Hangi hareketin hangi kasa kaç set yazdığı gün ve şablon adıyla birlikte
+      // biriktiriliyor; haftalık dökümde satır satır açılabilsin diye.
+      Object.entries(detailByMuscle).forEach(([kas, liste]) => {
+        const hedef = muscleDetail[kas] || (muscleDetail[kas] = []);
+        liste.forEach(item => hedef.push({
+          ...item, day: d.key, dayLabel: d.label, templateName: template.name,
+        }));
+      });
       workouts.push({ ...slot, template, sets: totalSets, minutes: sure });
     });
 
@@ -142,7 +154,13 @@ export const computeWeekPlan = (plan = {}, templates = [], {
   const statuses = MUSCLE_GROUPS.map(muscle => {
     const volume = muscleVolume[muscle] || 0;
     const { mev, mav, mrv } = getVolumeLandmarks(muscle, experienceLevel);
-    return { muscle, volume, mev, mav, mrv, status: volumeStatusOf(volume, muscle, experienceLevel) };
+    return {
+      muscle, volume, mev, mav, mrv,
+      status: volumeStatusOf(volume, muscle, experienceLevel),
+      // En çok katkı veren hareket üstte: hacim kısılacaksa ya da eklenecekse
+      // ilk bakılacak yer orası.
+      sources: (muscleDetail[muscle] || []).slice().sort((a, b) => b.volume - a.volume),
+    };
   });
 
   const trainingDays = gunler.filter(d => !d.isOffDay).length;

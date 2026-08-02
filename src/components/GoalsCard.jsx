@@ -1,6 +1,7 @@
 import React, { memo } from 'react';
 import { Target, Check, TrendingDown, TrendingUp, Sparkles, AlertTriangle, RotateCcw } from 'lucide-react';
-import { GOAL_FIELDS, goalProgress, weeksToGoal, deriveGoalSet } from '../utils/goals';
+import { GOAL_FIELDS, goalProgress, deriveGoalSet, goalEta } from '../utils/goals';
+import { formatDay } from '../utils/dates';
 import { clampNumber, parseNumber } from '../utils/helpers';
 
 /**
@@ -19,8 +20,9 @@ const GoalsCard = memo(({
   setSettings,
   current = {},
   earliest = {},
-  weeklyKg = 0,
   heightCm = 0,
+  // Hedef başına ölçüm eğilimi: { goalWeight: { perWeek, spanDays, confidence }, ... }
+  trends = {},
 }) => {
   const { values: goalValues, derived, inconsistent } = deriveGoalSet(settings, heightCm);
   // Sınırlama YAZARKEN değil odaktan çıkışta uygulanır. Her tuşta sınıra
@@ -38,21 +40,22 @@ const GoalsCard = memo(({
 
   const rows = GOAL_FIELDS.map(f => {
     const target = goalValues[f.key];
+    // Her ölçüm kendi hızıyla ilerliyor: kilo düşerken yağsız kütle sabit
+    // kalabiliyor. Bu yüzden varış tahmini kilo hızından türetilmiyor, her
+    // metrik kendi geçmişinden hesaplanıyor.
+    const trend = trends[f.key] || null;
     return {
       ...f,
       target,
       isDerived: Boolean(derived[f.key]),
       hasTarget: parseNumber(target) > 0,
       progress: goalProgress(earliest[f.key], current[f.key], target),
+      trend,
+      eta: trend ? goalEta(current[f.key], target, trend.perWeek) : null,
     };
   });
 
   const anyUserEntered = GOAL_FIELDS.some(f => parseNumber(settings[f.key]) > 0);
-
-  const weightRow = rows.find(r => r.key === 'goalWeight');
-  const eta = weightRow?.hasTarget && weeklyKg !== 0
-    ? weeksToGoal(current.goalWeight, weightRow.target, weeklyKg)
-    : null;
 
   const clearAll = () => setSettings(prev => {
     const next = { ...prev };
@@ -164,17 +167,48 @@ const GoalsCard = memo(({
                       />
                     </div>
                   )}
+
+                  {/* Tahmini varış: ölçüm geçmişindeki eğilim aynı hızda sürerse.
+                      Hız, tek tek ölçümlerin gürültüsünden etkilenmesin diye
+                      son haftaların tamamına uydurulan doğrudan geliyor. */}
+                  {!p.reached && row.eta && (
+                    <p className="text-[9px] font-mono leading-relaxed">
+                      {row.eta.wrongDirection ? (
+                        <span className="text-amber-400">
+                          Eğilim ters yönde (haftada {row.trend.perWeek > 0 ? '+' : ''}{row.trend.perWeek}{row.unit}) — bu gidişle hedefe yaklaşmıyorsun.
+                        </span>
+                      ) : row.eta.stalled ? (
+                        <span className="text-zinc-500">
+                          Son {row.trend.spanDays} günde bu değer yerinde sayıyor; süre tahmini yapılamıyor.
+                        </span>
+                      ) : row.eta.tooFar ? (
+                        <span className="text-zinc-500">
+                          Mevcut hız çok yavaş — hedef 3 yıldan uzak görünüyor.
+                        </span>
+                      ) : (
+                        <span className="text-cyan-400">
+                          Haftada {row.trend.perWeek > 0 ? '+' : ''}{row.trend.perWeek}{row.unit} hızında
+                          {' '}<strong>~{row.eta.weeks} hafta</strong> ({formatDay(row.eta.date, 'medium', { year: true })})
+                          {row.trend.confidence === 'low' && (
+                            <span className="text-zinc-600"> · az veri, tahmin oynak</span>
+                          )}
+                        </span>
+                      )}
+                    </p>
+                  )}
                 </>
               )}
             </div>
           );
         })}
 
-        {eta && (
+        {/* Varış tahmini her satırda kendi eğilimiyle veriliyor. Hiç eğilim
+            çıkarılamıyorsa sebebi burada söyleniyor, satırlar sessizce boş
+            kalmasın. */}
+        {rows.some(r => r.hasTarget) && rows.every(r => !r.trend) && (
           <p className="text-[9px] font-mono text-zinc-600 leading-relaxed pt-1 border-t border-zinc-800">
-            {eta.wrongDirection
-              ? 'Mevcut kilo eğilimin hedefin ters yönünde — bu hızda hedefe yaklaşmıyorsun.'
-              : `Mevcut hızda (haftada ${Math.abs(weeklyKg)} kg) hedef kiloya yaklaşık ${eta.weeks} haftada ulaşırsın.`}
+            Varış tahmini için son 6 hafta içinde en az üç ölçüm gerekiyor. Ölçüm
+            biriktikçe her hedefin altında tahmini tarih görünecek.
           </p>
         )}
 

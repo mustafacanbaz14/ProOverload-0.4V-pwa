@@ -1,5 +1,5 @@
-import React, { memo } from 'react';
-import { CalendarCheck, Moon, BrainCircuit, Flame, Dumbbell, HeartPulse, ChevronRight } from 'lucide-react';
+import React, { memo, useState } from 'react';
+import { CalendarCheck, Moon, BrainCircuit, Flame, Dumbbell, HeartPulse, ChevronRight, ChevronDown } from 'lucide-react';
 
 const Metric = ({ icon, label, value, tone = 'text-zinc-200' }) => (
   <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 min-w-0">
@@ -10,7 +10,8 @@ const Metric = ({ icon, label, value, tone = 'text-zinc-200' }) => (
   </div>
 );
 
-const TodayCoachCard = memo(({ data, onStart, onOpenEnergy, onOpenWellness, onOpenCardio }) => {
+const TodayCoachCard = memo(({ data, actions = [], onAction, onStart, onOpenEnergy, onOpenWellness, onOpenCardio }) => {
+  const [showAll, setShowAll] = useState(false);
   if (!data) return null;
   const planned = Boolean(data.workoutTemplate);
   return (
@@ -56,6 +57,40 @@ const TodayCoachCard = memo(({ data, onStart, onOpenEnergy, onOpenWellness, onOp
             </p>
           )}
         </div>
+
+        {/* Sıralanmış eylem listesi. Kart tek cümleyle "planın hazır" diyordu
+            ama günün asıl kararı çoğu zaman başka yerde oluyor: uyku kötüyse
+            planın hazır olması bir şey ifade etmiyor. İlk iki madde açık,
+            gerisi istenirse açılıyor — kart ikinci bir ekrana dönüşmesin. */}
+        {actions.length > 0 && (
+          <div className="space-y-1.5">
+            {(showAll ? actions : actions.slice(0, 2)).map(item => (
+              <div key={item.key} className={`rounded-xl border p-2.5 ${item.tone.chip}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <span className={`text-[10px] font-bold leading-snug ${item.tone.text}`}>{item.title}</span>
+                  {item.action && onAction && (
+                    <button
+                      onClick={() => onAction(item.action)}
+                      className="text-[9px] font-bold text-zinc-400 active:text-zinc-100 shrink-0 flex items-center"
+                    >
+                      Aç <ChevronRight size={10} />
+                    </button>
+                  )}
+                </div>
+                <p className="text-[9px] font-mono text-zinc-400 leading-relaxed mt-1">{item.detail}</p>
+              </div>
+            ))}
+            {actions.length > 2 && (
+              <button
+                onClick={() => setShowAll(v => !v)}
+                className="w-full text-[9px] font-mono text-zinc-500 active:text-zinc-300 py-1 flex items-center justify-center gap-1"
+              >
+                {showAll ? 'Daha az göster' : `${actions.length - 2} madde daha`}
+                <ChevronDown size={10} className={`transition-transform ${showAll ? 'rotate-180' : ''}`} />
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="grid grid-cols-[1fr_auto_auto] gap-2">
           <button

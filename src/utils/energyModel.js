@@ -1,6 +1,7 @@
 // Saf hesap modülü — yalnızca aynı katmandaki bağımsız modüllerden import eder.
 import { parseNumber } from './number.js';
 import { dailyTotals } from './nutritionStats.js';
+import { weekBounds, formatRange } from './dates.js';
 
 /**
  * Günlük enerji harcamasının bileşenlere ayrılması.
@@ -213,6 +214,9 @@ export const dayEnergyBreakdown = ({
     bmr: base,
     neat,
     neatSource,
+    // Bu günde kullanılan çarpan — arayüz "burada genel ayardan sapıldı mı"
+    // sorusunu buradan cevaplıyor.
+    neatMultiplier: carpan,
     tef,
     tefEstimated,
     lifting: eatLifting,
@@ -228,6 +232,18 @@ export const dayEnergyBreakdown = ({
     // Ölçülen TDEE ile karşılaştırma: bu gün ortalamanın altında mı üstünde mi.
     vsMaintenance: maint > 0 ? Math.round(total - maint) : null,
   };
+};
+
+/**
+ * Genel NEAT ayarlarını o günün kaydıyla birleştirir.
+ *
+ * Güne özel çarpan varsa genel ayarı ezer. Tek yerde durması önemli: aynı gün
+ * ana ekranda, kalori panosunda ve gün tablosunda ayrı ayrı hesaplanıyor ve
+ * üçünün aynı sayıyı vermesi gerekiyor.
+ */
+export const neatOptsForDay = (neatOpts = {}, record = {}) => {
+  const gunluk = parseNumber(record?.neatMultiplier);
+  return gunluk > 0 ? { ...neatOpts, neatMultiplier: gunluk } : neatOpts;
 };
 
 /**
@@ -266,7 +282,8 @@ export const buildEnergySeries = (nutritionHistory = [], {
         manual: n.activeCaloriesOut,
         // Gün bazlı adım girilmişse o günün kaydından okunur.
         steps: n.steps,
-        ...neatOpts,
+        // Güne özel çarpan varsa genel ayarı ezer.
+        ...neatOptsForDay(neatOpts, n),
       });
       return {
         date: n.date,
@@ -277,6 +294,8 @@ export const buildEnergySeries = (nutritionHistory = [], {
         balance: Math.round(macros.calories - b.total),
         isRestDay: b.isRestDay,
         isActiveRest: b.isActiveRest,
+        // Bu güne özel çarpan girilmişse ham değeri; girilmemişse boş.
+        neatOverride: n.neatMultiplier ?? '',
       };
     })
     .filter(d => d.intake > 0 || d.out > 0)
@@ -310,23 +329,31 @@ export const averageDailyExercise = (dayCalories, days = 28) => {
   return Math.round(toplam / days);
 };
 
-/** Seriyi haftalara toplar (pazartesi başlangıçlı). */
+/**
+ * Seriyi haftalara toplar (pazartesi başlangıçlı, yedi günlük döngü).
+ *
+ * Her hafta kendi takvim aralığını (pazartesi–pazar) ve veri bulunan ilk/son
+ * günü taşır. İkisi ayrı: ilk kayıt haftanın ortasında başlamışsa o hafta eksik
+ * demektir ve toplamları tam haftalarla kıyaslamak yanıltıcı olur — bu yüzden
+ * `partial` ile işaretleniyor.
+ */
 export const groupByWeek = (series = []) => {
   const weeks = new Map();
 
   series.forEach(d => {
-    const date = new Date(d.date);
-    const day = date.getDay();
-    const monday = new Date(date);
-    monday.setDate(date.getDate() - day + (day === 0 ? -6 : 1));
-    monday.setHours(0, 0, 0, 0);
-    const key = monday.toISOString().split('T')[0];
+    const sinir = weekBounds(d.date);
+    if (!sinir) return;
+    const key = sinir.startKey;
 
     const w = weeks.get(key) || {
-      weekStart: key, days: 0, intake: 0, out: 0, balance: 0,
+      weekStart: key, weekEnd: sinir.endKey,
+      firstDate: d.date, lastDate: d.date,
+      days: 0, intake: 0, out: 0, balance: 0,
       lifting: 0, cardio: 0, tef: 0, epoc: 0, restDays: 0,
     };
     w.days += 1;
+    if (d.date < w.firstDate) w.firstDate = d.date;
+    if (d.date > w.lastDate) w.lastDate = d.date;
     w.intake += d.intake;
     w.out += d.out;
     w.balance += d.balance;
@@ -339,7 +366,18 @@ export const groupByWeek = (series = []) => {
   });
 
   return [...weeks.values()]
-    .map(w => ({ ...w, kg: Math.round((w.balance / 7700) * 100) / 100 }))
+    .map(w => ({
+      ...w,
+      kg: Math.round((w.balance / 7700) * 100) / 100,
+      partial: w.days < 7,
+      // Eksik haftada aralık verinin gerçekten kapsadığı günleri gösterir;
+      // tam haftada takvim aralığı zaten aynı şeye denk geliyor.
+      rangeLabel: w.days < 7
+        ? formatRange(w.firstDate, w.lastDate)
+        : formatRange(w.weekStart, w.weekEnd),
+      // Günlük ortalama, eksik haftayı tam haftayla kıyaslanabilir kılar.
+      dailyBalance: w.days > 0 ? Math.round(w.balance / w.days) : 0,
+    }))
     .sort((a, b) => new Date(b.weekStart) - new Date(a.weekStart));
 };
 

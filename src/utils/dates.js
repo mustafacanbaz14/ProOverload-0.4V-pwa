@@ -79,6 +79,120 @@ export const formatDay = (value, style = 'short', opts = {}) => {
   return `${govde} ${style === 'short' ? gunKisa : gunAdi}`;
 };
 
+/* ------------------------------------------------------------------ *
+ *  HAFTA
+ * ------------------------------------------------------------------ */
+
+/** "YYYY-MM-DD" — yerel gün anahtarı. */
+export const dayKey = (value) => {
+  const d = toLocalDate(value);
+  if (!gecerli(d)) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+/**
+ * Bir tarihin ait olduğu haftanın pazartesi ve pazarı.
+ *
+ * Hafta pazartesi başlıyor (ISO): `getDay()` pazarı 0 verdiği için pazar bir
+ * ÖNCEKİ haftanın son günü sayılmalı, yoksa pazar günleri tek başına yeni bir
+ * hafta açıyor ve haftalık toplamlar ikiye bölünüyor.
+ */
+export const weekBounds = (value) => {
+  const d = toLocalDate(value);
+  if (!gecerli(d)) return null;
+  const gun = d.getDay();
+  const pazartesi = new Date(d);
+  pazartesi.setHours(0, 0, 0, 0);
+  pazartesi.setDate(d.getDate() - gun + (gun === 0 ? -6 : 1));
+  const pazar = new Date(pazartesi);
+  pazar.setDate(pazartesi.getDate() + 6);
+  return { start: pazartesi, end: pazar, startKey: dayKey(pazartesi), endKey: dayKey(pazar) };
+};
+
+/**
+ * İki tarih arası aralık etiketi: "21 – 26 Tem", ay değişiyorsa "28 Tem – 3 Ağu".
+ *
+ * Aynı ay içinde ay adı bir kez yazılıyor; "21 Tem – 26 Tem" gereksiz tekrar ve
+ * dar satırlarda taşıyor.
+ */
+export const formatRange = (from, to, opts = {}) => {
+  const { year = false } = opts;
+  const a = toLocalDate(from);
+  const b = toLocalDate(to);
+  if (!gecerli(a)) return '';
+  if (!gecerli(b)) return formatDay(a, 'short', { weekday: false, year });
+
+  // Tek günlük aralıkta "16 – 16 Tem" yazmak saçma; tek tarih yeter.
+  if (a.getTime() === b.getTime()) return formatDay(a, 'short', { weekday: false, year });
+
+  const ayniAy = a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
+  const bas = ayniAy
+    ? String(a.getDate())
+    : formatDay(a, 'short', { weekday: false, year: year && a.getFullYear() !== b.getFullYear() });
+  const son = formatDay(b, 'short', { weekday: false, year });
+  return `${bas} – ${son}`;
+};
+
+/**
+ * Tarihe göre sıralı bir listeyi haftalara böler (en yeni hafta önce).
+ *
+ * Liste sıralamasını değiştirmez, yalnızca gruplar. "Kısmi hafta" burada az
+ * kayıt olması demek DEĞİL — antrenman geçmişinde haftada üç kayıt olması
+ * normaldir. Kısmi olan, haftanın veri sınırıyla kesilmiş olması:
+ *   - en eski hafta pazartesiden sonra başlıyorsa (ilk kayıt haftanın ortasında)
+ *   - içinde bulunulan hafta henüz pazara varmadıysa
+ * Yalnızca bu iki durumda aralık etiketi kapsanan günleri gösterir.
+ *
+ * @param items  tarihe göre AZALAN sırada liste
+ * @param getDate öğeden tarih çıkaran fonksiyon
+ */
+export const groupIntoWeeks = (items = [], getDate = (x) => x?.date) => {
+  const gruplar = [];
+  const indeks = new Map();
+
+  items.forEach(item => {
+    const tarih = dayKey(getDate(item));
+    if (!tarih) return;
+    const sinir = weekBounds(tarih);
+    let grup = indeks.get(sinir.startKey);
+    if (!grup) {
+      grup = {
+        key: sinir.startKey,
+        weekStart: sinir.startKey,
+        weekEnd: sinir.endKey,
+        firstDate: tarih,
+        lastDate: tarih,
+        items: [],
+      };
+      indeks.set(sinir.startKey, grup);
+      gruplar.push(grup);
+    }
+    if (tarih < grup.firstDate) grup.firstDate = tarih;
+    if (tarih > grup.lastDate) grup.lastDate = tarih;
+    grup.items.push(item);
+  });
+
+  const bugun = dayKey(new Date());
+  const buHafta = weekBounds(bugun)?.startKey;
+
+  return gruplar.map((g, i) => {
+    // Devam eden hafta: pazara henüz varılmadı.
+    const ongoing = g.weekStart === buHafta && bugun < g.weekEnd;
+    // En eski hafta pazartesiden sonra başlıyorsa veri orada kesilmiş demektir.
+    const clipped = i === gruplar.length - 1 && g.firstDate > g.weekStart;
+    const kesik = ongoing || clipped;
+    return {
+      ...g,
+      ongoing,
+      clipped,
+      partial: kesik,
+      label: kesik ? formatRange(g.firstDate, g.lastDate) : formatRange(g.weekStart, g.weekEnd),
+      fullLabel: formatRange(g.weekStart, g.weekEnd),
+      note: ongoing ? 'devam ediyor' : clipped ? 'kayıt bu gün başlıyor' : null,
+    };
+  });
+};
+
 /** Bugün/dün gibi göreli ifade; değilse tarih + gün adı. */
 export const formatDayRelative = (value, style = 'medium') => {
   const d = toLocalDate(value);

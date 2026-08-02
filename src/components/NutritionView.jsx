@@ -13,7 +13,7 @@ import CalorieBalanceCard from './CalorieBalanceCard';
 import DisclosureCard from './DisclosureCard';
 import { formatDay, weekdayName } from '../utils/dates';
 import { dayMindCalories } from '../utils/wellness';
-import { dayEnergyBreakdown } from '../utils/energyModel';
+import { dayEnergyBreakdown, neatOptsForDay } from '../utils/energyModel';
 
 const MacroTile = ({ label, value, numericValue, target, color, bar }) => {
   const ratio = target > 0 ? Math.min(100, Math.round((parseNumber(numericValue) / target) * 100)) : null;
@@ -89,7 +89,8 @@ const NutritionView = memo(({
       recovery,
       manual: record.activeCaloriesOut,
       steps: record.steps,
-      ...neatOpts,
+      // Güne özel hareket çarpanı varsa genel ayarı ezer.
+      ...neatOptsForDay(neatOpts, record),
     });
   };
 

@@ -143,6 +143,11 @@ export const mergeNutrition = (data) => ({
   activeCaloriesOut: data?.activeCaloriesOut || '', bmrAtTheTime: data?.bmrAtTheTime || 0,
   // Adım sayısı: NEAT 'steps' modunda günlük hareket buradan hesaplanır.
   steps: data?.steps || '',
+  // O güne özel günlük hareket (NEAT) çarpanı. Boş = ayarlardaki genel çarpan
+  // kullanılır. Tek bir gün diğerlerinden belirgin farklıysa (bütün gün ayakta
+  // bir iş, ya da tam tersi masa başı) genel varsayılanı bozmadan o gün
+  // düzeltilebilsin diye kayıt bazında tutuluyor.
+  neatMultiplier: data?.neatMultiplier ?? '',
   // Günlük su tüketimi beslenme kaydına aittir; geçmiş günler ayrı ayrı
   // düzenlenebilir. Eski kayıtlarda alan yoksa boş başlar.
   waterMl: data?.waterMl || '',

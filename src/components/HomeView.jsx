@@ -26,6 +26,8 @@ const HomeView = memo(({
   showMuscleVolume = false,
   onToggleMuscleVolume,
   todayCoach,
+  coachActions = [],
+  onCoachAction,
   onOpenEnergy,
   onOpenWellness,
   onOpenCardio,
@@ -46,6 +48,8 @@ const HomeView = memo(({
 
       <TodayCoachCard
         data={todayCoach}
+        actions={coachActions}
+        onAction={onCoachAction}
         onStart={handleStartRequest}
         onOpenEnergy={onOpenEnergy}
         onOpenWellness={onOpenWellness}

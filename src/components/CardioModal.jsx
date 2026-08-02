@@ -16,7 +16,7 @@ const QUICK_MINUTES = [15, 20, 30, 45, 60];
  * uydurma bir sayı göstermek yerine ölçüm girmesi söylenir.
  */
 const CardioModal = memo(({
-  isOpen, onClose, onSave, weightKg, existing = [], onDelete, planned = [],
+  isOpen, onClose, onSave, weightKg, entriesFor, onDelete, planned = [],
   initialDate, editingEntry = null,
 }) => {
   const [type, setType] = useState(editingEntry?.type || 'zone2');
@@ -26,6 +26,8 @@ const CardioModal = memo(({
   const [note, setNote] = useState(editingEntry?.note || '');
   const [showActivities, setShowActivities] = useState(false);
   const [activityQuery, setActivityQuery] = useState('');
+  // Ekran kapanmadan kaç aktivite eklendiği — geri bildirim için.
+  const [eklenenSayisi, setEklenenSayisi] = useState(0);
   // Plandan yüklendiyse planlanan tempo/süre burada tutulur; kayda da yazılır
   // ki sonradan "planladığımdan sert mi geçti" sorusu cevaplanabilsin.
   const [plan, setPlan] = useState(editingEntry?.plannedEffort ? {
@@ -57,6 +59,31 @@ const CardioModal = memo(({
   const fark = plan ? effortDelta({
     type, minutes, effort, plannedEffort: plan.effort, plannedMinutes: plan.minutes,
   }, weightKg) : null;
+
+  const kaydet = () => onSave({
+    ...(editingEntry?.id ? { id: editingEntry.id } : {}),
+    type, minutes: Number(minutes), effort, date, note: note.trim(),
+    ...(plan ? { plannedEffort: plan.effort, plannedMinutes: plan.minutes } : {}),
+  });
+
+  // O günün kayıtları — tarih penceresinin içinden değişebildiği için üst
+  // bileşenden sabit liste değil, tarihe göre sorgulanabilir bir fonksiyon geliyor.
+  const existing = entriesFor ? entriesFor(date) : [];
+
+  /**
+   * Kayıttan sonra formu bir sonraki aktiviteye hazırlar.
+   *
+   * Tarih ve tempo korunuyor: aynı gün ikinci bir aktivite ekleyen kullanıcı
+   * çoğunlukla tarihi değiştirmiyor. Süre, not ve plan bağı sıfırlanıyor —
+   * plan bağı taşınırsa ikinci kayıt da aynı planla karşılaştırılırdı.
+   */
+  const yeniGirdiyeHazirla = () => {
+    setMinutes(30);
+    setNote('');
+    setPlan(null);
+    setShowActivities(false);
+    setEklenenSayisi(n => n + 1);
+  };
 
   return (
     <div className="fixed inset-0 bg-zinc-950 z-[95] flex flex-col h-[100dvh] max-w-[420px] mx-auto">
@@ -104,7 +131,7 @@ const CardioModal = memo(({
                   {(typeof s.activity === 'string' ? findActivity(s.activity)?.label : s.activity?.label) || 'Kardiyo'}
                 </span>
                 <span className="text-[10px] font-mono text-zinc-500 shrink-0">
-                  {s.minutes} dk · {findEffort(s.effort).label}
+                  {s.minutes} dk · {findEffort(s.effort).fullLabel}
                   {s.minuteSource === 'history' && ' · arşiv ort.'}
                 </span>
               </button>
@@ -134,7 +161,7 @@ const CardioModal = memo(({
               <span className="text-3xl font-mono font-bold text-zinc-100">{kcal}</span>
               <span className="text-[11px] font-mono text-zinc-500 ml-1">kcal</span>
               <p className="text-[9px] font-mono text-zinc-600 mt-2 leading-relaxed">
-                {minutes} dk · {activity?.label} · {activity?.met} MET × {effortInfo.met} ({effortInfo.label}) · {weightKg} kg
+                {minutes} dk · {activity?.label} · {activity?.met} MET × {effortInfo.met} ({effortInfo.fullLabel}) · {weightKg} kg
                 <br />
                 Dinlenmenin üstüne yakılan miktar. Günlük hedefe eklenecek sayı budur.
               </p>
@@ -203,9 +230,12 @@ const CardioModal = memo(({
               <button
                 key={e.key}
                 onClick={() => setEffort(e.key)}
-                className={`py-2 rounded-lg text-[9px] font-bold border leading-tight transition-colors ${effort === e.key ? 'bg-amber-900/25 border-amber-600 text-amber-300' : 'bg-zinc-950 border-zinc-800 text-zinc-500'}`}
+                className={`py-1.5 px-1 rounded-lg border leading-tight transition-colors ${effort === e.key ? 'bg-amber-900/25 border-amber-600 text-amber-300' : 'bg-zinc-950 border-zinc-800 text-zinc-500'}`}
               >
-                {e.label}
+                <span className="text-[9px] font-bold block">{e.label}</span>
+                {/* Kademenin ne anlama geldiği etiketin altında: "Eğlence" tek
+                    başına aktif toparlanma olduğunu söylemiyordu. */}
+                <span className="text-[7px] font-mono opacity-70 block leading-tight mt-0.5">{e.subLabel}</span>
               </button>
             ))}
           </div>
@@ -276,7 +306,7 @@ const CardioModal = memo(({
         {/* Bu seansta eklenenler */}
         {existing.length > 0 && (
           <div className="space-y-1.5 pt-1">
-            <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Bu Kayıtta Eklenenler</h4>
+            <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">{formatDay(date, 'medium')} · Bu Güne Eklenenler</h4>
             {existing.map(e => {
               const a = findActivity(e.type);
               return (
@@ -297,22 +327,50 @@ const CardioModal = memo(({
         )}
       </div>
 
-      <div className="p-3 border-t border-zinc-800 bg-zinc-950 shrink-0 pb-safe">
-        <button
-          disabled={!canSave}
-          onClick={() => {
-            onSave({
-              ...(editingEntry?.id ? { id: editingEntry.id } : {}),
-              type, minutes: Number(minutes), effort, date, note: note.trim(),
-              ...(plan ? { plannedEffort: plan.effort, plannedMinutes: plan.minutes } : {}),
-            });
-            onClose();
-          }}
-          className="w-full bg-red-600 active:bg-red-700 disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-bold py-3.5 rounded-xl uppercase text-[11px] tracking-wider flex items-center justify-center gap-2 transition-colors"
-        >
-          {editingEntry ? <Save size={15} /> : <Plus size={15} />}
-          {editingEntry ? 'Değişiklikleri Kaydet' : `${activity?.label} · ${minutes} dk · ${effortInfo.label}`}
-        </button>
+      <div className="p-3 border-t border-zinc-800 bg-zinc-950 shrink-0 pb-safe space-y-2">
+        {editingEntry ? (
+          <button
+            disabled={!canSave}
+            onClick={() => { kaydet(); onClose(); }}
+            className="w-full bg-red-600 active:bg-red-700 disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-bold py-3.5 rounded-xl uppercase text-[11px] tracking-wider flex items-center justify-center gap-2 transition-colors"
+          >
+            <Save size={15} /> Değişiklikleri Kaydet
+          </button>
+        ) : (
+          <>
+            {/* Bir günde birden fazla aktivite olabiliyor (sabah koşu, akşam maç).
+                Bu yüzden asıl buton kaydedip formu sıfırlıyor ve ekran açık
+                kalıyor; kapatmak ayrı ve ikincil bir eylem. */}
+            <button
+              disabled={!canSave}
+              onClick={() => { kaydet(); yeniGirdiyeHazirla(); }}
+              className="w-full bg-red-600 active:bg-red-700 disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-bold py-3.5 rounded-xl uppercase text-[11px] tracking-wider flex items-center justify-center gap-2 transition-colors"
+            >
+              <Plus size={15} />
+              {activity?.label} · {minutes} dk · {effortInfo.label}
+            </button>
+            <div className="flex gap-2">
+              <button
+                disabled={!canSave}
+                onClick={() => { kaydet(); onClose(); }}
+                className="flex-1 bg-zinc-900 border border-zinc-800 active:bg-zinc-800 disabled:opacity-40 text-zinc-300 font-bold py-2.5 rounded-xl uppercase text-[10px] tracking-wider flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <Save size={13} /> Kaydet ve kapat
+              </button>
+              <button
+                onClick={onClose}
+                className="px-4 bg-zinc-900 border border-zinc-800 active:bg-zinc-800 text-zinc-500 font-bold py-2.5 rounded-xl uppercase text-[10px] tracking-wider transition-colors"
+              >
+                Bitti
+              </button>
+            </div>
+            {eklenenSayisi > 0 && (
+              <p className="text-[9px] font-mono text-emerald-400 text-center">
+                Bu güne {eklenenSayisi} aktivite eklendi — istersen bir tane daha ekle.
+              </p>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

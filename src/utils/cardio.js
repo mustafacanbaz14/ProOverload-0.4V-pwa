@@ -63,11 +63,32 @@ export const CARDIO_ACTIVITIES = [
  * çakışma tavsiyesi kaloriye değil bu katsayıya bakıyor.
  */
 export const CARDIO_EFFORTS = [
-  { key: 'fun', label: 'Eğlence', met: 0.72, fatigue: 0.5, hint: 'Rahat sohbet edebiliyorsun, sık duraklama var' },
-  { key: 'easy', label: 'Hafif', met: 0.88, fatigue: 0.75, hint: 'Konuşabiliyorsun ama nefes belirgin' },
-  { key: 'moderate', label: 'Orta', met: 1, fatigue: 1, hint: 'Tablodaki standart tempo' },
-  { key: 'hard', label: 'Zorlu', met: 1.15, fatigue: 1.35, hint: 'Cümle kuramıyorsun, tempo yüksek' },
-  { key: 'match', label: 'Maç Temposu', met: 1.3, fatigue: 1.8, hint: 'Yarışma şiddeti, sprintler ve yön değiştirmeler' },
+  {
+    key: 'fun', label: 'Eğlence', subLabel: 'Aktif toparlanma',
+    fullLabel: 'Eğlence / Aktif Toparlanma',
+    met: 0.72, fatigue: 0.5,
+    hint: 'Rahat sohbet edebiliyorsun, sık duraklama var. Toparlanmayı hızlandırır, yorgunluk eklemez',
+  },
+  {
+    key: 'easy', label: 'Hafif', subLabel: 'Düşük yük',
+    fullLabel: 'Hafif',
+    met: 0.88, fatigue: 0.75, hint: 'Konuşabiliyorsun ama nefes belirgin',
+  },
+  {
+    key: 'moderate', label: 'Orta', subLabel: 'Standart',
+    fullLabel: 'Orta',
+    met: 1, fatigue: 1, hint: 'Tablodaki standart tempo',
+  },
+  {
+    key: 'hard', label: 'Zorlu', subLabel: 'Yüksek yük',
+    fullLabel: 'Zorlu',
+    met: 1.15, fatigue: 1.35, hint: 'Cümle kuramıyorsun, tempo yüksek',
+  },
+  {
+    key: 'match', label: 'Maç', subLabel: 'Yarışma',
+    fullLabel: 'Maç Temposu',
+    met: 1.3, fatigue: 1.8, hint: 'Yarışma şiddeti, sprintler ve yön değiştirmeler',
+  },
 ];
 
 export const DEFAULT_EFFORT = 'moderate';

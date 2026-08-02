@@ -519,6 +519,84 @@ export const calorieDashboard = ({
  * Hedefe ulaşmak için gereken süre tahmini.
  * Mevcut açık/fazla bu hızda sürerse kaç hafta gerekir.
  */
+/**
+ * Bir ölçümün haftalık değişim hızı.
+ *
+ * En basit yol ilk ve son ölçümü çıkarmak olurdu ama ikisi de tek gün: su
+ * tutmaya bağlı bir kilo dalgalanması hızı olduğundan büyük ya da ters yönlü
+ * gösterebilir. Bu yüzden pencere içindeki BÜTÜN noktalara en küçük kareler
+ * doğrusu uyduruluyor; eğim haftalık hıza çevriliyor.
+ *
+ * @param points [{ date, value }]
+ * @param days   kaç günlük pencere
+ * @returns { perWeek, samples, spanDays, confidence } | null
+ */
+export const trendRate = (points = [], days = 42) => {
+  const now = Date.now();
+  const gecerli = (points || [])
+    .map(p => ({ t: new Date(`${p.date}T12:00:00`).getTime(), v: parseNumber(p.value) }))
+    .filter(p => Number.isFinite(p.t) && p.v > 0 && (now - p.t) / 86400000 <= days)
+    .sort((a, b) => a.t - b.t);
+
+  // İki nokta doğru için yeterli ama güvenilir değil; üç noktadan itibaren
+  // eğilimden söz edilebiliyor.
+  if (gecerli.length < 3) return null;
+
+  const spanDays = (gecerli.at(-1).t - gecerli[0].t) / 86400000;
+  if (spanDays < 7) return null;
+
+  // x ekseni gün cinsinden; büyük zaman damgalarıyla çalışmak duyarlılık kaybettirir.
+  const x0 = gecerli[0].t;
+  const xs = gecerli.map(p => (p.t - x0) / 86400000);
+  const ys = gecerli.map(p => p.v);
+  const n = xs.length;
+  const mx = xs.reduce((s, v) => s + v, 0) / n;
+  const my = ys.reduce((s, v) => s + v, 0) / n;
+  const pay = xs.reduce((s, x, i) => s + (x - mx) * (ys[i] - my), 0);
+  const payda = xs.reduce((s, x) => s + (x - mx) ** 2, 0);
+  if (payda === 0) return null;
+
+  const gunlukEgim = pay / payda;
+  return {
+    perWeek: Math.round(gunlukEgim * 7 * 100) / 100,
+    samples: n,
+    spanDays: Math.round(spanDays),
+    // Uzun pencere ve çok ölçüm = daha güvenilir eğilim.
+    confidence: n >= 6 && spanDays >= 21 ? 'high' : n >= 4 && spanDays >= 14 ? 'medium' : 'low',
+  };
+};
+
+/**
+ * Hedefe tahmini varış.
+ *
+ * Mevcut eğilim aynı hızda sürerse kaç hafta kalır ve hangi tarihe denk gelir.
+ * Ters yön ve "neredeyse duruyor" durumları ayrı ayrı işaretleniyor; ikisinde
+ * de bir tarih uydurmak yanıltıcı olurdu.
+ */
+export const goalEta = (currentValue, targetValue, perWeek, { minRate = 0.01 } = {}) => {
+  const cur = parseNumber(currentValue);
+  const hedef = parseNumber(targetValue);
+  const hiz = parseNumber(perWeek);
+  if (!(cur > 0) || !(hedef > 0)) return null;
+
+  const fark = hedef - cur;
+  if (Math.abs(fark) < 0.05) return { reached: true };
+  if (Math.abs(hiz) < minRate) return { stalled: true };
+  if (Math.sign(fark) !== Math.sign(hiz)) return { wrongDirection: true };
+
+  const hafta = Math.abs(fark / hiz);
+  // 3 yıldan uzun bir tahmin bilgi değil gürültü.
+  if (!Number.isFinite(hafta) || hafta > 156) return { tooFar: true };
+
+  const tarih = new Date();
+  tarih.setDate(tarih.getDate() + Math.round(hafta * 7));
+  return {
+    weeks: Math.round(hafta * 10) / 10,
+    date: tarih,
+    remaining: Math.round(Math.abs(fark) * 10) / 10,
+  };
+};
+
 export const weeksToGoal = (currentWeight, goalWeight, weeklyKg) => {
   const cur = parseNumber(currentWeight);
   const goal = parseNumber(goalWeight);

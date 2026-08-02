@@ -15,6 +15,11 @@ const SUPERSET_REST_FACTOR = 0.5;
  */
 export const previewTemplateVolume = (exercises = [], customExercises = []) => {
   const byMuscle = {};
+  // Kas -> o kasa katkı veren hareketler. Toplam sayı "neden bu kadar" sorusunu
+  // cevaplamıyordu: 12 set göğüs görünüyor ama bunun 4'ü bench, 4'ü incline,
+  // 4'ü dips katkısı olabilir ve hangi hareketi kısacağına ancak bu dökümle
+  // karar verilebiliyor.
+  const detailByMuscle = {};
   let totalSets = 0;
 
   (exercises || []).forEach(ex => {
@@ -24,17 +29,31 @@ export const previewTemplateVolume = (exercises = [], customExercises = []) => {
 
     const { contributions } = detectMuscleGroup(ex.name, customExercises);
     Object.entries(contributions || {}).forEach(([muscle, weight]) => {
-      byMuscle[muscle] = (byMuscle[muscle] || 0) + sets * weight;
+      const katki = sets * weight;
+      byMuscle[muscle] = (byMuscle[muscle] || 0) + katki;
+      const liste = detailByMuscle[muscle] || (detailByMuscle[muscle] = []);
+      // Aynı hareket bir şablona iki kez konabiliyor; tek satırda toplanır.
+      const mevcut = liste.find(item => item.name === ex.name);
+      if (mevcut) {
+        mevcut.sets += sets;
+        mevcut.volume += katki;
+      } else {
+        liste.push({ name: ex.name, sets, weight, volume: katki });
+      }
     });
   });
 
   // Yarım katkılar ondalık biriktirir; çeyrek sete yuvarlanır.
   Object.keys(byMuscle).forEach(m => {
     byMuscle[m] = Math.round(byMuscle[m] * 4) / 4;
+    detailByMuscle[m] = detailByMuscle[m]
+      .map(item => ({ ...item, volume: Math.round(item.volume * 4) / 4 }))
+      .sort((a, b) => b.volume - a.volume);
   });
 
   return {
     byMuscle,
+    detailByMuscle,
     totalSets,
     exercises: (exercises || []).filter(ex => (ex.sets || []).filter(isWorkingSet).length > 0).length,
   };

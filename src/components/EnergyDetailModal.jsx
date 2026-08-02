@@ -1,6 +1,6 @@
 import React, { useState, useMemo, memo } from 'react';
 import { X, Flame, CalendarDays, Table2, Sparkles, Scale, Moon, Dumbbell, ChevronDown, Footprints } from 'lucide-react';
-import { buildEnergySeries, groupByWeek, dayEnergyBreakdown, theoreticalWeek, planVsActual, neatMethodComparison } from '../utils/energyModel';
+import { buildEnergySeries, groupByWeek, dayEnergyBreakdown, theoreticalWeek, planVsActual, neatMethodComparison, neatOptsForDay } from '../utils/energyModel';
 import { dailyTotals } from '../utils/nutritionStats';
 import { parseNumber } from '../utils/helpers';
 import { formatDay } from '../utils/dates';
@@ -13,6 +13,23 @@ const TABS = [
 ];
 
 const kcal = (n) => `${n > 0 ? '+' : ''}${Math.round(n)}`;
+
+/**
+ * Güne özel günlük hareket çarpanı seçenekleri.
+ *
+ * Serbest sayı girmek yerine hazır kademeler var: kullanıcı bir günü "daha
+ * hareketliydi" diye işaretlerken 1.13 gibi bir sayı üretmiyor, "hareketli"
+ * diyor. "Varsayılan" seçeneği güne özel değeri kaldırıp ayarlardakine döner.
+ */
+const NEAT_PRESETS = [
+  { label: 'Varsayılan', value: null },
+  { label: 'Çok durgun ×0.75', value: 0.75 },
+  { label: 'Durgun ×0.9', value: 0.9 },
+  { label: 'Normal ×1', value: 1 },
+  { label: 'Hareketli ×1.15', value: 1.15 },
+  { label: 'Çok hareketli ×1.25', value: 1.25 },
+  { label: 'Ayakta iş ×1.4', value: 1.4 },
+];
 const dateShort = (d) => formatDay(d);
 
 /**
@@ -39,6 +56,9 @@ const EnergyDetailModal = memo(({
   avgDailyExercise = 0,
   estimatedMacros = {},
   maintenanceEstimated = false,
+  // Güne özel NEAT çarpanını yazan geri çağrı; verilmezse kontrol gizlenir.
+  onSetDayNeat,
+  defaultNeatMultiplier = 1,
 }) => {
   const [tab, setTab] = useState('today');
   // Tabloda açılan gün — geçmiş günün dökümünü satır altında gösterir.
@@ -61,7 +81,7 @@ const EnergyDetailModal = memo(({
       lifting: w.lifting, cardio: w.cardio, recovery: w.mind, manual: todayForm.activeCaloriesOut,
       activeRecovery: w.activeRecovery,
       steps: todayForm.steps,
-      ...neatOpts,
+      ...neatOptsForDay(neatOpts, todayForm),
     });
   }, [todayForm, maintenance, bmr, dayCalories, neatOpts, estimatedMacros]);
 
@@ -324,6 +344,42 @@ const EnergyDetailModal = memo(({
                                     P {Math.round(d.macros.protein)} · K {Math.round(d.macros.carbs)} · Y {Math.round(d.macros.fats)}
                                   </span>
                                 </div>
+
+                                {/* Güne özel günlük hareket çarpanı.
+                                    Bütün gün ayakta geçen bir gün ile masa başı
+                                    geçen gün aynı çarpanla hesaplanamıyor; genel
+                                    varsayılanı bozmadan tek gün düzeltilebiliyor. */}
+                                {onSetDayNeat && (
+                                  <div className="pt-1.5 border-t border-zinc-800 space-y-1.5">
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-zinc-500">Günlük hareket çarpanı</span>
+                                      <span className={parseNumber(d.neatOverride) > 0 ? 'text-cyan-400 font-bold' : 'text-zinc-500'}>
+                                        ×{d.breakdown.neatMultiplier}
+                                        {parseNumber(d.neatOverride) > 0
+                                          ? ' · bu güne özel'
+                                          : ` · genel (×${defaultNeatMultiplier})`}
+                                      </span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1">
+                                      {NEAT_PRESETS.map(p => {
+                                        const secili = p.value === null
+                                          ? !(parseNumber(d.neatOverride) > 0)
+                                          : parseNumber(d.neatOverride) === p.value;
+                                        return (
+                                          <button
+                                            key={p.label}
+                                            onClick={(e) => { e.stopPropagation(); onSetDayNeat(d.date, p.value ?? ''); }}
+                                            className={`px-2 py-1 rounded-lg border text-[9px] font-bold transition-colors ${secili
+                                              ? 'border-cyan-600 text-cyan-400 bg-cyan-950/25'
+                                              : 'border-zinc-800 text-zinc-500 bg-zinc-900'}`}
+                                          >
+                                            {p.label}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -350,12 +406,22 @@ const EnergyDetailModal = memo(({
             <div className="space-y-2.5">
               {weeks.map(w => (
                 <div key={w.weekStart} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-3.5 space-y-2">
-                  <div className="flex justify-between items-baseline">
-                    <span className="text-[11px] font-bold text-zinc-200">{dateShort(w.weekStart)} haftası</span>
-                    <span className="text-[9px] font-mono text-zinc-600">
-                      {w.days} gün · {w.restDays} dinlenme
+                  <div className="flex justify-between items-baseline gap-2">
+                    <span className="text-[11px] font-bold text-zinc-200 min-w-0 truncate">
+                      {w.rangeLabel}
+                    </span>
+                    <span className="text-[9px] font-mono text-zinc-600 shrink-0">
+                      {w.days}/7 gün · {w.restDays} dinlenme
                     </span>
                   </div>
+
+                  {/* Eksik hafta tam haftayla doğrudan kıyaslanamaz; toplam yerine
+                      günlük ortalamaya bakmak gerektiği burada söyleniyor. */}
+                  {w.partial && (
+                    <span className="inline-flex items-center gap-1 text-[9px] font-mono text-amber-400 border border-amber-900/50 bg-amber-950/20 rounded-md px-1.5 py-0.5">
+                      Kısmi hafta · günlük ort. {kcal(w.dailyBalance)} kcal
+                    </span>
+                  )}
 
                   <div className="flex items-baseline gap-2">
                     <span className={`text-xl font-mono font-bold ${w.balance < 0 ? 'text-cyan-400' : w.balance > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>

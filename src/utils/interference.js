@@ -196,7 +196,7 @@ export const analyzeDayConflicts = (day) => {
       key: 'effort',
       level: SEVIYE.medium,
       title: 'Tempo yüksek seçilmiş',
-      detail: `${sertKardiyo.map(c => `${c.activity.label} (${findEffort(c.effort || DEFAULT_EFFORT).label})`).join(', ')}. Bu şiddet bacaklarda ağırlık antrenmanına yakın yorgunluk bırakır; bacak gününde orta tempoya çekmek toparlanmayı korur.`,
+      detail: `${sertKardiyo.map(c => `${c.activity.label} (${findEffort(c.effort || DEFAULT_EFFORT).fullLabel})`).join(', ')}. Bu şiddet bacaklarda ağırlık antrenmanına yakın yorgunluk bırakır; bacak gününde orta tempoya çekmek toparlanmayı korur.`,
     });
     if (seviye.key === 'low' || seviye.key === 'none') seviye = SEVIYE.medium;
   }

@@ -14,8 +14,11 @@ import { totalCardioCalories, dayWorkoutCalories } from './utils/cardio';
 import { computeWeekPlan, findPlan } from './utils/weekPlan';
 import { removeTemplateFromPlans } from './utils/planMigration';
 import { buildPersonalVolumeGuidance } from './utils/personalization';
-import { averageDailyExercise, dayEnergyBreakdown, ACTIVITY_LEVELS, estimateMacrosForTef, thermicEffect } from './utils/energyModel';
-import { recommendedCalories } from './utils/goals';
+import { buildCoachActions } from './utils/coach';
+import { buildPlateauInsights } from './utils/insights';
+import { analyzeDayConflicts } from './utils/interference';
+import { averageDailyExercise, dayEnergyBreakdown, ACTIVITY_LEVELS, estimateMacrosForTef, thermicEffect, neatOptsForDay } from './utils/energyModel';
+import { recommendedCalories, trendRate, GOAL_FIELDS } from './utils/goals';
 import { caloriesFromMacros, dailyTotals } from './utils/nutritionStats';
 import { DEFAULT_READINESS, READINESS_FIELDS, computeReadiness, readinessTrend } from './utils/readiness';
 import { safeSetRawItem } from './utils/persist';
@@ -304,13 +307,26 @@ export default function App() {
       goalFFM: parseNumber(comp?.ffm),
       goalFFMI: parseNumber(comp?.ffmi),
     });
+    // Her hedefin kendi eğilimi: kilo düşerken yağsız kütle sabit kalabiliyor,
+    // tek bir "haftalık kilo" hızından dört tahmin türetmek yanlış olurdu.
+    // Doğru, son altı haftanın ölçümlerine ayrı ayrı bakmak.
+    const noktalar = sortedMetrics.map(m => {
+      const comp = computeComposition(m);
+      return { date: m.date, values: shape(m, comp) };
+    });
+    const trends = Object.fromEntries(GOAL_FIELDS.map(f => [
+      f.key,
+      trendRate(noktalar.map(p => ({ date: p.date, value: p.values[f.key] })), 42),
+    ]));
+
     return {
       current: shape(currentMetricsForm, computedComp),
       earliest: earliestMetrics
         ? shape(earliestMetrics, computeComposition(earliestMetrics))
         : {},
+      trends,
     };
-  }, [currentMetricsForm, computedComp, earliestMetrics]);
+  }, [currentMetricsForm, computedComp, earliestMetrics, sortedMetrics]);
 
   const dashboardStats = useMemo(() => {
     const monday = getMondayOfCurrentWeek();
@@ -1182,6 +1198,28 @@ export default function App() {
     });
   }, [nutritionHistory]);
 
+  /**
+   * Bir güne özel günlük hareket (NEAT) çarpanı yazar.
+   *
+   * Değer beslenme kaydında tutuluyor çünkü gün bazlı diğer enerji alanları
+   * (adım, elle eklenen kalori) da orada. O tarihe henüz kayıt yoksa boş bir
+   * kayıt açılıyor — kullanıcı sırf çarpan girmek için önce beslenme yazmak
+   * zorunda kalmasın.
+   */
+  const handleSetDayNeat = useCallback((date, value) => {
+    setNutritionHistory(prev => {
+      const idx = prev.findIndex(n => n.date === date);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...next[idx], neatMultiplier: value };
+        return next;
+      }
+      return [mergeNutrition({ date, neatMultiplier: value }), ...prev];
+    });
+    setCurrentNutritionForm(prev =>
+      prev?.date === date ? { ...prev, neatMultiplier: value } : prev);
+  }, []);
+
   const handleNutritionDateChange = (date) => {
     const existing = nutritionHistory.find(n => n.date === date);
     if (existing) setCurrentNutritionForm(mergeNutrition(existing));
@@ -1388,26 +1426,34 @@ export default function App() {
       setActiveWorkout(prev => prev ? { ...prev, cardio: (prev.cardio || []).filter(c => c.id !== entryId) } : prev);
       return;
     }
-    const today = getLocalDateString();
+    // Geçmiş bir güne kayıt eklenirken silme de o güne uygulanmalı; sabit
+    // "bugün" varsayımı, geçmiş güne yanlış eklenen girdiyi silinemez yapıyordu.
+    const hedefTarih = cardioContext?.date || getLocalDateString();
     setWorkouts(prev => prev
-      .map(w => w.date === today && w.cardio
+      .map(w => w.date === hedefTarih && w.cardio
         ? { ...w, cardio: w.cardio.filter(c => c.id !== entryId) }
         : w)
       // Son kardiyo da silinince boş kayıt geride kalmasın.
       .filter(w => (w.exercises || []).length > 0 || (w.cardio || []).length > 0));
-  }, []);
+  }, [cardioContext]);
 
   // Kardiyo penceresinde listelenecek girişler: aktif seans varsa onunkiler.
-  const cardioEntries = useMemo(() => {
-    if (cardioContext?.date) {
-      return workouts
-        .filter(workout => workout.date === cardioContext.date)
-        .flatMap(workout => workout.cardio || []);
-    }
-    if (activeWorkout) return activeWorkout.cardio || [];
+  /**
+   * Kardiyo ekranında listelenecek girişler.
+   *
+   * Tarihi parametre alıyor çünkü kullanıcı pencerenin içinden tarihi
+   * değiştirebiliyor; sabit bir liste verilseydi geçmiş bir güne geçildiğinde
+   * hâlâ bugünün kayıtları görünürdü.
+   */
+  const cardioEntriesFor = useCallback((dateStr) => {
     const today = getLocalDateString();
-    return workouts.find(w => w.date === today && w.cardio)?.cardio || [];
-  }, [activeWorkout, workouts, cardioContext]);
+    // Aktif seans varsa kardiyo oraya yazılıyor, ayrı bir gün kaydına değil.
+    if (activeWorkout && (!dateStr || dateStr === today)) return activeWorkout.cardio || [];
+    const hedef = dateStr || today;
+    return workouts
+      .filter(workout => workout.date === hedef)
+      .flatMap(workout => workout.cardio || []);
+  }, [activeWorkout, workouts]);
 
   // Bu haftaki toplam kardiyo kalorisi (dinlenme üstü).
   const weeklyCardioKcal = useMemo(() => {
@@ -1448,7 +1494,7 @@ export default function App() {
       recovery: exercise.mind,
       manual: nutrition.activeCaloriesOut,
       steps: nutrition.steps,
-      ...neatOpts,
+      ...neatOptsForDay(neatOpts, nutrition),
     });
     const recommendation = recommendedCalories(maintenanceCalories, settings.nutritionGoal, {
       weightKg: latestWeight,
@@ -1480,7 +1526,7 @@ export default function App() {
     const detail = recoveryConcern
       ? 'Yoğunluğu düşür, teknik kalitesini koru ve eklem ağrısı varsa zorlayan hareketi değiştir.'
       : activeRest
-        ? `${planDay.cardioMinutes} dk eğlence temposu · yaklaşık ${planDay.cardioKcal} kcal. Gün off day olarak kalır.`
+        ? `${planDay.cardioMinutes} dk aktif toparlanma temposu · yaklaşık ${planDay.cardioKcal} kcal. Gün off day olarak kalır.`
         : workoutTemplate
         ? `${planDay.sets} teorik set · yaklaşık ${planDay.minutes} dk · ${planDay.totalKcal} kcal.`
         : 'Hazır oluşluğun iyiyse eksik kas gruplarına kısa bir seans ekleyebilirsin.';
@@ -1513,10 +1559,62 @@ export default function App() {
       planCalories: planDay?.totalKcal || 0,
       activeRest,
       workoutTemplate,
+      // Eylem listesinin hesabı için ham girdiler; koç modülü saf kalsın diye
+      // React state'ine değil bu nesneye bakıyor.
+      _signals: {
+        planDay,
+        sleep,
+        macros,
+        calorieRemaining: adjustedTarget > 0 ? remaining : null,
+        doneToday: workouts.filter(w => w.date === date && (w.exercises || []).length > 0).length,
+      },
     };
   }, [weekPlanDays, nutritionHistory, currentNutritionForm, dayCaloriesFor,
     maintenanceCalories, computedComp, neatOpts, estimatedTefMacros, settings.nutritionGoal,
-    settings.paceRate, latestWeight, wellness, readiness]);
+    settings.paceRate, latestWeight, wellness, readiness, workouts]);
+
+  /**
+   * Koçun sıralanmış eylem listesi.
+   *
+   * Sinyaller uygulamanın dört bir yanında zaten hesaplanıyor (hazır oluşluk,
+   * uyku, hacim, ACWR, plato, ölçüm boşluğu); burada tek yerde toplanıp
+   * önceliklendiriliyor ki kullanıcı "bugün neye bakmalıyım" sorusunu tek
+   * kartta cevaplayabilsin.
+   */
+  const plateauInsights = useMemo(() => buildPlateauInsights(workouts), [workouts]);
+
+  const coachActions = useMemo(() => {
+    const bugun = getLocalDateString();
+    const sonOlcum = sortedMetrics[0]?.date;
+    const gunFarki = sonOlcum
+      ? Math.floor((new Date(`${bugun}T12:00:00`) - new Date(`${sonOlcum}T12:00:00`)) / 86400000)
+      : null;
+    // Eklem ağrısı en son seansın formundan okunuyor; bugünkü form henüz yok.
+    const sonSeans = sortedWorkouts.find(w => w.readiness);
+
+    return buildCoachActions({
+      readiness,
+      sleep: todayCoach?._signals.sleep,
+      lastReadiness: sonSeans?.readiness,
+      planDay: todayCoach?._signals.planDay,
+      doneToday: todayCoach?._signals.doneToday || 0,
+      conflict: todayCoach?._signals.planDay
+        ? analyzeDayConflicts(todayCoach._signals.planDay)
+        : null,
+      macros: todayCoach?._signals.macros,
+      targetProtein: Math.round(parseNumber(computedComp?.ffm) * (settings.nutritionGoal === 'bulk'
+        ? (settings.proteinPerFfmBulk || 2.2)
+        : (settings.proteinPerFfmCut || 2.6))),
+      calorieRemaining: todayCoach?._signals.calorieRemaining ?? null,
+      muscleVolume: dashboardStats.muscleVolume,
+      experienceLevel: settings.experienceLevel,
+      acwr: dashboardStats,
+      daysSinceMetric: gunFarki,
+      plateaus: plateauInsights,
+    });
+  }, [readiness, todayCoach, sortedWorkouts, sortedMetrics, computedComp,
+    settings.nutritionGoal, settings.proteinPerFfmBulk, settings.proteinPerFfmCut,
+    settings.experienceLevel, dashboardStats, plateauInsights]);
 
   const needsBackup = useMemo(() => {
     if (!lastBackupDate) return true;
@@ -1589,6 +1687,18 @@ export default function App() {
               readiness={readiness}
               personalVolume={personalVolume}
               todayCoach={todayCoach}
+              coachActions={coachActions}
+              // Her koç maddesi doğrudan ilgili ekranı açar; kullanıcı uyarıyı
+              // okuyup nereye gideceğini ayrıca aramasın.
+              onCoachAction={(hedef) => ({
+                workout: () => handleStartRequest(todayCoach?.workoutTemplate || null),
+                cardio: () => setIsCardioOpen(true),
+                nutrition: () => handleChangeView('nutrition'),
+                wellness: () => { setWellnessTab('sleep'); setIsWellnessOpen(true); },
+                metrics: () => { setProgressTab('body'); handleChangeView('progress'); },
+                analysis: () => { setProgressTab('analysis'); handleChangeView('progress'); },
+                plan: () => setIsWeekPlanOpen(true),
+              })[hedef]?.()}
               onOpenEnergy={() => setIsEnergyDetailOpen(true)}
               onOpenWellness={() => { setWellnessTab('sleep'); setIsWellnessOpen(true); }}
               onOpenCardio={() => setIsCardioOpen(true)}
@@ -1979,6 +2089,8 @@ export default function App() {
           avgDailyExercise={avgDailyExercise}
           estimatedMacros={estimatedTefMacros}
           maintenanceEstimated={!(adaptiveTDEE?.tdee > 0)}
+          onSetDayNeat={handleSetDayNeat}
+          defaultNeatMultiplier={settings.neatMultiplier || 1}
         />
 
         {/* KARDİYO */}
@@ -1989,7 +2101,10 @@ export default function App() {
           onSave={handleSaveCardio}
           onDelete={handleDeleteCardio}
           weightKg={latestWeight}
-          existing={cardioContext ? [] : cardioEntries}
+          // Tek bir kaydı düzenlerken liste gizlenir; onun dışında (bugün ya da
+          // geçmiş bir gün) o güne eklenenler görünür kalır, çünkü aynı güne
+          // arka arkaya birkaç aktivite eklenebiliyor.
+          entriesFor={cardioContext?.entry ? null : cardioEntriesFor}
           planned={!cardioContext || cardioContext.date === getLocalDateString() ? todayPlannedCardio : []}
           initialDate={cardioContext?.date || getLocalDateString()}
           editingEntry={cardioContext?.entry || null}

@@ -1,7 +1,7 @@
 import React, { useState, useMemo, memo } from 'react';
 import {
   X, CalendarRange, Clock, Layers, Flame, Moon, AlertTriangle, CheckCircle2, Info,
-  Plus, Trash2, Dumbbell, HeartPulse, Star, Pencil, Check, Zap,
+  Plus, Trash2, Dumbbell, HeartPulse, Star, Pencil, Check, Zap, ChevronDown,
 } from 'lucide-react';
 import MuscleHeatmap from './MuscleHeatmap';
 import { WEEKDAYS, computeWeekPlan, STATUS_LABEL, STATUS_COLOR, emptyPlan } from '../utils/weekPlan';
@@ -41,6 +41,8 @@ const WeeklyPlanModal = memo(({
 }) => {
   const [editingDay, setEditingDay] = useState(null);
   const [renaming, setRenaming] = useState(null);
+  // Kas dökümünde açık olan satır — hangi hareketin kaç set yazdığı burada açılır.
+  const [openMuscle, setOpenMuscle] = useState(null);
   const [seciliPlanId, setSeciliPlanId] = useState(activePlanId);
 
   // Görüntülenen program: kullanıcı listeden başkasını seçebilir, "aktif"
@@ -230,7 +232,7 @@ const WeeklyPlanModal = memo(({
         {result.activeRecoveryDays > 0 && (
           <div className="bg-indigo-950/20 border border-indigo-900/40 rounded-xl px-3 py-2 flex items-center justify-between gap-2">
             <span className="text-[10px] font-bold text-indigo-300">Aktif off day</span>
-            <span className="text-[9px] font-mono text-zinc-500">{result.activeRecoveryDays} gün · yalnızca eğlence temposu</span>
+            <span className="text-[9px] font-mono text-zinc-500">{result.activeRecoveryDays} gün · yalnızca aktif toparlanma temposu</span>
           </div>
         )}
 
@@ -376,7 +378,7 @@ const WeeklyPlanModal = memo(({
                                   onChange={(e) => slotGuncelle(d.key, slot.id, { effort: e.target.value })}
                                   className={`${kucukAlan} w-full`}
                                 >
-                                  {CARDIO_EFFORTS.map(x => <option key={x.key} value={x.key}>{x.label}</option>)}
+                                  {CARDIO_EFFORTS.map(x => <option key={x.key} value={x.key}>{x.fullLabel}</option>)}
                                 </select>
                               </label>
                             )}
@@ -523,20 +525,55 @@ const WeeklyPlanModal = memo(({
             <span className="text-[9px] font-mono text-zinc-600">tüm setler etkili varsayımı</span>
           </div>
           <div className="divide-y divide-zinc-800/70">
-            {result.statuses.map(s => (
-              <div key={s.muscle} className="px-4 py-2.5 flex justify-between items-center gap-2">
-                <span className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-[11px] font-bold text-zinc-200 truncate">{s.muscle}</span>
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded border shrink-0 ${STATUS_COLOR[s.status]}`}>
-                    {STATUS_LABEL[s.status]}
-                  </span>
-                </span>
-                <span className="text-[10px] font-mono text-zinc-400 shrink-0">
-                  <strong className="text-zinc-100">{s.volume}</strong>
-                  <span className="text-zinc-600"> · MEV {s.mev} / MAV {s.mav}</span>
-                </span>
-              </div>
-            ))}
+            {result.statuses.map(s => {
+              const acik = openMuscle === s.muscle;
+              const kaynakVar = s.sources.length > 0;
+              return (
+                <div key={s.muscle}>
+                  <button
+                    onClick={() => setOpenMuscle(acik ? null : s.muscle)}
+                    disabled={!kaynakVar}
+                    className="w-full px-4 py-2.5 flex justify-between items-center gap-2 text-left active:bg-zinc-800/50 disabled:active:bg-transparent transition-colors"
+                    aria-expanded={acik}
+                  >
+                    <span className="flex items-center gap-1.5 min-w-0">
+                      {kaynakVar
+                        ? <ChevronDown size={11} className={`text-zinc-600 shrink-0 transition-transform ${acik ? 'rotate-180' : ''}`} />
+                        : <span className="w-[11px] shrink-0" />}
+                      <span className="text-[11px] font-bold text-zinc-200 truncate">{s.muscle}</span>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded border shrink-0 ${STATUS_COLOR[s.status]}`}>
+                        {STATUS_LABEL[s.status]}
+                      </span>
+                    </span>
+                    <span className="text-[10px] font-mono text-zinc-400 shrink-0">
+                      <strong className="text-zinc-100">{s.volume}</strong>
+                      <span className="text-zinc-600"> · MEV {s.mev} / MAV {s.mav}</span>
+                    </span>
+                  </button>
+
+                  {/* Hangi hareket bu kasa ne kadar yazıyor.
+                      Katkı ağırlığı da gösteriliyor: bir hareket birincil kasına
+                      tam set, yardımcı kaslarına yarım ya da çeyrek set yazıyor,
+                      bu yüzden "4 set bench" göğüse 4, tricepse 2 set olabiliyor. */}
+                  {acik && (
+                    <div className="px-4 pb-3 pt-0.5 space-y-1 bg-zinc-950/50">
+                      {s.sources.map((src, i) => (
+                        <div key={`${src.day}-${src.name}-${i}`} className="flex justify-between items-baseline gap-2 text-[10px] font-mono">
+                          <span className="text-zinc-400 truncate min-w-0">
+                            <span className="text-zinc-600">{WEEKDAYS.find(w => w.key === src.day)?.short} · </span>
+                            {src.name}
+                          </span>
+                          <span className="text-zinc-500 shrink-0">
+                            {src.sets} set × {src.weight === 1 ? 'tam' : src.weight === 0.5 ? '½' : '¼'}
+                            {' = '}<strong className="text-cyan-400">{src.volume}</strong>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
