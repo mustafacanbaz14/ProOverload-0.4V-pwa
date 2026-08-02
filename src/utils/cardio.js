@@ -7,7 +7,7 @@
  */
 
 export const CARDIO_ACTIVITIES = [
-  { key: 'walk', label: 'Yürüyüş', met: 3.5, group: 'Koşu & Yürüyüş', hint: 'Rahat tempo, ~5 km/s' },
+  { key: 'walk', label: 'Yürüyüş', met: 3.5, group: 'Koşu & Yürüyüş', hint: 'Rahat tempo, ~5 km/s', activeRecovery: true },
   { key: 'walk_incline', label: 'Eğimli Yürüyüş', met: 6.0, group: 'Koşu & Yürüyüş', hint: 'Bantta %10-12 eğim, tutunmadan' },
   { key: 'zone2', label: 'Zone 2 Koşu', met: 7.0, group: 'Koşu & Yürüyüş', hint: 'Konuşabildiğin tempo, nabız maks. %60-70' },
   { key: 'run', label: 'Tempolu Koşu', met: 9.8, group: 'Koşu & Yürüyüş', hint: '~10 km/s sabit tempo' },
@@ -28,25 +28,25 @@ export const CARDIO_ACTIVITIES = [
   { key: 'padel', label: 'Padel / Squash', met: 7.3, group: 'Spor', hint: 'Sürekli ralli' },
   { key: 'hike', label: 'Doğa Yürüyüşü', met: 6.0, group: 'Spor', hint: 'Engebeli arazi' },
   { key: 'basketball_half', label: 'Basketbol (Yarı Saha)', met: 4.5, group: 'Spor', hint: 'Şut atma, hafif tempo' },
-  { key: 'pilates', label: 'Pilates', met: 3.0, group: 'Spor', hint: 'Mat çalışması' },
-  { key: 'yoga', label: 'Yoga', met: 3.0, group: 'Spor', hint: 'Hatha/akış temposu' },
+  { key: 'pilates', label: 'Pilates', met: 3.0, group: 'Spor', hint: 'Mat çalışması', activeRecovery: true },
+  { key: 'yoga', label: 'Yoga', met: 3.0, group: 'Spor', hint: 'Hatha/akış temposu', activeRecovery: true },
   { key: 'climbing', label: 'Tırmanış', met: 8.0, group: 'Spor', hint: 'Boulder / duvar' },
   { key: 'skiing', label: 'Kayak / Snowboard', met: 6.8, group: 'Spor', hint: 'Pist, orta tempo' },
   { key: 'dance', label: 'Dans', met: 5.5, group: 'Spor', hint: 'Sosyal dans temposu' },
-  { key: 'stationary_bike', label: 'Sabit Bisiklet (Hafif)', met: 5.0, group: 'Makine', hint: 'Düşük direnç' },
-  { key: 'treadmill_walk', label: 'Bantta Yürüyüş', met: 4.3, group: 'Makine', hint: 'Düz, 5-6 km/s' },
+  { key: 'stationary_bike', label: 'Sabit Bisiklet (Hafif)', met: 5.0, group: 'Makine', hint: 'Düşük direnç', activeRecovery: true },
+  { key: 'treadmill_walk', label: 'Bantta Yürüyüş', met: 4.3, group: 'Makine', hint: 'Düz, 5-6 km/s', activeRecovery: true },
   { key: 'ski_erg', label: 'Ski Ergo', met: 7.0, group: 'Makine', hint: 'Orta şiddet' },
   { key: 'assault_bike', label: 'Assault Bike', met: 10.0, group: 'Yüksek Şiddet', hint: 'Kollu bisiklet, yüksek şiddet' },
   { key: 'burpee', label: 'Burpee / Vücut Ağırlığı', met: 8.0, group: 'Yüksek Şiddet', hint: 'Sürekli tempo' },
   { key: 'sled', label: 'Kızak İtme / Çekme', met: 9.5, group: 'Yüksek Şiddet', hint: 'Ağır kızak, aralıklı' },
   { key: 'housework', label: 'Ev İşi', met: 3.3, group: 'Günlük', hint: 'Temizlik, toparlama' },
   { key: 'gardening', label: 'Bahçe İşi', met: 3.8, group: 'Günlük', hint: 'Kazma, budama' },
-  { key: 'shopping_walk', label: 'Alışveriş / Şehir Yürüyüşü', met: 3.5, group: 'Günlük', hint: 'Duraklamalı yürüyüş' },
+  { key: 'shopping_walk', label: 'Alışveriş / Şehir Yürüyüşü', met: 3.5, group: 'Günlük', hint: 'Duraklamalı yürüyüş', activeRecovery: true },
   { key: 'stairs_daily', label: 'Merdiven Çıkma (Günlük)', met: 5.0, group: 'Günlük', hint: 'Bina merdiveni' },
   // Cinsel aktivite: Compendium'da 1.8-2.8 MET aralığında ölçülmüştür ve
   // ortalama süre kısadır. Popüler kaynaklardaki yüksek rakamlar ölçüme
   // dayanmıyor; burada bilerek gerçekçi değer kullanılıyor.
-  { key: 'sex', label: 'Cinsel Aktivite', met: 2.8, group: 'Günlük', hint: 'Ölçümlere göre 1.8-2.8 MET; abartılı tahminlerden kaçınıldı' },
+  { key: 'sex', label: 'Cinsel Aktivite', met: 2.8, group: 'Günlük', hint: 'Ölçümlere göre 1.8-2.8 MET; abartılı tahminlerden kaçınıldı', activeRecovery: true },
 ];
 
 /**
@@ -240,11 +240,31 @@ export const resolvePlannedCardioMinutes = (slot, workouts = [], weightKg = 0, f
   return { minutes: fallback, source: 'default', stats };
 };
 
-/** Yalnız eğlence temposu kardiyo bulunan günü aktif dinlenme olarak sınıflar. */
+/**
+ * Tek girdinin off day'i bozmayacak kadar düşük yükte olup olmadığı.
+ *
+ * Rahat yürüyüş/yoga/hafif bisiklet gibi açıkça düşük-yük aktiviteleri tempo
+ * düğmesinden bağımsızdır. Diğer aktivitelerde yalnızca “Eğlence / Aktif
+ * Toparlanma” seçimi geçerlidir; HIIT'i eğlence diye işaretlemek onu toparlanma
+ * seansına dönüştürmez. 90 dakika sınırı da çok uzun bir aktivitenin sessizce
+ * off day sayılmasını engeller.
+ */
+export const isActiveRecoveryEntry = (entry = {}) => {
+  const activityKey = entry.type
+    || (typeof entry.activity === 'string' ? entry.activity : entry.activity?.key);
+  const activity = findActivity(activityKey);
+  const minutes = Number(entry.minutes) || 0;
+  if (!activity || minutes <= 0 || minutes > 90) return false;
+  if (activity.activeRecovery) return true;
+  const effort = findEffort(entry.effort || entry.effortInfo?.key);
+  return effort.key === 'fun' && activity.met * effort.met <= 5.2;
+};
+
+/** Yalnız aktif-toparlanma girdileri bulunan günü aktif dinlenme sınıflar. */
 export const isActiveRecoveryCardioDay = (strengthSessionCount = 0, entries = []) =>
   Number(strengthSessionCount) === 0
   && entries.length > 0
-  && entries.every(entry => findEffort(entry?.effort || entry?.effortInfo?.key).key === 'fun');
+  && entries.every(isActiveRecoveryEntry);
 
 /** Arşiv kartında tek kaydı aynı aktivitenin kişisel ortalamasıyla kıyaslar. */
 export const evaluateCardioEntry = (entry, workouts = [], weightKg = 0) => {

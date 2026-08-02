@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import { computeReadiness } from '../src/utils/readiness.js';
-import { dayEnergyBreakdown, theoreticalWeek, estimateMacrosForTef } from '../src/utils/energyModel.js';
+import { dayEnergyBreakdown, theoreticalWeek, estimateMacrosForTef, groupByWeek } from '../src/utils/energyModel.js';
 import { calorieDashboard, deriveGoalSet } from '../src/utils/goals.js';
 import { mergeWellnessDay } from '../src/utils/wellness.js';
 import { migrateWeekPlans, removeTemplateFromPlans } from '../src/utils/planMigration.js';
 import { suggestNextTarget, mergeWorkout } from '../src/utils/helpers.js';
 import { dailyTotals, nutritionDayScore } from '../src/utils/nutritionStats.js';
 import { buildPlateauInsights, buildNutritionPerformanceInsight } from '../src/utils/insights.js';
-import { resolvePlannedCardioMinutes, isActiveRecoveryCardioDay } from '../src/utils/cardio.js';
+import { resolvePlannedCardioMinutes, isActiveRecoveryCardioDay, isActiveRecoveryEntry } from '../src/utils/cardio.js';
+import { groupIntoWeeks } from '../src/utils/dates.js';
+import { deloadState } from '../src/utils/deload.js';
 
 const tests = [];
 const test = (name, run) => tests.push({ name, run });
@@ -76,9 +78,12 @@ test('elle girilen plan süresi arşiv ortalamasının önüne geçer', () => {
 });
 
 test('yalnız eğlence temposu kardiyo aktif off day sayılır ama kalorisi korunur', () => {
-  assert.equal(isActiveRecoveryCardioDay(0, [{ effort: 'fun' }]), true);
-  assert.equal(isActiveRecoveryCardioDay(1, [{ effort: 'fun' }]), false);
-  assert.equal(isActiveRecoveryCardioDay(0, [{ effort: 'fun' }, { effort: 'moderate' }]), false);
+  assert.equal(isActiveRecoveryCardioDay(0, [{ type: 'zone2', minutes: 30, effort: 'fun' }]), true);
+  assert.equal(isActiveRecoveryCardioDay(1, [{ type: 'zone2', minutes: 30, effort: 'fun' }]), false);
+  assert.equal(isActiveRecoveryCardioDay(0, [
+    { type: 'zone2', minutes: 30, effort: 'fun' },
+    { type: 'zone2', minutes: 30, effort: 'moderate' },
+  ]), false);
 });
 
 test('aktif off day enerji harcamasını korurken dinlenme olarak etiketlenir', () => {
@@ -216,6 +221,45 @@ test('yedekten gelen kardiyo tempo, plan ve not alanlarını korur', () => {
     id: 'cardio-1', type: 'zone2', minutes: 42, effort: 'easy',
     plannedEffort: 'moderate', plannedMinutes: 35, note: 'Parkur', manualEntry: true,
   });
+});
+
+test('düşük-yük yürüyüş off dayi korur, eğimli yürüyüş ve HIIT korumaz', () => {
+  assert.equal(isActiveRecoveryEntry({ type: 'walk', minutes: 45, effort: 'hard' }), true);
+  assert.equal(isActiveRecoveryEntry({ type: 'walk_incline', minutes: 45, effort: 'moderate' }), false);
+  assert.equal(isActiveRecoveryEntry({ type: 'hiit', minutes: 20, effort: 'fun' }), false);
+  assert.equal(isActiveRecoveryEntry({ type: 'walk', minutes: 120, effort: 'easy' }), false);
+  assert.equal(isActiveRecoveryCardioDay(0, [
+    { type: 'walk', minutes: 30, effort: 'moderate' },
+    { type: 'yoga', minutes: 20, effort: 'easy' },
+  ]), true);
+});
+
+test('ilk kısmi hafta ilk kayıttan pazar gününe kadar etiketlenir', () => {
+  const groups = groupIntoWeeks([
+    { date: '2026-07-23' },
+    { date: '2026-07-21' },
+  ]);
+  assert.equal(groups[0].partial, true);
+  assert.ok(groups[0].label.includes('21'));
+  assert.ok(groups[0].label.includes('26'));
+
+  const rows = ['2026-07-21', '2026-07-23'].map(date => ({
+    date, intake: 2000, out: 2400, balance: -400, isRestDay: true,
+    breakdown: { lifting: 0, cardio: 0, tef: { total: 150 }, epoc: 0 },
+  }));
+  const energyWeeks = groupByWeek(rows);
+  assert.ok(energyWeeks[0].rangeLabel.includes('21'));
+  assert.ok(energyWeeks[0].rangeLabel.includes('26'));
+});
+
+test('deload süresi gün gün ilerler ve süresi dolunca hesaplarda kapanır', () => {
+  const active = deloadState({ active: true, startDate: '2026-07-20', days: 7, preset: 'balanced' }, '2026-07-23');
+  assert.equal(active.active, true);
+  assert.equal(active.dayIndex, 4);
+  assert.equal(active.loadScale, 0.9);
+  const expired = deloadState({ active: true, startDate: '2026-07-20', days: 7, preset: 'balanced' }, '2026-07-27');
+  assert.equal(expired.active, false);
+  assert.equal(expired.expired, true);
 });
 
 for (const { name, run } of tests) {

@@ -52,6 +52,7 @@ export const buildCoachActions = (ctx = {}) => {
     macros = {}, targetProtein = 0, calorieRemaining = null,
     muscleVolume = {}, experienceLevel = 'intermediate',
     acwr, daysSinceMetric = null, plateaus = [],
+    deload = null, deloadSuggestion = null,
   } = ctx;
 
   const items = [];
@@ -65,13 +66,26 @@ export const buildCoachActions = (ctx = {}) => {
     ekle({
       key: 'joint', priority: 1, tone: TONES.danger, action: 'workout',
       title: 'Eklem ağrısı yüksek kaydedilmiş',
-      detail: 'Son seansta eklem ağrın 7+. Ağrıyan eklemi zorlayan bileşik hareketi bugün makine ya da izolasyon varyantıyla değiştir; DOMS geçer, eklem sorunu ısrar edilirse kalıcılaşır.',
+      detail: 'Son seansta eklem ağrın 7+. Eklem ağrısı kas ağrısıyla aynı sinyal değildir. Bugün ağrısız hareket aralığı ve daha kolay kontrol edilen bir varyant seç; ağrı sürüyorsa yükü zorlamadan değerlendirme al.',
     });
   }
 
-  if (readiness?.deloadOnerisi) {
+  // Deload sürüyorsa uyarı değil durum bildirimi: kullanıcı zaten önlemi almış.
+  if (deload?.active) {
     ekle({
-      key: 'deload', priority: 1, tone: TONES.warn, action: 'workout',
+      key: 'deload-running', priority: 1, tone: TONES.info, action: 'deload',
+      title: `Deload ${deload.dayIndex}/${deload.totalDays}. gün`,
+      detail: `${deload.preset.label} — ${deload.preset.summary}. Antrenman ekranındaki hedefler ölçekleniyor; ${deload.daysLeft} gün sonra kendiliğinden normale döner.`,
+    });
+  } else if (deloadSuggestion?.suggest) {
+    ekle({
+      key: 'deload', priority: 1, tone: TONES.warn, action: 'deload',
+      title: 'Deload zamanı geldi',
+      detail: `${deloadSuggestion.reasons.join('. ')}. Deload ekranından yaklaşımı ve süreyi seçersen hedefler kendiliğinden ölçeklenir.`,
+    });
+  } else if (readiness?.deloadOnerisi) {
+    ekle({
+      key: 'readiness-low', priority: 1, tone: TONES.warn, action: 'workout',
       title: 'Üst üste düşük hazır oluşluk',
       detail: `Son üç seansın ortalaması ${readiness.ortalama}/100. Hacim tavanı aşılmasa bile toparlanamıyorsun — bu hafta set sayısını %30 düşür, ağırlığı koru.`,
     });

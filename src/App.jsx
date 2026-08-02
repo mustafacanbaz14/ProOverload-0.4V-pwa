@@ -15,6 +15,9 @@ import { computeWeekPlan, findPlan } from './utils/weekPlan';
 import { removeTemplateFromPlans } from './utils/planMigration';
 import { buildPersonalVolumeGuidance } from './utils/personalization';
 import { buildCoachActions } from './utils/coach';
+import { deloadState, shouldSuggestDeload, emptyDeload } from './utils/deload';
+import DeloadModal from './components/DeloadModal';
+import SubstituteModal from './components/SubstituteModal';
 import { buildPlateauInsights } from './utils/insights';
 import { analyzeDayConflicts } from './utils/interference';
 import { averageDailyExercise, dayEnergyBreakdown, ACTIVITY_LEVELS, estimateMacrosForTef, thermicEffect, neatOptsForDay } from './utils/energyModel';
@@ -106,6 +109,9 @@ export default function App() {
   const [prCelebration, setPrCelebration] = useState(null);
   const [isWeekPlanOpen, setIsWeekPlanOpen] = useState(false);
   const [isWellnessOpen, setIsWellnessOpen] = useState(false);
+  const [isDeloadOpen, setIsDeloadOpen] = useState(false);
+  // Yerine hareket aranan giriş: { name, exerciseId }
+  const [substituteFor, setSubstituteFor] = useState(null);
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(() =>
     !initial.settings.onboardingComplete
@@ -1583,6 +1589,30 @@ export default function App() {
    */
   const plateauInsights = useMemo(() => buildPlateauInsights(workouts), [workouts]);
 
+  // Deload durumu her render'da tarihten yeniden hesaplanıyor; süre dolduğunda
+  // ayar yazılmıyor, yalnızca kapalı sayılıyor (render sırasında state yazmamak
+  // için). Kullanıcı kaydı kendisi temizliyor.
+  const deload = useMemo(
+    () => deloadState(settings.deload),
+    [settings.deload]);
+
+  const deloadSuggestion = useMemo(
+    () => shouldSuggestDeload({
+      readiness,
+      isDeloadNeeded: dashboardStats.isDeloadNeeded,
+      acwr: dashboardStats,
+    }),
+    [readiness, dashboardStats]);
+
+  /** Antrenmandaki bir hareketi başka bir hareketle değiştirir; setler korunur. */
+  const handleSubstituteExercise = useCallback((exerciseId, newName) => {
+    setActiveWorkout(prev => prev ? {
+      ...prev,
+      exercises: (prev.exercises || []).map(ex => ex.id === exerciseId ? { ...ex, name: newName } : ex),
+    } : prev);
+    showToast(`Hareket ${newName} ile değiştirildi.`);
+  }, [showToast]);
+
   const coachActions = useMemo(() => {
     const bugun = getLocalDateString();
     const sonOlcum = sortedMetrics[0]?.date;
@@ -1611,10 +1641,12 @@ export default function App() {
       acwr: dashboardStats,
       daysSinceMetric: gunFarki,
       plateaus: plateauInsights,
+      deload,
+      deloadSuggestion,
     });
   }, [readiness, todayCoach, sortedWorkouts, sortedMetrics, computedComp,
     settings.nutritionGoal, settings.proteinPerFfmBulk, settings.proteinPerFfmCut,
-    settings.experienceLevel, dashboardStats, plateauInsights]);
+    settings.experienceLevel, dashboardStats, plateauInsights, deload, deloadSuggestion]);
 
   const needsBackup = useMemo(() => {
     if (!lastBackupDate) return true;
@@ -1849,6 +1881,8 @@ export default function App() {
               onToggleSuperset={handleToggleSuperset}
               onEditExercise={setEditorExercise}
               onMoveExercise={moveExercise}
+              onSubstitute={(name, exerciseId) => setSubstituteFor({ name, exerciseId })}
+              deload={deload}
               onOpenCardio={() => setIsCardioOpen(true)}
               cardioKcal={totalCardioCalories(activeWorkout.cardio || [], latestWeight)}
               rest={rest}
@@ -1877,6 +1911,7 @@ export default function App() {
               weekPlan: () => setIsWeekPlanOpen(true),
               energy: () => setIsEnergyDetailOpen(true),
               sleep: () => { setWellnessTab('sleep'); setIsWellnessOpen(true); },
+              deload: () => setIsDeloadOpen(true),
             }[key];
             action?.();
           }}
@@ -2036,6 +2071,28 @@ export default function App() {
           workouts={workouts}
         />
 
+        {/* DELOAD */}
+        <DeloadModal
+          isOpen={isDeloadOpen}
+          onClose={() => setIsDeloadOpen(false)}
+          deload={settings.deload || emptyDeload()}
+          onChange={(next) => setSettings(prev => ({ ...prev, deload: next }))}
+          suggestion={deloadSuggestion}
+        />
+
+        {/* HAREKET İKAMESİ */}
+        <SubstituteModal
+          isOpen={Boolean(substituteFor)}
+          onClose={() => setSubstituteFor(null)}
+          exerciseName={substituteFor?.name || ''}
+          allExerciseNames={allExercisesNames}
+          customExercises={customExercises}
+          performedNames={performedNames}
+          onPick={(name) => {
+            if (substituteFor?.exerciseId) handleSubstituteExercise(substituteFor.exerciseId, name);
+          }}
+        />
+
         {/* REKOR KUTLAMASI */}
         <PRCelebration record={prCelebration} onDone={() => setPrCelebration(null)} />
 
@@ -2067,6 +2124,7 @@ export default function App() {
               guide: () => setIsMeasurementGuideOpen(true),
               report: () => setIsReportCardOpen(true),
               sleep: () => { setWellnessTab('sleep'); setIsWellnessOpen(true); },
+              deload: () => setIsDeloadOpen(true),
               mind: () => { setWellnessTab('mind'); setIsWellnessOpen(true); },
             }[key];
             ac?.();

@@ -181,12 +181,17 @@ export const groupIntoWeeks = (items = [], getDate = (x) => x?.date) => {
     // En eski hafta pazartesiden sonra başlıyorsa veri orada kesilmiş demektir.
     const clipped = i === gruplar.length - 1 && g.firstDate > g.weekStart;
     const kesik = ongoing || clipped;
+    // Aralık kayıt bulunan son güne göre kesilmez. Örneğin ilk kayıt salıysa
+    // “21–26 Tem” gösterilir; o hafta cuma kayıt olmaması haftayı cuma bitirmez.
+    // Yalnız ilk veri günü ve henüz gelmemiş gelecek günler gerçek sınırdır.
+    const gorunenBas = clipped ? g.firstDate : g.weekStart;
+    const gorunenSon = ongoing ? bugun : g.weekEnd;
     return {
       ...g,
       ongoing,
       clipped,
       partial: kesik,
-      label: kesik ? formatRange(g.firstDate, g.lastDate) : formatRange(g.weekStart, g.weekEnd),
+      label: formatRange(gorunenBas, gorunenSon),
       fullLabel: formatRange(g.weekStart, g.weekEnd),
       note: ongoing ? 'devam ediyor' : clipped ? 'kayıt bu gün başlıyor' : null,
     };

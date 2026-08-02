@@ -322,6 +322,23 @@ export const suggestNextTarget = (previousSets, { repRangeMin, repRangeMax }, mu
   // Küçük kas gruplarında 2.5 kg'lık sıçrama çok büyük kalır.
   const increment = SMALL_MUSCLE_GROUPS.includes(muscle) ? 1.25 : 2.5;
 
+  // Deload açıkken normal ilerleme mantığı devre dışı: amaç zaten yükü geri
+  // çekmek. Diğer dallardan önce dönülüyor, yoksa "tekrar arttır" önerisi
+  // deloadun kendisiyle çelişirdi.
+  const deload = context?.deload;
+  if (deload?.active) {
+    const hedefKg = Math.round(weight * deload.loadScale * 2) / 2;
+    return {
+      weight: hedefKg,
+      reps: Math.min(repRangeMax, reps),
+      confidence: 'high',
+      strategy: 'deload',
+      note: deload.loadScale < 1
+        ? `Deload ${deload.dayIndex}/${deload.totalDays}. gün — ağırlığı ${hedefKg} kg'a çek, set sayısını da azalt`
+        : `Deload ${deload.dayIndex}/${deload.totalDays}. gün — ağırlık aynı, set sayısını yarıya indir`,
+    };
+  }
+
   const readinessScore = parseNumber(context?.readiness?.score);
   const jointPain = parseNumber(context?.readiness?.jointPain);
   if (jointPain >= 9 || (readinessScore > 0 && readinessScore < 40)) {

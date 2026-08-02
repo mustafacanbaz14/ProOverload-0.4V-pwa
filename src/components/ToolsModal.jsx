@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import {
   X, Wrench, Brain, Dumbbell, CalendarPlus, CalendarRange, HeartPulse,
-  Trophy, Flame, Calculator, ArrowRightLeft, Ruler, Moon,
+  Trophy, Flame, Calculator, ArrowRightLeft, Ruler, Moon, BatteryLow,
 } from 'lucide-react';
 
 /**
@@ -23,6 +23,7 @@ const GROUPS = [
       { key: 'builder', label: 'Program Oluştur', hint: 'Gün gün şablon yaz', icon: CalendarPlus, color: 'text-emerald-400' },
       { key: 'weekPlan', label: 'Haftalık Programlar', hint: 'Çoklu program, saatli kardiyo, çakışma asistanı', icon: CalendarRange, color: 'text-cyan-400' },
       { key: 'plates', label: 'Plaka Hesaplayıcı', hint: 'Bar yüklemesi ve ısınma setleri', icon: Calculator, color: 'text-amber-400' },
+      { key: 'deload', label: 'Deload', hint: 'Boşaltma haftası kur; hedefler otomatik ölçeklenir', icon: BatteryLow, color: 'text-amber-400' },
     ],
   },
   {

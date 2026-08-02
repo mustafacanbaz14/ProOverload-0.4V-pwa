@@ -149,6 +149,9 @@ const CardioModal = memo(({
             <span className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest block">1 · Ne yaptın?</span>
             <strong className="text-[12px] text-zinc-100 block truncate">{activity?.label}</strong>
             <span className="text-[9px] font-mono text-zinc-500">{activity?.hint}</span>
+            {activity?.activeRecovery && (
+              <span className="text-[8px] font-bold text-indigo-300 block mt-1">Off day&apos;i bozmaz · aktif toparlanma</span>
+            )}
           </span>
           <span className="text-[9px] font-bold text-red-400 flex items-center shrink-0">Değiştir <ChevronDown size={12} className={`ml-1 transition-transform ${showActivities ? 'rotate-180' : ''}`} /></span>
         </button>
@@ -292,6 +295,7 @@ const CardioModal = memo(({
                     </span>
                   </div>
                   {a.hint && <span className="text-[9px] font-mono text-zinc-600 block mt-0.5">{a.hint}</span>}
+                  {a.activeRecovery && <span className="text-[8px] font-bold text-indigo-400 block mt-0.5">Aktif toparlanma · off day korunur</span>}
                 </button>
               ))}
             </div>

@@ -3,7 +3,7 @@ import { Trash2, Calendar, Scale, Beef, Pencil, Copy, BookmarkPlus, HeartPulse, 
 import { calcTonnage, calcEffectiveSets, isWorkingSet, foldForSearch, getLocalDateString } from '../utils/helpers';
 import {
   findActivity, findEffort, effortDelta, cardioEntryCalories, totalCardioCalories,
-  dayWorkoutCalories, cardioArchiveSummary, evaluateCardioEntry,
+  dayWorkoutCalories, cardioArchiveSummary, evaluateCardioEntry, isActiveRecoveryEntry,
 } from '../utils/cardio';
 import { dailyTotals } from '../utils/nutritionStats';
 import { parseNumber, clampNumber } from '../utils/helpers';
@@ -373,9 +373,9 @@ const HistoryView = memo(({
                     </p>
                   </div>
                 )}
-                {record.cardio.effort === 'fun' && (
+                {isActiveRecoveryEntry(record.cardio) && (
                   <span className="inline-flex text-[9px] font-bold text-indigo-300 border border-indigo-900/40 bg-indigo-950/20 rounded-lg px-2 py-1">
-                    Aktif toparlanma temposu
+                    Aktif toparlanma · off day korunur
                   </span>
                 )}
                 {record.cardio.note && <p className="text-[10px] text-zinc-400 bg-zinc-950/60 border border-zinc-800 rounded-lg px-2.5 py-2">{record.cardio.note}</p>}

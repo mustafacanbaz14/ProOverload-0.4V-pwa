@@ -1,7 +1,7 @@
 // Saf hesap modülü — yalnızca aynı katmandaki bağımsız modüllerden import eder.
 import { parseNumber } from './number.js';
 import { dailyTotals } from './nutritionStats.js';
-import { weekBounds, formatRange } from './dates.js';
+import { dayKey, weekBounds, formatRange } from './dates.js';
 
 /**
  * Günlük enerji harcamasının bileşenlere ayrılması.
@@ -365,20 +365,27 @@ export const groupByWeek = (series = []) => {
     weeks.set(key, w);
   });
 
-  return [...weeks.values()]
-    .map(w => ({
+  const sirali = [...weeks.values()]
+    .sort((a, b) => new Date(b.weekStart) - new Date(a.weekStart));
+  const bugun = dayKey(new Date());
+  const buHafta = weekBounds(bugun)?.startKey;
+
+  return sirali.map((w, index) => {
+    const ongoing = w.weekStart === buHafta && bugun < w.weekEnd;
+    const clipped = index === sirali.length - 1 && w.firstDate > w.weekStart;
+    return {
       ...w,
       kg: Math.round((w.balance / 7700) * 100) / 100,
       partial: w.days < 7,
-      // Eksik haftada aralık verinin gerçekten kapsadığı günleri gösterir;
-      // tam haftada takvim aralığı zaten aynı şeye denk geliyor.
-      rangeLabel: w.days < 7
-        ? formatRange(w.firstDate, w.lastDate)
-        : formatRange(w.weekStart, w.weekEnd),
+      ongoing,
+      clipped,
+      // Kayıt olmayan bir gün takvim haftasını erken bitirmez. İlk hafta veri
+      // salı başladıysa salı–pazar; devam eden hafta pazartesi–bugün gösterilir.
+      rangeLabel: formatRange(clipped ? w.firstDate : w.weekStart, ongoing ? bugun : w.weekEnd),
       // Günlük ortalama, eksik haftayı tam haftayla kıyaslanabilir kılar.
       dailyBalance: w.days > 0 ? Math.round(w.balance / w.days) : 0,
-    }))
-    .sort((a, b) => new Date(b.weekStart) - new Date(a.weekStart));
+    };
+  });
 };
 
 /**

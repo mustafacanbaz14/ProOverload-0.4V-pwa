@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { Activity, Pause, Play, Plus, X, Trash2, Trophy, TrendingUp, AlertCircle, Save, Timer, Layers, Link2, Unlink, BookmarkPlus, Settings, HeartPulse, ArrowUp, ArrowDown } from 'lucide-react';
+import { Activity, Pause, Play, Plus, X, Trash2, Trophy, TrendingUp, AlertCircle, Save, Timer, Layers, Link2, Unlink, BookmarkPlus, Settings, HeartPulse, ArrowUp, ArrowDown, Repeat, BatteryLow } from 'lucide-react';
 import WorkoutTimer from './WorkoutTimer';
 import { FORM_RATINGS, SET_TYPES } from '../utils/constants';
 import {
@@ -34,6 +34,8 @@ const ActiveWorkoutView = memo(({
   onToggleSuperset,
   onEditExercise,
   onMoveExercise,
+  onSubstitute,
+  deload,
 }) => {
   if (!activeWorkout) return null;
 
@@ -120,6 +122,22 @@ const ActiveWorkoutView = memo(({
           );
         })()}
 
+        {/* Deload bandı: hedeflerin neden düşük geldiği görünür olsun, yoksa
+            "uygulama yanlış öneriyor" gibi okunuyor. */}
+        {deload?.active && (
+          <div className="bg-amber-950/20 border border-amber-900/50 rounded-xl px-3 py-2.5 flex items-center gap-2.5">
+            <BatteryLow size={15} className="text-amber-400 shrink-0" />
+            <div className="min-w-0">
+              <span className="text-[10px] font-bold text-amber-300 block">
+                Deload · {deload.dayIndex}/{deload.totalDays}. gün
+              </span>
+              <span className="text-[9px] font-mono text-amber-200/80 block leading-relaxed">
+                {deload.preset.label} — {deload.preset.summary}. Hedefler buna göre geliyor.
+              </span>
+            </div>
+          </div>
+        )}
+
         {(activeWorkout.exercises || []).length === 0 && (
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 text-center space-y-3 my-4">
             <div className="p-3 bg-zinc-950 rounded-full w-12 h-12 mx-auto flex items-center justify-center border border-zinc-800 text-cyan-400">
@@ -142,6 +160,7 @@ const ActiveWorkoutView = memo(({
           const target = recentData ? suggestNextTarget(recentData.sets, settings, muscle, {
             history: recentData.history,
             readiness: activeWorkout.readiness,
+            deload,
           }) : null;
           const record = personalRecords.get(ex.name);
           // Katkılar büyükten küçüğe: birincil kas en solda.
@@ -183,6 +202,14 @@ const ActiveWorkoutView = memo(({
                     className={`p-1.5 transition-colors ${ex.supersetId ? 'text-purple-400' : 'text-zinc-600 active:text-purple-400'}`}
                   >
                     {ex.supersetId ? <Unlink size={13} /> : <Link2 size={13} />}
+                  </button>
+                  <button
+                    onClick={() => onSubstitute?.(ex.name, ex.id)}
+                    title="Bu hareketin yerine ne yapılabilir"
+                    aria-label="Yerine geçebilecek hareketleri gör"
+                    className="text-zinc-600 active:text-cyan-400 p-1.5"
+                  >
+                    <Repeat size={13} />
                   </button>
                   <button
                     onClick={() => onEditExercise?.(ex.name)}

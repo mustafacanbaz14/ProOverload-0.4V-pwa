@@ -48,6 +48,9 @@ export const DEFAULT_SETTINGS = {
   // BMI gösterimi: 'standard' klasik aralıklar, 'athletic' kas kütlesini
   // hesaba katan aralıklar.
   bmiMode: 'athletic',
+  // Deload (boşaltma) durumu: { active, startDate, days, preset }.
+  // Süre dolduğunda kayıt silinmiyor, deloadState onu kapalı sayıyor.
+  deload: { active: false, startDate: '', days: 7, preset: 'volume' },
   // Görünüm teması: 'dark' | 'light'
   theme: 'dark',
   // Yazı büyüklüğü çarpanı (kök font-size). 1 = varsayılan.

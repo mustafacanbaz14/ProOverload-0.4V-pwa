@@ -232,7 +232,7 @@ const WeeklyPlanModal = memo(({
         {result.activeRecoveryDays > 0 && (
           <div className="bg-indigo-950/20 border border-indigo-900/40 rounded-xl px-3 py-2 flex items-center justify-between gap-2">
             <span className="text-[10px] font-bold text-indigo-300">Aktif off day</span>
-            <span className="text-[9px] font-mono text-zinc-500">{result.activeRecoveryDays} gün · yalnızca aktif toparlanma temposu</span>
+            <span className="text-[9px] font-mono text-zinc-500">{result.activeRecoveryDays} gün · düşük-yük aktivite veya aktif toparlanma temposu</span>
           </div>
         )}
 
@@ -561,7 +561,7 @@ const WeeklyPlanModal = memo(({
                         <div key={`${src.day}-${src.name}-${i}`} className="flex justify-between items-baseline gap-2 text-[10px] font-mono">
                           <span className="text-zinc-400 truncate min-w-0">
                             <span className="text-zinc-600">{WEEKDAYS.find(w => w.key === src.day)?.short} · </span>
-                            {src.name}
+                            <span className="text-zinc-500">{src.templateName} · </span>{src.name}
                           </span>
                           <span className="text-zinc-500 shrink-0">
                             {src.sets} set × {src.weight === 1 ? 'tam' : src.weight === 0.5 ? '½' : '¼'}
