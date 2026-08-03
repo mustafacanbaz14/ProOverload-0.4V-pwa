@@ -242,8 +242,22 @@ export const dayEnergyBreakdown = ({
  * üçünün aynı sayıyı vermesi gerekiyor.
  */
 export const neatOptsForDay = (neatOpts = {}, record = {}) => {
-  const gunluk = parseNumber(record?.neatMultiplier);
-  return gunluk > 0 ? { ...neatOpts, neatMultiplier: gunluk } : neatOpts;
+  if (!record) return neatOpts;
+  const res = { ...neatOpts };
+  if (record.neatModeOverride) {
+    res.neatMode = record.neatModeOverride;
+  }
+  if (record.activityLevelOverride) {
+    res.activityLevel = record.activityLevelOverride;
+  }
+  if (parseNumber(record.neatManualOverride) > 0) {
+    res.neatManual = parseNumber(record.neatManualOverride);
+  }
+  const gunluk = parseNumber(record.neatMultiplier);
+  if (gunluk > 0) {
+    res.neatMultiplier = gunluk;
+  }
+  return res;
 };
 
 /**
@@ -297,8 +311,11 @@ export const buildEnergySeries = (nutritionHistory = [], {
         balance: Math.round(macros.calories - b.total),
         isRestDay: b.isRestDay,
         isActiveRest: b.isActiveRest,
-        // Bu güne özel çarpan girilmişse ham değeri; girilmemişse boş.
+        neatModeOverride: n.neatModeOverride ?? '',
+        activityLevelOverride: n.activityLevelOverride ?? '',
+        neatManualOverride: n.neatManualOverride ?? '',
         neatOverride: n.neatMultiplier ?? '',
+        steps: n.steps ?? '',
       };
     })
     .filter(d => d.intake > 0 || d.out > 0)

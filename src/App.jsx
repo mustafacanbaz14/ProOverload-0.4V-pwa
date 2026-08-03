@@ -1290,20 +1290,21 @@ export default function App() {
    * kayıt açılıyor — kullanıcı sırf çarpan girmek için önce beslenme yazmak
    * zorunda kalmasın.
    */
-  const handleSetDayNeat = useCallback((date, value) => {
+  const handleSetDayNeat = useCallback((date, updates) => {
+    const patch = typeof updates === 'object' && updates !== null ? updates : { neatMultiplier: updates };
     setNutritionHistory(prev => {
       const idx = prev.findIndex(n => n.date === date);
       let next;
       if (idx >= 0) {
         next = [...prev];
-        next[idx] = { ...next[idx], neatMultiplier: value };
+        next[idx] = { ...next[idx], ...patch };
       } else {
-        next = [mergeNutrition({ date, neatMultiplier: value }), ...prev];
+        next = [mergeNutrition({ date, ...patch }), ...prev];
       }
       return next;
     });
     setCurrentNutritionForm(prev =>
-      prev?.date === date ? { ...prev, neatMultiplier: value } : prev);
+      prev?.date === date ? { ...prev, ...patch } : prev);
   }, []);
 
   const handleNutritionDateChange = (date) => {

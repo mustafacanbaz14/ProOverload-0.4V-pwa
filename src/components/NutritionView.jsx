@@ -348,23 +348,71 @@ const NutritionView = memo(({
           </span>
         </div>
 
-        <div className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-xl p-2.5">
-          <span className="flex items-center gap-2 text-[10px] font-bold text-zinc-400">
-            <Footprints size={14} className="text-emerald-400" /> Hareket Çarpanı
-          </span>
-          <select
-            value={currentNutritionForm.neatMultiplier || ''}
-            onChange={(e) => setCurrentNutritionForm(prev => ({ ...prev, neatMultiplier: e.target.value ? Number(e.target.value) : '' }))}
-            className="bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1.5 font-mono text-zinc-300 text-[10px] outline-none focus:border-emerald-500"
-          >
-            <option value="">Genel Ayarı Kullan</option>
-            <option value="0.75">Çok durgun (×0.75)</option>
-            <option value="0.9">Durgun (×0.9)</option>
-            <option value="1">Normal (×1)</option>
-            <option value="1.15">Hareketli (×1.15)</option>
-            <option value="1.25">Çok hareketli (×1.25)</option>
-            <option value="1.4">Ayakta iş (×1.4)</option>
-          </select>
+        <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-2 text-[10px] font-bold text-zinc-400">
+              <Footprints size={14} className="text-emerald-400" /> Hareket Modu & Çarpanı
+            </span>
+            <select
+              value={currentNutritionForm.neatModeOverride || ''}
+              onChange={(e) => setCurrentNutritionForm(prev => ({ ...prev, neatModeOverride: e.target.value }))}
+              className="bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 font-mono text-zinc-300 text-[10px] outline-none focus:border-emerald-500"
+            >
+              <option value="">Genel Modu Kullan</option>
+              <option value="auto">Otomatik (Artık)</option>
+              <option value="level">Seviye Seçimi</option>
+              <option value="steps">Adım Sayısı</option>
+              <option value="manual">Elle Gir (Kcal)</option>
+            </select>
+          </div>
+
+          {currentNutritionForm.neatModeOverride === 'level' && (
+            <div className="flex items-center justify-between pt-1 border-t border-zinc-900">
+              <span className="text-[9px] font-bold text-zinc-500">Seviye</span>
+              <select
+                value={currentNutritionForm.activityLevelOverride || 'light'}
+                onChange={(e) => setCurrentNutritionForm(prev => ({ ...prev, activityLevelOverride: e.target.value }))}
+                className="bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 font-mono text-emerald-400 text-[10px] outline-none"
+              >
+                <option value="sedentary">Masa Başı (×0.15)</option>
+                <option value="light">Hafif (×0.25)</option>
+                <option value="moderate">Hareketli (×0.40)</option>
+                <option value="high">Fiziksel İş (×0.60)</option>
+              </select>
+            </div>
+          )}
+
+          {currentNutritionForm.neatModeOverride === 'manual' && (
+            <div className="flex items-center justify-between pt-1 border-t border-zinc-900">
+              <span className="text-[9px] font-bold text-zinc-500">Sabit Harcama (kcal)</span>
+              <input
+                type="number"
+                min={0}
+                max={5000}
+                value={currentNutritionForm.neatManualOverride || ''}
+                onChange={(e) => setCurrentNutritionForm(prev => ({ ...prev, neatManualOverride: e.target.value }))}
+                placeholder="Örn: 400"
+                className="w-24 bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 text-center font-mono text-emerald-400 text-[10px] outline-none"
+              />
+            </div>
+          )}
+
+          <div className="flex items-center justify-between pt-1 border-t border-zinc-900">
+            <span className="text-[9px] font-bold text-zinc-500">Çarpan (Ekstra)</span>
+            <select
+              value={currentNutritionForm.neatMultiplier || ''}
+              onChange={(e) => setCurrentNutritionForm(prev => ({ ...prev, neatMultiplier: e.target.value ? Number(e.target.value) : '' }))}
+              className="bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 font-mono text-zinc-300 text-[10px] outline-none focus:border-emerald-500"
+            >
+              <option value="">Genel Çarpan Kullan</option>
+              <option value="0.75">Çok durgun (×0.75)</option>
+              <option value="0.9">Durgun (×0.9)</option>
+              <option value="1">Normal (×1)</option>
+              <option value="1.15">Hareketli (×1.15)</option>
+              <option value="1.25">Çok hareketli (×1.25)</option>
+              <option value="1.4">Ayakta iş (×1.4)</option>
+            </select>
+          </div>
         </div>
 
         {isDaily ? (

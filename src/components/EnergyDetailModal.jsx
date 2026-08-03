@@ -350,50 +350,113 @@ const EnergyDetailModal = memo(({
                                     Bütün gün ayakta geçen bir gün ile masa başı
                                     geçen gün aynı çarpanla hesaplanamıyor; genel
                                     varsayılanı bozmadan tek gün düzeltilebiliyor. */}
-                                {onSetDayNeat && (
-                                  <div className="pt-1.5 border-t border-zinc-800 space-y-1.5">
-                                    <div className="flex justify-between items-center">
-                                      <span className="text-zinc-500">Günlük hareket çarpanı</span>
-                                      <span className={parseNumber(d.neatOverride) > 0 ? 'text-cyan-400 font-bold' : 'text-zinc-500'}>
-                                        ×{d.breakdown.neatMultiplier}
-                                        {parseNumber(d.neatOverride) > 0
-                                          ? ' · bu güne özel'
-                                          : ` · genel (×${defaultNeatMultiplier})`}
-                                      </span>
-                                    </div>
-                                    <div className="flex flex-wrap gap-1">
-                                      {NEAT_PRESETS.map(p => {
-                                        const currentVal = pendingNeats[d.date] !== undefined ? pendingNeats[d.date] : (parseNumber(d.neatOverride) || null);
-                                        const secili = p.value === currentVal;
-                                        return (
-                                          <button
-                                            key={p.label}
-                                            onClick={(e) => { e.stopPropagation(); setPendingNeats(prev => ({...prev, [d.date]: p.value})); }}
-                                            className={`px-2 py-1 rounded-lg border text-[9px] font-bold transition-colors ${secili
-                                              ? 'border-cyan-600 text-cyan-400 bg-cyan-950/25'
-                                              : 'border-zinc-800 text-zinc-500 bg-zinc-900'}`}
+                                {onSetDayNeat && (() => {
+                                  const initialObj = {
+                                    neatMultiplier: d.neatOverride || '',
+                                    neatModeOverride: d.neatModeOverride || '',
+                                    activityLevelOverride: d.activityLevelOverride || '',
+                                    neatManualOverride: d.neatManualOverride || '',
+                                  };
+                                  const cur = pendingNeats[d.date] !== undefined ? pendingNeats[d.date] : initialObj;
+                                  return (
+                                    <div className="pt-2 border-t border-zinc-800 space-y-2">
+                                      <div className="flex justify-between items-center">
+                                        <span className="text-[10px] font-bold text-zinc-400">Güne Özel Hareket (NEAT)</span>
+                                        <span className="text-[9px] font-mono text-cyan-400">
+                                          ×{d.breakdown.neatMultiplier} ({d.breakdown.neatSource || 'genel'})
+                                        </span>
+                                      </div>
+
+                                      <div className="grid grid-cols-2 gap-1.5">
+                                        <div>
+                                          <label className="text-[8px] font-mono text-zinc-500 block mb-0.5">Mod</label>
+                                          <select
+                                            value={cur.neatModeOverride || ''}
+                                            onChange={(e) => {
+                                              const val = e.target.value;
+                                              setPendingNeats(prev => ({ ...prev, [d.date]: { ...cur, neatModeOverride: val } }));
+                                            }}
+                                            className="w-full bg-zinc-900 border border-zinc-800 rounded px-1.5 py-1 text-[9px] font-mono text-zinc-200 outline-none"
                                           >
-                                            {p.label}
-                                          </button>
-                                        );
-                                      })}
-                                    </div>
-                                    {(pendingNeats[d.date] !== undefined && pendingNeats[d.date] !== (parseNumber(d.neatOverride) || null)) && (
-                                      <div className="flex justify-end mt-1.5">
+                                            <option value="">Genel Mod</option>
+                                            <option value="auto">Otomatik</option>
+                                            <option value="level">Seviye</option>
+                                            <option value="steps">Adım</option>
+                                            <option value="manual">Elle</option>
+                                          </select>
+                                        </div>
+
+                                        <div>
+                                          <label className="text-[8px] font-mono text-zinc-500 block mb-0.5">Çarpan</label>
+                                          <select
+                                            value={cur.neatMultiplier || ''}
+                                            onChange={(e) => {
+                                              const val = e.target.value ? Number(e.target.value) : '';
+                                              setPendingNeats(prev => ({ ...prev, [d.date]: { ...cur, neatMultiplier: val } }));
+                                            }}
+                                            className="w-full bg-zinc-900 border border-zinc-800 rounded px-1.5 py-1 text-[9px] font-mono text-zinc-200 outline-none"
+                                          >
+                                            <option value="">Genel Çarpan</option>
+                                            <option value="0.75">×0.75</option>
+                                            <option value="0.9">×0.90</option>
+                                            <option value="1">×1.00</option>
+                                            <option value="1.15">×1.15</option>
+                                            <option value="1.25">×1.25</option>
+                                            <option value="1.4">×1.40</option>
+                                          </select>
+                                        </div>
+                                      </div>
+
+                                      {cur.neatModeOverride === 'level' && (
+                                        <div>
+                                          <label className="text-[8px] font-mono text-zinc-500 block mb-0.5">Aktivite Seviyesi</label>
+                                          <select
+                                            value={cur.activityLevelOverride || 'light'}
+                                            onChange={(e) => {
+                                              const val = e.target.value;
+                                              setPendingNeats(prev => ({ ...prev, [d.date]: { ...cur, activityLevelOverride: val } }));
+                                            }}
+                                            className="w-full bg-zinc-900 border border-zinc-800 rounded px-1.5 py-1 text-[9px] font-mono text-emerald-400 outline-none"
+                                          >
+                                            <option value="sedentary">Masa Başı (×0.15)</option>
+                                            <option value="light">Hafif (×0.25)</option>
+                                            <option value="moderate">Hareketli (×0.40)</option>
+                                            <option value="high">Fiziksel İş (×0.60)</option>
+                                          </select>
+                                        </div>
+                                      )}
+
+                                      {cur.neatModeOverride === 'manual' && (
+                                        <div>
+                                          <label className="text-[8px] font-mono text-zinc-500 block mb-0.5">Sabit Harcama (kcal)</label>
+                                          <input
+                                            type="number"
+                                            value={cur.neatManualOverride || ''}
+                                            onChange={(e) => {
+                                              const val = e.target.value;
+                                              setPendingNeats(prev => ({ ...prev, [d.date]: { ...cur, neatManualOverride: val } }));
+                                            }}
+                                            placeholder="Örn: 400"
+                                            className="w-full bg-zinc-900 border border-zinc-800 rounded px-1.5 py-1 text-[9px] font-mono text-emerald-400 outline-none"
+                                          />
+                                        </div>
+                                      )}
+
+                                      <div className="flex justify-end pt-1">
                                         <button
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            onSetDayNeat(d.date, pendingNeats[d.date] ?? '');
-                                            setPendingNeats(prev => { const n = {...prev}; delete n[d.date]; return n; });
+                                            onSetDayNeat(d.date, cur);
+                                            setPendingNeats(prev => { const n = { ...prev }; delete n[d.date]; return n; });
                                           }}
-                                          className="bg-cyan-600 active:bg-cyan-700 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-lg shadow-cyan-950/30"
+                                          className="bg-cyan-600 active:bg-cyan-700 text-white px-3 py-1 rounded text-[9px] font-bold shadow"
                                         >
                                           Kaydet
                                         </button>
                                       </div>
-                                    )}
-                                  </div>
-                                )}
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             </td>
                           </tr>
