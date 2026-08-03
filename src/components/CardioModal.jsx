@@ -3,6 +3,7 @@ import { X, HeartPulse, Flame, Clock, Plus, Trash2, Gauge, CalendarCheck, Chevro
 import {
   CARDIO_ACTIVITIES, CARDIO_SECTIONS, CARDIO_EFFORTS, DEFAULT_EFFORT,
   findActivity, findEffort, estimateCardioCalories, cardioEntryCalories, effortDelta,
+  isActiveRecoveryEntry,
 } from '../utils/cardio';
 import { clampNumber, INPUT_LIMITS, foldForSearch, getLocalDateString } from '../utils/helpers';
 import { formatDay } from '../utils/dates';
@@ -154,7 +155,7 @@ const CardioModal = memo(({
             <span className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest block">1 · Ne yaptın?</span>
             <strong className="text-[12px] text-zinc-100 block truncate">{activity?.label}</strong>
             <span className="text-[9px] font-mono text-zinc-500">{activity?.hint}</span>
-            {activity?.activeRecovery && (
+            {isAR && (
               <span className="text-[8px] font-bold text-indigo-300 block mt-1">Off day&apos;i bozmaz · aktif toparlanma</span>
             )}
           </span>

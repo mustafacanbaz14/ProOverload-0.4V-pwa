@@ -570,20 +570,20 @@ export const VOLUME_STATUS = {
   over: { label: 'Tavan üstü', chip: 'text-red-400 border-red-900/40 bg-red-950/40', bar: 'bg-red-500', text: 'text-red-400', hex: '#ef4444' },
 };
 
-export const APP_VERSION = '2.5.6';
+export const APP_VERSION = '2.5.7';
 
 export const LATEST_RELEASE_NOTES = {
-  version: '2.5.6',
-  title: 'Neler Yeni? (v2.5.6)',
+  version: '2.5.7',
+  title: 'Neler Yeni? (v2.5.7)',
   date: '2026-08-04',
   items: [
     {
-      title: 'Özel (Elle Girilebilir) Tempo Çarpanı',
-      desc: 'Kardiyo ve aktivitelerde 0.1 ile 3.0 arasında özel tempo katsayısı girebilirsin. Elle girilen düşük katsayılı (MET ≤ 5.2) aktiviteler o günkü Off Day durumunu korur.'
+      title: 'Kardiyo Düzenleme Modalı Düzeltildi',
+      desc: 'Geçmiş kardiyo kayıtlarını düzenlerken modaldaki eksik modül aktarımı giderildi; sayfa çökmesi önlendi.'
     },
     {
-      title: 'Aktiviteye Özel Esnek Hesaplama',
-      desc: 'Girilen özel tempo katsayısı yalnızca seçili kaydı etkiler; genel kütüphane ve geçmiş kayıt yapısı korunur.'
+      title: 'Özel Tempo Çarpanı Desteği',
+      desc: 'Kardiyo ve aktivitelerde 0.1 ile 3.0 arasında özel tempo katsayısı girebilirsin. Elle girilen düşük katsayılı (MET ≤ 5.2) aktiviteler o günkü Off Day durumunu korur.'
     }
   ]
 };
