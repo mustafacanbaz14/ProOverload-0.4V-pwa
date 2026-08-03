@@ -1300,7 +1300,6 @@ export default function App() {
       } else {
         next = [mergeNutrition({ date, neatMultiplier: value }), ...prev];
       }
-      saveLocal('nutritionHistory', next);
       return next;
     });
     setCurrentNutritionForm(prev =>
