@@ -63,6 +63,7 @@ const EnergyDetailModal = memo(({
   const [tab, setTab] = useState('today');
   // Tabloda açılan gün — geçmiş günün dökümünü satır altında gösterir.
   const [openDay, setOpenDay] = useState(null);
+  const [pendingNeats, setPendingNeats] = useState({});
   const bmr = parseNumber(computedComp?.bmr);
 
   const series = useMemo(
@@ -362,13 +363,12 @@ const EnergyDetailModal = memo(({
                                     </div>
                                     <div className="flex flex-wrap gap-1">
                                       {NEAT_PRESETS.map(p => {
-                                        const secili = p.value === null
-                                          ? !(parseNumber(d.neatOverride) > 0)
-                                          : parseNumber(d.neatOverride) === p.value;
+                                        const currentVal = pendingNeats[d.date] !== undefined ? pendingNeats[d.date] : (parseNumber(d.neatOverride) || null);
+                                        const secili = p.value === currentVal;
                                         return (
                                           <button
                                             key={p.label}
-                                            onClick={(e) => { e.stopPropagation(); onSetDayNeat(d.date, p.value ?? ''); }}
+                                            onClick={(e) => { e.stopPropagation(); setPendingNeats(prev => ({...prev, [d.date]: p.value})); }}
                                             className={`px-2 py-1 rounded-lg border text-[9px] font-bold transition-colors ${secili
                                               ? 'border-cyan-600 text-cyan-400 bg-cyan-950/25'
                                               : 'border-zinc-800 text-zinc-500 bg-zinc-900'}`}
@@ -378,6 +378,20 @@ const EnergyDetailModal = memo(({
                                         );
                                       })}
                                     </div>
+                                    {(pendingNeats[d.date] !== undefined && pendingNeats[d.date] !== (parseNumber(d.neatOverride) || null)) && (
+                                      <div className="flex justify-end mt-1.5">
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            onSetDayNeat(d.date, pendingNeats[d.date] ?? '');
+                                            setPendingNeats(prev => { const n = {...prev}; delete n[d.date]; return n; });
+                                          }}
+                                          className="bg-cyan-600 active:bg-cyan-700 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-lg shadow-cyan-950/30"
+                                        >
+                                          Kaydet
+                                        </button>
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                               </div>

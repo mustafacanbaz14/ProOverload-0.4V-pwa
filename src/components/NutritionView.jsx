@@ -1,7 +1,7 @@
 import React, { memo, useMemo, useState } from 'react';
 import {
   Activity, BarChart3, Beef, ChevronDown, Copy,
-  Droplets, Flame, Plus, Save, Search, Sparkles, Trash2, TrendingUp,
+  Droplets, Flame, Plus, Save, Search, Sparkles, Trash2, TrendingUp, Footprints,
 } from 'lucide-react';
 import {
   parseNumber, clampNumber, INPUT_LIMITS, getLocalDateString,
@@ -346,6 +346,25 @@ const NutritionView = memo(({
             />
             <span className="text-[9px] font-mono text-zinc-600">/ {dayScore?.waterTarget || 2500} ml</span>
           </span>
+        </div>
+
+        <div className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-xl p-2.5">
+          <span className="flex items-center gap-2 text-[10px] font-bold text-zinc-400">
+            <Footprints size={14} className="text-emerald-400" /> Hareket Çarpanı
+          </span>
+          <select
+            value={currentNutritionForm.neatMultiplier || ''}
+            onChange={(e) => setCurrentNutritionForm(prev => ({ ...prev, neatMultiplier: e.target.value ? Number(e.target.value) : '' }))}
+            className="bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1.5 font-mono text-zinc-300 text-[10px] outline-none focus:border-emerald-500"
+          >
+            <option value="">Genel Ayarı Kullan</option>
+            <option value="0.75">Çok durgun (×0.75)</option>
+            <option value="0.9">Durgun (×0.9)</option>
+            <option value="1">Normal (×1)</option>
+            <option value="1.15">Hareketli (×1.15)</option>
+            <option value="1.25">Çok hareketli (×1.25)</option>
+            <option value="1.4">Ayakta iş (×1.4)</option>
+          </select>
         </div>
 
         {isDaily ? (
