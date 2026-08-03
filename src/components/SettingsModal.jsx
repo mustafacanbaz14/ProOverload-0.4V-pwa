@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
-import { X, Settings, Download, Upload, Smartphone, HeartPulse, Database, Dumbbell, Beef, Sun, Moon, Footprints, Layers3 } from 'lucide-react';
+import { X, Settings, Download, Upload, Smartphone, HeartPulse, Database, Dumbbell, Beef, Sun, Moon, Footprints, Layers3, Sparkles } from 'lucide-react';
 import { exportAppleHealthXML, exportGoogleFitJSON } from '../utils/healthSync';
-import { EXPERIENCE_LEVELS } from '../utils/constants';
+import { EXPERIENCE_LEVELS, APP_VERSION } from '../utils/constants';
 import { ratesForGoal } from '../utils/goals';
 import { ACTIVITY_LEVELS } from '../utils/energyModel';
 
@@ -50,6 +50,7 @@ const SettingsModal = memo(({
   nutritionHistory,
   lastBackupDate,
   onOpenOnboarding,
+  onOpenReleaseNotes,
   profileGender = 'male',
 }) => {
   if (!isOpen) return null;
@@ -545,6 +546,25 @@ const SettingsModal = memo(({
               >
                 <Download size={12} className="text-blue-400" /> Google Fit
               </button>
+            </div>
+          </Group>
+
+          {/* --- SÜRÜM BİLGİSİ --- */}
+          <Group icon={<Sparkles size={12} className="text-cyan-400" />} title="Sürüm & Güncelleme">
+            <div className="flex items-center justify-between bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+              <div>
+                <span className="text-[11px] font-bold text-zinc-200 block">ProOverload v{APP_VERSION}</span>
+                <span className="text-[9px] font-mono text-zinc-500 block mt-0.5">Son Güncelleme Notları</span>
+              </div>
+              {onOpenReleaseNotes && (
+                <button
+                  type="button"
+                  onClick={onOpenReleaseNotes}
+                  className="bg-zinc-900 border border-zinc-800 hover:border-cyan-800 text-cyan-400 text-[10px] font-bold px-3 py-1.5 rounded-lg active:bg-zinc-800 transition-colors"
+                >
+                  Notları Oku
+                </button>
+              )}
             </div>
           </Group>
         </div>

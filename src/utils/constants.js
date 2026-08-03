@@ -566,3 +566,29 @@ export const VOLUME_STATUS = {
   high: { label: 'Yüksek', chip: 'text-orange-400 border-orange-900/40 bg-orange-950/40', bar: 'bg-orange-500', text: 'text-orange-400', hex: '#f97316' },
   over: { label: 'Tavan üstü', chip: 'text-red-400 border-red-900/40 bg-red-950/40', bar: 'bg-red-500', text: 'text-red-400', hex: '#ef4444' },
 };
+
+export const APP_VERSION = '2.5.4';
+
+export const LATEST_RELEASE_NOTES = {
+  version: '2.5.4',
+  title: 'Neler Yeni? (v2.5.4)',
+  date: '2026-08-04',
+  items: [
+    {
+      title: 'Otomatik Güncelleme Bildirimi',
+      desc: 'Uygulama güncellendiğinde yenilikler ilk açılışta otomatik gösterilir.'
+    },
+    {
+      title: 'Güncelleme Geçmişi',
+      desc: 'Ayarlar sayfasının en altından son güncelleme notlarını dilediğiniz zaman tekrar açabilirsiniz.'
+    },
+    {
+      title: 'Güne Özel NEAT Yönetimi',
+      desc: 'Geçmiş veya bugün için günlük hareket modunu (Otomatik, Seviye, Adım, Elle) ve çarpanını gün bazlı özelleştirin.'
+    },
+    {
+      title: 'Hassas Uyku Puanı Girişi',
+      desc: 'Uyku puanı slider hassasiyeti 1 puanlık hassasiyete kavuşturuldu.'
+    }
+  ]
+};

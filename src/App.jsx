@@ -7,7 +7,7 @@ import {
   requestWakeLock, playRestAlert, vibrateAlert
 } from './lockScreen';
 
-import { DEFAULT_EXERCISES, MUSCLE_GROUPS, BODY_METRICS, getVolumeLandmarks, ACWR_MIN_DAYS } from './utils/constants';
+import { DEFAULT_EXERCISES, MUSCLE_GROUPS, BODY_METRICS, getVolumeLandmarks, ACWR_MIN_DAYS, APP_VERSION } from './utils/constants';
 import { migrateCustomExercises } from './utils/migrations';
 import { computeAdaptiveTDEE } from './utils/tdee';
 import { totalCardioCalories, dayWorkoutCalories } from './utils/cardio';
@@ -67,6 +67,7 @@ import TrainingView from './components/TrainingView';
 import ProgressHubView from './components/ProgressHubView';
 import GlobalSearchModal from './components/GlobalSearchModal';
 import OnboardingModal from './components/OnboardingModal';
+import ReleaseNotesModal from './components/ReleaseNotesModal';
 import { formatDay, formatDayRelative } from './utils/dates';
 import { emptyWellnessDay, mergeWellnessDay, dayMindCalories, computeSleepScore } from './utils/wellness';
 import { buildCycleSummary, emptyCycleDay, mergeCycleDay } from './utils/cycle';
@@ -119,6 +120,19 @@ export default function App() {
     && initial.workouts.length === 0
     && initial.metricsHistory.length === 0
     && initial.nutritionHistory.length === 0);
+  const [isReleaseNotesOpen, setIsReleaseNotesOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      const lastSeen = localStorage.getItem('po_last_seen_version');
+      if (lastSeen !== APP_VERSION) {
+        setIsReleaseNotesOpen(true);
+        localStorage.setItem('po_last_seen_version', APP_VERSION);
+      }
+    } catch {
+      // localStorage erişim engellerine karşı koruma
+    }
+  }, []);
   // Araçlar listesinde uyku ve meditasyon ayrı giriş; hangisinden gelindiyse
   // Toparlanma ekranı o sekmede açılır.
   const [wellnessTab, setWellnessTab] = useState('sleep');
@@ -2054,7 +2068,14 @@ export default function App() {
           nutritionHistory={nutritionHistory}
           lastBackupDate={lastBackupDate}
           onOpenOnboarding={() => setIsOnboardingOpen(true)}
+          onOpenReleaseNotes={() => setIsReleaseNotesOpen(true)}
           profileGender={profileGender}
+        />
+
+        {/* RELEASE NOTES MODAL */}
+        <ReleaseNotesModal
+          isOpen={isReleaseNotesOpen}
+          onClose={() => setIsReleaseNotesOpen(false)}
         />
 
         {/* QR CODE MODAL */}
