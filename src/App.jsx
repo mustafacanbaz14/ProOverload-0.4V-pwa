@@ -1293,12 +1293,15 @@ export default function App() {
   const handleSetDayNeat = useCallback((date, value) => {
     setNutritionHistory(prev => {
       const idx = prev.findIndex(n => n.date === date);
+      let next;
       if (idx >= 0) {
-        const next = [...prev];
+        next = [...prev];
         next[idx] = { ...next[idx], neatMultiplier: value };
-        return next;
+      } else {
+        next = [mergeNutrition({ date, neatMultiplier: value }), ...prev];
       }
-      return [mergeNutrition({ date, neatMultiplier: value }), ...prev];
+      saveLocal('nutritionHistory', next);
+      return next;
     });
     setCurrentNutritionForm(prev =>
       prev?.date === date ? { ...prev, neatMultiplier: value } : prev);

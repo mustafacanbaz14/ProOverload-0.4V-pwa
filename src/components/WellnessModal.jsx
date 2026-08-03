@@ -167,7 +167,7 @@ const WellnessModal = memo(({
                 <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Hızlı Puan</h4>
                 <strong className="text-sm font-mono text-purple-300">{uyku.quickScore || '—'}/100</strong>
               </div>
-              <input type="range" min={0} max={100} step={5} value={uyku.quickScore || 0}
+              <input type="range" min={0} max={100} step={1} value={uyku.quickScore || 0}
                 onChange={(e) => uykuGuncelle({ quickScore: Number(e.target.value) })}
                 className="w-full accent-purple-500" aria-label="Genel uyku puanı" />
               <div className="grid grid-cols-5 gap-1.5">
