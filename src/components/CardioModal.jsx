@@ -22,6 +22,7 @@ const CardioModal = memo(({
   const [type, setType] = useState(editingEntry?.type || 'zone2');
   const [minutes, setMinutes] = useState(editingEntry?.minutes || 30);
   const [effort, setEffort] = useState(editingEntry?.effort || DEFAULT_EFFORT);
+  const [customEffortMultiplier, setCustomEffortMultiplier] = useState(editingEntry?.customEffortMultiplier ?? 0.72);
   const [date, setDate] = useState(initialDate || getLocalDateString());
   const [note, setNote] = useState(editingEntry?.note || '');
   const [showActivities, setShowActivities] = useState(false);
@@ -38,9 +39,10 @@ const CardioModal = memo(({
   if (!isOpen) return null;
 
   const activity = findActivity(type);
-  const effortInfo = findEffort(effort);
+  const effortInfo = findEffort(effort, customEffortMultiplier);
   const kcal = estimateCardioCalories((activity?.met || 0) * effortInfo.met, weightKg, minutes);
   const canSave = Boolean(activity) && Number(minutes) > 0;
+  const isAR = isActiveRecoveryEntry({ type, minutes, effort, customEffortMultiplier });
   const normalizedActivityQuery = foldForSearch(activityQuery).trim();
   const visibleActivities = normalizedActivityQuery
     ? CARDIO_ACTIVITIES.filter(item => foldForSearch(`${item.label} ${item.group} ${item.hint || ''}`).includes(normalizedActivityQuery))
@@ -51,18 +53,21 @@ const CardioModal = memo(({
     setType(activityKey);
     setMinutes(slot.minutes);
     setEffort(slot.effort || DEFAULT_EFFORT);
+    if (slot.customEffortMultiplier) setCustomEffortMultiplier(slot.customEffortMultiplier);
     setShowActivities(false);
     setPlan({ effort: slot.effort || DEFAULT_EFFORT, minutes: Number(slot.minutes) || 0 });
   };
 
   // Planlanan ile şu an seçilen arasındaki fark — kaydetmeden önce görünür.
   const fark = plan ? effortDelta({
-    type, minutes, effort, plannedEffort: plan.effort, plannedMinutes: plan.minutes,
+    type, minutes, effort, customEffortMultiplier, plannedEffort: plan.effort, plannedMinutes: plan.minutes,
   }, weightKg) : null;
 
   const kaydet = () => onSave({
     ...(editingEntry?.id ? { id: editingEntry.id } : {}),
-    type, minutes: Number(minutes), effort, date, note: note.trim(),
+    type, minutes: Number(minutes), effort,
+    ...(effort === 'custom' ? { customEffortMultiplier: Number(customEffortMultiplier) || 1.0 } : {}),
+    date, note: note.trim(),
     ...(plan ? { plannedEffort: plan.effort, plannedMinutes: plan.minutes } : {}),
   });
 
@@ -228,20 +233,36 @@ const CardioModal = memo(({
           <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center">
             <Gauge size={12} className="mr-1.5 text-amber-400" /> 3 · Tempo nasıldı?
           </span>
-          <div className="grid grid-cols-5 gap-1.5">
+          <div className="grid grid-cols-6 gap-1">
             {CARDIO_EFFORTS.map(e => (
               <button
                 key={e.key}
                 onClick={() => setEffort(e.key)}
-                className={`py-1.5 px-1 rounded-lg border leading-tight transition-colors ${effort === e.key ? 'bg-amber-900/25 border-amber-600 text-amber-300' : 'bg-zinc-950 border-zinc-800 text-zinc-500'}`}
+                className={`py-1.5 px-0.5 rounded-lg border leading-tight transition-colors text-center ${effort === e.key ? 'bg-amber-900/25 border-amber-600 text-amber-300' : 'bg-zinc-950 border-zinc-800 text-zinc-500'}`}
               >
-                <span className="text-[9px] font-bold block">{e.label}</span>
-                {/* Kademenin ne anlama geldiği etiketin altında: "Eğlence" tek
-                    başına aktif toparlanma olduğunu söylemiyordu. */}
-                <span className="text-[7px] font-mono opacity-70 block leading-tight mt-0.5">{e.subLabel}</span>
+                <span className="text-[9px] font-bold block truncate">{e.label}</span>
+                <span className="text-[7px] font-mono opacity-70 block leading-tight mt-0.5 truncate">{e.subLabel}</span>
               </button>
             ))}
           </div>
+          {effort === 'custom' && (
+            <div className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 mt-2">
+              <span className="text-[10px] font-mono text-zinc-400">Özel Tempo Çarpanı (0.1 - 3.0):</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-mono text-zinc-500">×</span>
+                <input
+                  type="number"
+                  step="0.05"
+                  min="0.1"
+                  max="3.0"
+                  value={customEffortMultiplier}
+                  onChange={(e) => setCustomEffortMultiplier(e.target.value)}
+                  onBlur={(e) => setCustomEffortMultiplier(clampNumber(e.target.value, 0.1, 3.0) || 1.0)}
+                  className="w-20 bg-zinc-900 border border-amber-600/50 rounded-lg py-1 px-2 text-center font-mono text-amber-300 text-xs outline-none focus:border-amber-500"
+                />
+              </div>
+            </div>
+          )}
           <p className="text-[9px] font-mono text-zinc-500 leading-relaxed">
             {effortInfo.hint}. Kalori ×{effortInfo.met}, yorgunluk ×{effortInfo.fatigue}.
             Compendium aynı aktiviteyi şiddete göre ayrı listeliyor; tek MET değeri

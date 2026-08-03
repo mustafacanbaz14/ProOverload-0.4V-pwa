@@ -333,6 +333,14 @@ test('düşük-yük yürüyüş off dayi korur, eğimli yürüyüş ve HIIT koru
   ]), true);
 });
 
+test('özel tempo katsayısı kalori, yorgunluk ve aktif toparlanmayı hesaplar', () => {
+  const swimEntry = { type: 'swim', minutes: 30, effort: 'custom', customEffortMultiplier: 0.52 };
+  assert.equal(isActiveRecoveryEntry(swimEntry), true);
+
+  const hardSwim = { type: 'swim', minutes: 30, effort: 'custom', customEffortMultiplier: 1.2 };
+  assert.equal(isActiveRecoveryEntry(hardSwim), false);
+});
+
 test('ilk kısmi hafta ilk kayıttan pazar gününe kadar etiketlenir', () => {
   const groups = groupIntoWeeks([
     { date: '2026-07-23' },

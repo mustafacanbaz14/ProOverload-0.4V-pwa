@@ -310,7 +310,7 @@ const HistoryView = memo(({
                               <span className="font-bold text-zinc-200 truncate pr-2">{findActivity(c.type)?.label || c.type}</span>
                               <span className="text-zinc-400 text-[10px] shrink-0">
                                 {c.minutes} dk
-                                {c.effort && ` · ${findEffort(c.effort).fullLabel}`}
+                                {c.effort && ` · ${findEffort(c).fullLabel}`}
                                 {weightForDate(w.date) > 0 && ` · ${cardioEntryCalories(c, weightForDate(w.date), true)} kcal`}
                               </span>
                             </div>
@@ -385,7 +385,7 @@ const HistoryView = memo(({
             <div className="text-center py-12 text-zinc-600 text-xs font-mono">Henüz kardiyo veya aktivite kaydı yok</div>
           ) : <WeekGroups key="cardio" items={filteredCardio} expandAll={Boolean(q)}>{record => {
             const activity = findActivity(record.cardio.type);
-            const effort = findEffort(record.cardio.effort);
+            const effort = findEffort(record.cardio);
             const historicalWeight = weightForDate(record.date);
             const calories = cardioEntryCalories(record.cardio, historicalWeight, true);
             const deviation = effortDelta(record.cardio, historicalWeight);

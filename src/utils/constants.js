@@ -570,28 +570,20 @@ export const VOLUME_STATUS = {
   over: { label: 'Tavan üstü', chip: 'text-red-400 border-red-900/40 bg-red-950/40', bar: 'bg-red-500', text: 'text-red-400', hex: '#ef4444' },
 };
 
-export const APP_VERSION = '2.5.5';
+export const APP_VERSION = '2.5.6';
 
 export const LATEST_RELEASE_NOTES = {
-  version: '2.5.5',
-  title: 'Neler Yeni? (v2.5.5)',
-  date: '2026-08-03',
+  version: '2.5.6',
+  title: 'Neler Yeni? (v2.5.6)',
+  date: '2026-08-04',
   items: [
     {
-      title: 'Geçmiş Enerji Hesabı Düzeltildi',
-      desc: 'Her gün artık o tarihte bilinen son kilo ve vücut ölçümünü kullanır; daha sonraki ölçümler geçmişi değiştirmez.'
+      title: 'Özel (Elle Girilebilir) Tempo Çarpanı',
+      desc: 'Kardiyo ve aktivitelerde 0.1 ile 3.0 arasında özel tempo katsayısı girebilirsin. Elle girilen düşük katsayılı (MET ≤ 5.2) aktiviteler o günkü Off Day durumunu korur.'
     },
     {
-      title: 'Günlük NEAT Gerçekten Tek Güne Özel',
-      desc: 'Bir tarihte seçilen hareket modu veya çarpanı yalnız o günü etkiler. Boş bırakılan günler Ayarlar bölümündeki genel tercihi kullanır.'
-    },
-    {
-      title: 'Eski Yanlış İstisnalar Sıfırlandı',
-      desc: 'Önceki sürümün geçmişe yaydığı günlük NEAT alanları bir kez temizlendi ve geçmiş standart genel ayara döndürüldü.'
-    },
-    {
-      title: 'Daha Açık Günlük Kontrol',
-      desc: 'Beslenme ve Kalori Detayı ekranları hangi değerin genel, hangisinin yalnız seçili güne özel olduğunu açıkça gösterir.'
+      title: 'Aktiviteye Özel Esnek Hesaplama',
+      desc: 'Girilen özel tempo katsayısı yalnızca seçili kaydı etkiler; genel kütüphane ve geçmiş kayıt yapısı korunur.'
     }
   ]
 };

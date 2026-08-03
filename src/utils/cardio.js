@@ -51,6 +51,10 @@ export const CARDIO_ACTIVITIES = [
 
 /**
  * Tempo / zorluk kademeleri.
+];
+
+/**
+ * Tempo / zorluk kademeleri.
  *
  * Compendium aynı aktiviteyi şiddete göre ayrı satırlarda listeliyor —
  * basketbol "şut atma" 4.5 iken "maç" 8.0 MET. Yani tek bir MET değeri o
@@ -89,12 +93,38 @@ export const CARDIO_EFFORTS = [
     fullLabel: 'Maç Temposu',
     met: 1.3, fatigue: 1.8, hint: 'Yarışma şiddeti, sprintler ve yön değiştirmeler',
   },
+  {
+    key: 'custom', label: 'Özel', subLabel: 'Elle katsayı',
+    fullLabel: 'Özel Tempo',
+    met: 1, fatigue: 1, hint: 'Kendi tempo çarpanını elle belirle (0.1 - 3.0)',
+  },
 ];
 
 export const DEFAULT_EFFORT = 'moderate';
 
-export const findEffort = (key) =>
-  CARDIO_EFFORTS.find(e => e.key === key) || CARDIO_EFFORTS.find(e => e.key === DEFAULT_EFFORT);
+export const findEffort = (keyOrEntry, customMultiplier) => {
+  const key = typeof keyOrEntry === 'object' ? keyOrEntry?.key || keyOrEntry?.effort : keyOrEntry;
+  const mult = typeof keyOrEntry === 'object'
+    ? (keyOrEntry?.customEffortMultiplier ?? keyOrEntry?.customMultiplier)
+    : customMultiplier;
+
+  if (key === 'custom') {
+    const val = Number(mult);
+    const numericMult = val > 0 ? Math.min(3.0, Math.max(0.1, val)) : 1.0;
+    return {
+      key: 'custom',
+      label: 'Özel',
+      subLabel: `x${numericMult}`,
+      fullLabel: `Özel (x${numericMult})`,
+      met: numericMult,
+      fatigue: numericMult,
+      hint: `Elle belirlenmiş ×${numericMult} tempo katsayısı`,
+      isCustom: true,
+      customMultiplier: numericMult,
+    };
+  }
+  return CARDIO_EFFORTS.find(e => e.key === key) || CARDIO_EFFORTS.find(e => e.key === DEFAULT_EFFORT);
+};
 
 // Ağırlık antrenmanı: Compendium'da şiddetli çaba 5.0, orta çaba 3.5 MET.
 // Süre tahmini setler arası dinlenmeyi de kapsadığı için orta değer alındı.
@@ -115,6 +145,11 @@ export const activitySectionOf = (activityKey) => {
   const group = CARDIO_ACTIVITIES.find(activity => activity.key === activityKey)?.group;
   return CARDIO_SECTIONS.find(section => section.groups.includes(group)) || CARDIO_SECTIONS[0];
 };
+
+export const findActivity = (key) => CARDIO_ACTIVITIES.find(a => a.key === key) || null;
+
+/**
+ * Dinlenmenin ÜSTÜNE harcanan kaloriyi verir.
 
 export const findActivity = (key) => CARDIO_ACTIVITIES.find(a => a.key === key) || null;
 
@@ -142,8 +177,8 @@ export const estimateCardioCalories = (met, weightKg, minutes) => {
 export const cardioEntryCalories = (entry, weightKg, preferProvidedWeight = false) => {
   const act = findActivity(entry?.type);
   if (!act) return 0;
-  const effort = entry?.effort ? findEffort(entry.effort) : null;
-  const met = act.met * (effort ? effort.met : 1);
+  const effort = findEffort(entry);
+  const met = act.met * effort.met;
   const historicalWeight = preferProvidedWeight && Number(weightKg) > 0
     ? Number(weightKg)
     : Number(entry?.weightAtTime) > 0 ? Number(entry.weightAtTime) : weightKg;
@@ -162,8 +197,8 @@ export const cardioFatigueLoad = (entry) => {
   if (!act) return 0;
   const dk = Number(entry?.minutes) || 0;
   if (dk <= 0) return 0;
-  const effort = entry?.effort ? findEffort(entry.effort) : null;
-  return Math.round(act.met * dk * (effort ? effort.fatigue : 1) / 10);
+  const effort = findEffort(entry);
+  return Math.round(act.met * dk * effort.fatigue / 10);
 };
 
 /**
@@ -175,10 +210,10 @@ export const cardioFatigueLoad = (entry) => {
 export const effortDelta = (entry, weightKg) => {
   const act = findActivity(entry?.type);
   if (!act || !entry?.plannedEffort || !entry?.effort) return null;
-  if (entry.plannedEffort === entry.effort) return null;
+  if (entry.plannedEffort === entry.effort && entry.plannedCustomEffortMultiplier === entry.customEffortMultiplier) return null;
 
-  const planlanan = findEffort(entry.plannedEffort);
-  const gercek = findEffort(entry.effort);
+  const planlanan = findEffort(entry.plannedEffort, entry.plannedCustomEffortMultiplier);
+  const gercek = findEffort(entry);
   const dk = Number(entry.plannedMinutes ?? entry.minutes) || 0;
 
   const planKcal = estimateCardioCalories(act.met * planlanan.met, weightKg, dk);
@@ -263,9 +298,8 @@ export const resolvePlannedCardioMinutes = (slot, workouts = [], weightKg = 0, f
  *
  * Rahat yürüyüş/yoga/hafif bisiklet gibi açıkça düşük-yük aktiviteleri tempo
  * düğmesinden bağımsızdır. Diğer aktivitelerde yalnızca “Eğlence / Aktif
- * Toparlanma” seçimi geçerlidir; HIIT'i eğlence diye işaretlemek onu toparlanma
- * seansına dönüştürmez. 90 dakika sınırı da çok uzun bir aktivitenin sessizce
- * off day sayılmasını engeller.
+ * Toparlanma” veya “Özel” tempo seçimi ile MET <= 5.2 olan durumlar geçerlidir.
+ * 90 dakika sınırı da çok uzun bir aktivitenin sessizce off day sayılmasını engeller.
  */
 export const isActiveRecoveryEntry = (entry = {}) => {
   const activityKey = entry.type
@@ -274,8 +308,8 @@ export const isActiveRecoveryEntry = (entry = {}) => {
   const minutes = Number(entry.minutes) || 0;
   if (!activity || minutes <= 0 || minutes > 90) return false;
   if (activity.activeRecovery) return true;
-  const effort = findEffort(entry.effort || entry.effortInfo?.key);
-  return effort.key === 'fun' && activity.met * effort.met <= 5.2;
+  const effort = findEffort(entry);
+  return (effort.key === 'fun' || effort.key === 'custom') && activity.met * effort.met <= 5.2;
 };
 
 /** Yalnız aktif-toparlanma girdileri bulunan günü aktif dinlenme sınıflar. */
