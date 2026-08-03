@@ -28,7 +28,12 @@ const CycleSummaryCard = memo(({ summary, onOpen }) => {
                   ? 'İlk seti kontrol seti yap; beklenenden zorsa hacmi azalt.'
                   : 'Belirti yükü düşük; yalnız faz nedeniyle programı değiştirme.'}
             </span>
-            {summary.nextPeriod && <span className="text-[8px] font-mono text-zinc-600 block mt-1">Sonraki tahmin: {formatDay(summary.nextPeriod, 'medium')}</span>}
+            {summary.nextPeriodStart && (
+              <span className="text-[8px] font-mono text-zinc-600 block mt-1">
+                Sonraki tahmin: {formatDay(summary.nextPeriodStart, 'short')} – {formatDay(summary.nextPeriodEnd, 'medium')}
+                {summary.daysUntilNext > 0 ? ` · ${summary.daysUntilNext} gün` : ''}
+              </span>
+            )}
           </span>
         </span>
         <ChevronRight size={14} className="shrink-0 mt-1" />

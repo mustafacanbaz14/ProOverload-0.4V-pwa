@@ -4,6 +4,7 @@ import {
   Plus, Trash2, Dumbbell, HeartPulse, Star, Pencil, Check, Zap, ChevronDown,
 } from 'lucide-react';
 import MuscleHeatmap from './MuscleHeatmap';
+import PlanningGuide from './PlanningGuide';
 import { WEEKDAYS, computeWeekPlan, STATUS_LABEL, STATUS_COLOR, emptyPlan } from '../utils/weekPlan';
 import { CARDIO_ACTIVITIES, CARDIO_SECTIONS, CARDIO_EFFORTS, DEFAULT_EFFORT } from '../utils/cardio';
 import { analyzeDayConflicts, activityImpact } from '../utils/interference';
@@ -199,6 +200,8 @@ const WeeklyPlanModal = memo(({
       </div>
 
       <div className="flex-1 overflow-y-auto hide-scrollbar p-3 space-y-3 pb-safe">
+
+        <PlanningGuide mode="week" />
 
         {templates.length === 0 && (
           <div className="bg-amber-950/20 border border-amber-900/40 rounded-2xl p-3.5 flex items-start gap-2.5">

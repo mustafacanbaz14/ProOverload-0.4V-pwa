@@ -21,6 +21,26 @@
 [class~="text-[12px]"] { font-size: calc(12px * var(--font-scale, 1)); }
 [class~="text-[13px]"] { font-size: calc(13px * var(--font-scale, 1)); }
 
+/* Opsiyonel pembe vurgu paleti. Semantik başarı/uyarı/tehlike renkleri
+   değişmez; yalnızca uygulamanın cyan marka rengi rose ölçeğine taşınır. */
+:root[data-accent='rose'] {
+  --color-cyan-950: oklch(25.8% .092 26.042);
+  --color-cyan-900: oklch(31.8% .124 28.93);
+  --color-cyan-800: oklch(38.4% .159 28.998);
+  --color-cyan-700: oklch(45.5% .188 29.815);
+  --color-cyan-600: oklch(52.5% .223 3.958);
+  --color-cyan-500: oklch(59.2% .249 .584);
+  --color-cyan-400: oklch(71.2% .194 13.428);
+  --color-cyan-300: oklch(81% .117 11.638);
+  --color-cyan-200: oklch(89.9% .061 10.001);
+}
+
+:root[data-theme='light'][data-accent='rose'] {
+  --color-cyan-400: oklch(50.5% .205 11.496);
+  --color-cyan-300: oklch(46% .19 11.496);
+  --color-cyan-200: oklch(41% .16 11.496);
+}
+
 /*
  * AÇIK TEMA
  *

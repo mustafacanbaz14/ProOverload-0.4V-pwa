@@ -270,7 +270,7 @@ export const buildEnergySeries = (nutritionHistory = [], {
     .map(n => {
       const macros = dailyTotals(n);
       const w = dayCalories ? dayCalories(n.date) : { lifting: 0, cardio: 0 };
-      const b = dayEnergyBreakdown({
+      const calculated = dayEnergyBreakdown({
         maintenance,
         bmr,
         macros,
@@ -285,6 +285,9 @@ export const buildEnergySeries = (nutritionHistory = [], {
         // Güne özel çarpan varsa genel ayarı ezer.
         ...neatOptsForDay(neatOpts, n),
       });
+      // Yeni kayıtlar kaydedildikleri günün vücut ve enerji bağlamını saklar.
+      // Eski kayıtlar yukarıdaki geriye uyumlu hesap yolunu kullanır.
+      const b = n.energySnapshot?.total > 0 ? n.energySnapshot : calculated;
       return {
         date: n.date,
         intake: Math.round(macros.calories),

@@ -38,7 +38,7 @@ import {
   foldForSearch, parseNumber, mergeMetrics, mergeNutrition,
   isWorkingSet, calcEffectiveSets, buildPersonalRecords, loadPersistedState,
   computeComposition, sortByDateDesc, suggestNextTarget, mergeSettings,
-  mergeWorkout, mergeTemplate, isWarmupSet, estimate1RM
+  mergeWorkout, mergeTemplate, isWarmupSet, estimate1RM, findMetricsForDate
 } from './utils/helpers';
 
 import Navbar from './components/Navbar';
@@ -771,7 +771,13 @@ export default function App() {
 
     const persistableWorkout = Object.fromEntries(Object.entries(activeWorkout)
       .filter(([key]) => key !== 'isEditingOld' && key !== 'activeExerciseId'));
-    const saved = { ...persistableWorkout, duration: finalDuration || 45, timer: { status: 'finished' } };
+    const metricAtDate = findMetricsForDate(metricsHistory, activeWorkout.date, currentMetricsForm);
+    const saved = {
+      ...persistableWorkout,
+      duration: finalDuration || 45,
+      weightAtTime: parseNumber(activeWorkout.weightAtTime) || parseNumber(metricAtDate?.weight),
+      timer: { status: 'finished' },
+    };
 
     setWorkouts(prev => {
       const idx = prev.findIndex(w => w.id === saved.id);
@@ -839,15 +845,40 @@ export default function App() {
   }, [showToast]);
 
   const handleSaveNutrition = () => {
+    const date = currentNutritionForm.date;
+    const body = bodyContextForDate(date);
+    const exercise = dayCaloriesFor(date);
+    const macros = dailyTotals(currentNutritionForm);
+    const energySnapshot = dayEnergyBreakdown({
+      maintenance: maintenanceCalories,
+      bmr: body.bmr,
+      macros,
+      estimatedMacros: estimatedTefMacros,
+      lifting: exercise.lifting,
+      cardio: exercise.cardio,
+      activeRecovery: exercise.activeRecovery,
+      recovery: exercise.mind,
+      manual: currentNutritionForm.activeCaloriesOut,
+      steps: currentNutritionForm.steps,
+      ...neatOptsForDay({ ...neatOpts, weightKg: body.weight }, currentNutritionForm),
+    });
+    const savedNutrition = {
+      ...currentNutritionForm,
+      weightAtTheTime: body.weight,
+      bmrAtTheTime: body.bmr,
+      maintenanceAtTheTime: maintenanceCalories,
+      energySnapshot,
+    };
     setNutritionHistory(prev => {
       const idx = prev.findIndex(n => n.date === currentNutritionForm.date);
       if (idx >= 0) {
         const next = [...prev];
-        next[idx] = currentNutritionForm;
+        next[idx] = savedNutrition;
         return next;
       }
-      return [currentNutritionForm, ...prev];
+      return [savedNutrition, ...prev];
     });
+    setCurrentNutritionForm(savedNutrition);
     showToast('Beslenme kaydedildi.');
   };
 
@@ -1239,12 +1270,15 @@ export default function App() {
   // Geçmiş bir beslenme kaydının tek alanını günceller (yakılan kalori gibi).
   // Kaydın tamamını forma yüklemeye gerek kalmıyor.
   const handleUpdateNutritionField = useCallback((id, patch) => {
-    setNutritionHistory(prev => prev.map(n => n.id === id ? { ...n, ...patch } : n));
+    const changesEnergy = Object.prototype.hasOwnProperty.call(patch, 'activeCaloriesOut')
+      || Object.prototype.hasOwnProperty.call(patch, 'neatMultiplier');
+    const normalizedPatch = changesEnergy ? { ...patch, energySnapshot: null } : patch;
+    setNutritionHistory(prev => prev.map(n => n.id === id ? { ...n, ...normalizedPatch } : n));
     // Düzenlenen gün açıkta duran form ile aynıysa form da güncellenmeli,
     // yoksa kaydet düğmesi eski değeri geri yazar.
     setCurrentNutritionForm(prev => {
       const target = prev && nutritionHistory.find(n => n.id === id);
-      return target && target.date === prev.date ? { ...prev, ...patch } : prev;
+      return target && target.date === prev.date ? { ...prev, ...normalizedPatch } : prev;
     });
   }, [nutritionHistory]);
 
@@ -1304,6 +1338,18 @@ export default function App() {
     return rec ? parseNumber(rec.weight) : 0;
   }, [sortedMetrics]);
 
+  /** Bir günün hesabında o gün bilinen son ölçüm kullanılır; gelecek ölçüm geçmişi değiştirmez. */
+  const bodyContextForDate = useCallback((dateStr) => {
+    const metric = findMetricsForDate(metricsHistory, dateStr, currentMetricsForm);
+    const composition = computeComposition(metric || currentMetricsForm);
+    return {
+      metric,
+      weight: parseNumber(metric?.weight) || latestWeight,
+      bmr: parseNumber(composition?.bmr) || parseNumber(computedComp?.bmr),
+      bodyFat: parseNumber(composition?.activeBF),
+    };
+  }, [metricsHistory, currentMetricsForm, latestWeight, computedComp]);
+
   // Modal her gün için ayrı ayrı soruyor; kilo ve antrenman listesi sabit
   // olduğu için tek bir fonksiyon yeterli.
   // Meditasyon/esneme de dinlenmenin üstünde bir harcama; küçük ama gerçek.
@@ -1311,11 +1357,12 @@ export default function App() {
   // toplanıyor.
   const dayCaloriesFor = useCallback(
     (dateStr) => {
-      const w = dayWorkoutCalories(workouts, dateStr, latestWeight);
-      const zihin = dayMindCalories(wellness, dateStr, latestWeight);
-      return { ...w, mind: zihin, total: w.total + zihin };
+      const body = bodyContextForDate(dateStr);
+      const w = dayWorkoutCalories(workouts, dateStr, body.weight);
+      const zihin = dayMindCalories(wellness, dateStr, body.weight);
+      return { ...w, mind: zihin, total: w.total + zihin, weightAtTime: body.weight, bmrAtTime: body.bmr };
     },
-    [workouts, latestWeight, wellness]);
+    [workouts, bodyContextForDate, wellness]);
 
   // Olculen TDEE o donemin ORTALAMA egzersizini zaten iceriyor; NEAT artigindan
   // dusulmezse antrenman kalorisi iki kez sayilir.
@@ -1388,13 +1435,13 @@ export default function App() {
   // Aktif antrenman varsa oraya yazılır; yoksa bugünün kardiyo kaydına eklenir
   // (yoksa oluşturulur), böylece basketbol/koşu için seans başlatmak gerekmez.
   const handleAddCardio = useCallback((entry) => {
-    const item = { id: generateId(), ...entry };
+    const today = getLocalDateString();
+    const item = { id: generateId(), ...entry, weightAtTime: entry.weightAtTime || bodyContextForDate(today).weight };
     if (activeWorkoutRef.current) {
       setActiveWorkout(prev => prev ? { ...prev, cardio: [...(prev.cardio || []), item] } : prev);
       showToast('Kardiyo antrenmana eklendi.');
       return;
     }
-    const today = getLocalDateString();
     setWorkouts(prev => {
       const idx = prev.findIndex(w => w.date === today && (w.exercises || []).length === 0 && w.cardio);
       if (idx >= 0) {
@@ -1408,7 +1455,7 @@ export default function App() {
       }, ...prev];
     });
     showToast('Kardiyo bugüne kaydedildi.');
-  }, [showToast]);
+  }, [showToast, bodyContextForDate]);
 
   const handleOpenHistoricalCardio = useCallback((date) => {
     setCardioContext({ date });
@@ -1431,6 +1478,7 @@ export default function App() {
       ...cardioContext?.entry,
       ...entryFields,
       id: cardioContext?.entry?.id || entryFields.id || generateId(),
+      weightAtTime: cardioContext?.entry?.weightAtTime || bodyContextForDate(date).weight,
       ...(cardioContext || date !== getLocalDateString() ? { manualEntry: true } : {}),
     };
 
@@ -1469,7 +1517,7 @@ export default function App() {
       }, ...next];
     });
     showToast(cardioContext?.entry ? 'Kardiyo kaydı güncellendi.' : 'Geçmiş kardiyo kaydedildi.');
-  }, [cardioContext, handleAddCardio, showToast]);
+  }, [cardioContext, handleAddCardio, showToast, bodyContextForDate]);
 
   const handleDeleteCardio = useCallback((entryId) => {
     if (activeWorkoutRef.current) {
@@ -1593,8 +1641,8 @@ export default function App() {
           : 'text-cyan-300 border-cyan-900/50 bg-cyan-950/30',
       headline,
       detail,
-      sleepLabel: sleep ? `${sleep.score}/100` : 'Veri yok',
-      sleepTone: sleep ? sleep.zone.text : 'text-zinc-500',
+      sleepLabel: sleep ? `${sleep.score}/100` : 'Hızlı puan gir',
+      sleepTone: sleep ? sleep.zone.text : 'text-purple-400',
       readinessLabel: readiness ? `${readiness.ortalama}/100` : 'Veri yok',
       readinessTone: readiness?.zone?.text || 'text-zinc-500',
       calorieLabel: adjustedTarget > 0
@@ -1838,6 +1886,7 @@ export default function App() {
               maintenanceCalories={maintenanceCalories}
               neatOpts={neatOpts}
               onOpenEnergyDetail={() => setIsEnergyDetailOpen(true)}
+              bodyContextForDate={bodyContextForDate}
             />
           )}
 
@@ -1918,6 +1967,7 @@ export default function App() {
               wellness={wellness}
               maintenanceCalories={maintenanceCalories}
               onUpdateNutrition={handleUpdateNutritionField}
+              bodyContextForDate={bodyContextForDate}
             />
           )}
 
@@ -2001,6 +2051,7 @@ export default function App() {
           nutritionHistory={nutritionHistory}
           lastBackupDate={lastBackupDate}
           onOpenOnboarding={() => setIsOnboardingOpen(true)}
+          profileGender={profileGender}
         />
 
         {/* QR CODE MODAL */}

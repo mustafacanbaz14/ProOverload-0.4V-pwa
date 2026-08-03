@@ -140,13 +140,40 @@ export const buildCycleSummary = (records = [], date = dayKey(new Date()), confi
   const lastStart = [...starts].reverse().find(start => start <= selectedDate) || null;
   const cycleLength = estimatedCycleLength(entries, mergedConfig.cycleLength);
   const periodLength = Math.max(2, Math.min(10, parseNumber(mergedConfig.periodLength) || 5));
-  const cycleDay = lastStart ? (diffDays(lastStart, selectedDate) + 1) : null;
+  const daysSinceStart = lastStart ? diffDays(lastStart, selectedDate) : null;
+  // Kayıtlı son başlangıçtan birden fazla döngü geçmişse gösterilen gün sayısı
+  // 40, 70 diye büyümez; tahmini döngü içinde 1…N aralığına sarılır.
+  const cycleDay = daysSinceStart !== null
+    ? ((Math.max(0, daysSinceStart) % cycleLength) + 1)
+    : null;
   const phase = phaseFor(cycleDay, cycleLength, periodLength);
   const severity = savedEntry ? symptomSeverity(entry) : 'none';
-  const nextPeriod = lastStart ? dayKey(addDays(lastStart, cycleLength)) : null;
-  const intervals = starts.slice(1).map((start, index) => diffDays(starts[index], start));
+  const completedCycles = daysSinceStart !== null ? Math.floor(Math.max(0, daysSinceStart) / cycleLength) : 0;
+  const nextPeriodStart = lastStart
+    ? dayKey(addDays(lastStart, (completedCycles + 1) * cycleLength))
+    : null;
+  const nextPeriodEnd = nextPeriodStart ? dayKey(addDays(nextPeriodStart, periodLength - 1)) : null;
+  const currentPeriodEnd = lastStart && cycleDay <= periodLength
+    ? dayKey(addDays(lastStart, completedCycles * cycleLength + periodLength - 1))
+    : null;
+  const intervals = starts.slice(1)
+    .map((start, index) => diffDays(starts[index], start))
+    .filter(days => days >= 15 && days <= 60);
+  const meanDeviation = intervals.length >= 2
+    ? Math.round(intervals.reduce((sum, value) => sum + Math.abs(value - cycleLength), 0) / intervals.length)
+    : 2;
+  const uncertaintyDays = Math.max(1, Math.min(7, meanDeviation || 1));
+  const nextPeriodWindow = nextPeriodStart ? {
+    earliest: dayKey(addDays(nextPeriodStart, -uncertaintyDays)),
+    latest: dayKey(addDays(nextPeriodStart, uncertaintyDays)),
+  } : null;
+  const futurePeriods = nextPeriodStart
+    ? Array.from({ length: 3 }, (_, index) => {
+      const start = dayKey(addDays(nextPeriodStart, index * cycleLength));
+      return { start, end: dayKey(addDays(start, periodLength - 1)), estimated: true };
+    })
+    : [];
   const irregular = intervals.some(days => days < 21 || days > 45);
-  const daysSinceStart = lastStart ? diffDays(lastStart, selectedDate) : null;
   const longGap = daysSinceStart !== null && daysSinceStart > 45;
   const warning = entry.bleeding === 'heavy' || parseNumber(entry.pain) >= 8
     ? 'Yoğun kanama veya şiddetli ağrı tekrarlıyorsa sağlık uzmanıyla görüş. Saatte bir–iki ped/tampon değiştirme, baş dönmesi veya bayılma acil değerlendirme gerektirebilir.'
@@ -162,7 +189,15 @@ export const buildCycleSummary = (records = [], date = dayKey(new Date()), confi
     cycleDay,
     cycleLength,
     periodLength,
-    nextPeriod,
+    // nextPeriod eski bileşenler/yedeklerle uyumlu takma addır.
+    nextPeriod: nextPeriodStart,
+    nextPeriodStart,
+    nextPeriodEnd,
+    currentPeriodEnd,
+    nextPeriodWindow,
+    futurePeriods,
+    daysUntilNext: nextPeriodStart ? diffDays(selectedDate, nextPeriodStart) : null,
+    uncertaintyDays,
     phase,
     severity,
     advice: adviceFor(severity, entry),

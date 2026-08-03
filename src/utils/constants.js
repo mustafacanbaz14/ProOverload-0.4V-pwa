@@ -59,6 +59,9 @@ export const DEFAULT_SETTINGS = {
   deload: { active: false, startDate: '', days: 7, preset: 'volume' },
   // Görünüm teması: 'dark' | 'light'
   theme: 'dark',
+  // Marka vurgu rengi temadan bağımsızdır. Kadın profili pembe paleti
+  // kullanabilir; varsayılan mevcut cyan görünümü korur.
+  accentTheme: 'cyan',
   // Yazı büyüklüğü çarpanı (kök font-size). 1 = varsayılan.
   fontScale: 1,
   // Basit görünüm günlük kararları öne çıkarıp gelişmiş kartları kapalı başlatır;

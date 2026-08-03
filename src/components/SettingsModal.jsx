@@ -50,6 +50,7 @@ const SettingsModal = memo(({
   nutritionHistory,
   lastBackupDate,
   onOpenOnboarding,
+  profileGender = 'male',
 }) => {
   if (!isOpen) return null;
 
@@ -169,6 +170,29 @@ const SettingsModal = memo(({
                 Tüm uygulamadaki yazılar bu orana göre ölçeklenir.
               </p>
             </div>
+
+            {profileGender === 'female' && (
+              <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800">
+                <span className="text-zinc-200 text-[11px] font-bold block mb-2">Vurgu Rengi</span>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    // Sabit hex kullanılır: rose tema seçiliyken global cyan değişkeni
+                    // pembeye döner; sınıf kullanılsa iki önizleme noktası da pembe görünürdü.
+                    { key: 'cyan', label: 'Turkuaz', color: '#06b6d4' },
+                    { key: 'rose', label: 'Pembe', color: '#f43f5e' },
+                  ].map(option => {
+                    const active = (settings.accentTheme || 'cyan') === option.key;
+                    return (
+                      <button key={option.key} onClick={() => set({ accentTheme: option.key })}
+                        className={`py-2.5 rounded-lg text-[10px] font-bold uppercase border flex items-center justify-center gap-2 ${active ? 'border-cyan-600 text-cyan-400 bg-cyan-950/25' : 'border-zinc-800 text-zinc-500 bg-zinc-900'}`}>
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: option.color }} /> {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[9px] font-mono text-zinc-600 mt-2">İsteğe bağlıdır; sağlık ve uyarı renklerini değiştirmez.</p>
+              </div>
+            )}
 
             <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800">
               <span className="text-zinc-200 text-[11px] font-bold flex items-center gap-1.5 mb-1">

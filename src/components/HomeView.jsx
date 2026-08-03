@@ -127,6 +127,11 @@ const HomeView = memo(({
 
       {/* İnteraktif Kas Isı Haritası */}
       <MuscleHeatmap muscleVolume={dashboardStats.muscleVolume} onSelectMuscle={onSelectMuscle} experienceLevel={experienceLevel} gender={gender} />
+      {gender === 'female' && (
+        <p className="-mt-3 px-1 text-[9px] font-mono text-zinc-600 leading-relaxed">
+          Kadınlara yalnız cinsiyet nedeniyle farklı set çarpanı uygulanmaz. Araştırmalar göreli hipertrofi yanıtını genel olarak benzer buluyor; hacim, belirtiler ve kişisel toparlanma trendine göre ayarlanır.
+        </p>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-zinc-900 p-4 rounded-2xl border border-zinc-800">

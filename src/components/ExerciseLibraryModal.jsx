@@ -2,6 +2,7 @@ import React, { useState, useMemo, memo } from 'react';
 import { X, Search, Star, Settings, Trash2, Eye, EyeOff, Plus, Dumbbell, Check } from 'lucide-react';
 import { MUSCLE_GROUPS } from '../utils/constants';
 import { foldForSearch } from '../utils/helpers';
+import { exerciseMuscleRank, exerciseRankLabel, sortExercisesForMuscle } from '../utils/exerciseSort';
 
 const chip = (w) =>
   w === 1 ? 'text-emerald-400 border-emerald-900/50 bg-emerald-950/30'
@@ -38,7 +39,7 @@ const ExerciseLibraryModal = memo(({
 
   const list = useMemo(() => {
     const q = foldForSearch(query).trim();
-    return allExerciseNames.filter(name => {
+    const filtered = allExerciseNames.filter(name => {
       if (onlyMine && !isUserAdded(name)) return false;
       if (q && !foldForSearch(name).includes(q)) return false;
       if (muscleFilter !== 'Tümü') {
@@ -47,6 +48,7 @@ const ExerciseLibraryModal = memo(({
       }
       return true;
     });
+    return sortExercisesForMuscle(filtered, muscleFilter, getContributions);
   }, [allExerciseNames, query, muscleFilter, onlyMine, getContributions, isUserAdded]);
 
   if (!isOpen) return null;
@@ -97,6 +99,11 @@ const ExerciseLibraryModal = memo(({
           </button>
           <span className="text-[10px] font-mono text-zinc-600">{list.length} hareket</span>
         </div>
+        {muscleFilter !== 'Tümü' && (
+          <p className="text-[9px] font-mono text-zinc-600 leading-relaxed">
+            Sıra: %100 izolasyon → %100 bileşik → yardımcı katkılar.
+          </p>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto bg-zinc-950 hide-scrollbar pb-safe">
@@ -119,6 +126,9 @@ const ExerciseLibraryModal = memo(({
           const mine = isUserAdded(name);
           const hidden = hiddenNames.has(name);
           const done = performedNames.has(name);
+          const rank = muscleFilter !== 'Tümü'
+            ? exerciseMuscleRank(name, muscleFilter, getContributions)
+            : null;
 
           return (
             <div
@@ -136,6 +146,11 @@ const ExerciseLibraryModal = memo(({
                   {done && <span className="text-[8px] font-sans text-cyan-600 shrink-0">YAPILDI</span>}
                 </div>
                 <div className="flex flex-wrap gap-1 mt-1.5">
+                  {rank && (
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${rank.weight === 1 ? 'text-emerald-300 border-emerald-900/60 bg-emerald-950/25' : 'text-amber-300 border-amber-900/50 bg-amber-950/20'}`}>
+                      {exerciseRankLabel(rank)}
+                    </span>
+                  )}
                   {parts.length === 0 ? (
                     <span className="text-[10px] text-zinc-600 font-mono">Kas eşlemesi yok</span>
                   ) : parts.map(([m, w]) => (

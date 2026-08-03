@@ -142,6 +142,10 @@ export const mergeNutrition = (data) => ({
   // sayılmış olabilir). Eski kayıtlarda alan yok, öğün moduna düşerler.
   entryMode: data?.entryMode === 'daily' ? 'daily' : 'meals',
   activeCaloriesOut: data?.activeCaloriesOut || '', bmrAtTheTime: data?.bmrAtTheTime || 0,
+  weightAtTheTime: data?.weightAtTheTime || 0,
+  maintenanceAtTheTime: data?.maintenanceAtTheTime || 0,
+  energySnapshot: data?.energySnapshot && typeof data.energySnapshot === 'object'
+    ? data.energySnapshot : null,
   // Adım sayısı: NEAT 'steps' modunda günlük hareket buradan hesaplanır.
   steps: data?.steps || '',
   // O güne özel günlük hareket (NEAT) çarpanı. Boş = ayarlardaki genel çarpan
@@ -194,6 +198,7 @@ export const mergeWorkout = (data) => ({
   date: data?.date || getLocalDateString(),
   name: typeof data?.name === 'string' && data.name.trim() ? data.name : 'Serbest Antrenman',
   duration: Number(data?.duration) > 0 ? Number(data.duration) : 0,
+  weightAtTime: Number(data?.weightAtTime) > 0 ? Number(data.weightAtTime) : 0,
   exercises: Array.isArray(data?.exercises) ? data.exercises.map(mergeExercise) : [],
   cardio: Array.isArray(data?.cardio)
     ? data.cardio
@@ -202,6 +207,7 @@ export const mergeWorkout = (data) => ({
         id: c.id || generateId(),
         type: c.type,
         minutes: Number(c.minutes) || 0,
+        ...(Number(c.weightAtTime) > 0 ? { weightAtTime: Number(c.weightAtTime) } : {}),
         ...(typeof c.effort === 'string' ? { effort: c.effort } : {}),
         ...(typeof c.plannedEffort === 'string' ? { plannedEffort: c.plannedEffort } : {}),
         ...(Number(c.plannedMinutes) > 0 ? { plannedMinutes: Number(c.plannedMinutes) } : {}),

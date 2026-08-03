@@ -113,7 +113,16 @@ const yatisEkseni = (dk) => (dk >= 720 ? dk - 1440 : dk);
  */
 export const computeSleepScore = (record = {}, history = []) => {
   const inBed = timeInBedMinutes(record.bedTime, record.wakeTime);
-  if (!inBed) return null;
+  if (!inBed) {
+    const quickScore = Math.max(0, Math.min(100, parseNumber(record.quickScore)));
+    if (!(quickScore > 0)) return null;
+    return {
+      score: Math.round(quickScore), zone: sleepZoneOf(quickScore), inBed: 0,
+      asleep: 0, efficiency: 0, bedDeviation: null, quick: true,
+      parts: [{ key: 'quick', label: 'Genel değerlendirme', max: 100, value: Math.round(quickScore) }],
+      notes: ['Bu öznel hızlı puandır. Saatleri girersen süre, verimlilik ve düzen ayrı hesaplanır.'],
+    };
+  }
 
   const latency = Math.max(0, parseNumber(record.latency));
   const awakeMin = Math.max(0, parseNumber(record.awakeMinutes));
@@ -167,7 +176,7 @@ export const computeSleepScore = (record = {}, history = []) => {
 /** Son N gecenin ortalaması ve eğilimi. */
 export const sleepTrend = (records = [], count = 14) => {
   const seri = (records || [])
-    .filter(r => r?.sleep && timeInBedMinutes(r.sleep.bedTime, r.sleep.wakeTime) > 0)
+    .filter(r => r?.sleep && (timeInBedMinutes(r.sleep.bedTime, r.sleep.wakeTime) > 0 || parseNumber(r.sleep.quickScore) > 0))
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .slice(0, count)
     .reverse();
@@ -310,7 +319,7 @@ export const dayMindCalories = (records = [], dateStr, weightKg = 0) => {
 export const emptyWellnessDay = (date, id) => ({
   id,
   date,
-  sleep: { bedTime: '', wakeTime: '', latency: '', awakenings: '', awakeMinutes: '', refreshed: 6, note: '' },
+  sleep: { bedTime: '', wakeTime: '', latency: '', awakenings: '', awakeMinutes: '', refreshed: 6, quickScore: '', note: '' },
   mind: [],
 });
 
@@ -341,7 +350,12 @@ export const mergeWellnessDay = (data = {}, idFactory = () => `wellness-${Date.n
     ...data,
     id: data?.id || base.id,
     date: base.date,
-    sleep: { ...base.sleep, ...sleep },
+    sleep: {
+      ...base.sleep,
+      ...sleep,
+      quickScore: sleep.quickScore === '' || sleep.quickScore === undefined
+        ? '' : Math.max(0, Math.min(100, parseNumber(sleep.quickScore))),
+    },
     mind,
   };
 };

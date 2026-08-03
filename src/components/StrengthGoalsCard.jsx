@@ -17,6 +17,7 @@ const StrengthGoalsCard = memo(({
     () => Array.isArray(settings.strengthGoals) ? settings.strengthGoals : [],
     [settings.strengthGoals],
   );
+  const selectedRecord = personalRecords?.get?.(draft.exercise.trim()) || null;
 
   const goalRows = useMemo(() => goals.map(goal => {
     const targetWeight = parseNumber(goal.weight);
@@ -63,6 +64,13 @@ const StrengthGoalsCard = memo(({
         <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-3 space-y-2">
           <input list={listId} value={draft.exercise} onChange={event => setDraft(prev => ({ ...prev, exercise: event.target.value }))} placeholder="Hareket ara…" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-[11px] text-zinc-200 outline-none focus:border-cyan-500" />
           <datalist id={listId}>{allExerciseNames.map(name => <option key={name} value={name} />)}</datalist>
+          {selectedRecord?.e1rm > 0 && (
+            <div className="flex items-center gap-1.5 text-[8px] font-mono">
+              <span className="text-zinc-600 mr-auto">Mevcut e1RM {selectedRecord.e1rm} kg</span>
+              <button onClick={() => setDraft(prev => ({ ...prev, weight: Math.round((selectedRecord.e1rm + 2.5) * 2) / 2, reps: 1 }))} className="px-2 py-1 rounded border border-cyan-900/40 text-cyan-500">+2.5 kg</button>
+              <button onClick={() => setDraft(prev => ({ ...prev, weight: Math.round(selectedRecord.e1rm * 1.05 * 2) / 2, reps: 1 }))} className="px-2 py-1 rounded border border-cyan-900/40 text-cyan-500">+%5</button>
+            </div>
+          )}
           <div className="grid grid-cols-[1fr_74px_auto] gap-2">
             <label><span className="text-[8px] font-mono text-zinc-600 block mb-1">Hedef kg</span><input type="number" inputMode="decimal" min="1" max="500" step="0.5" value={draft.weight} onChange={event => setDraft(prev => ({ ...prev, weight: event.target.value }))} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-2 text-[11px] font-mono text-cyan-400 outline-none focus:border-cyan-500" /></label>
             <label><span className="text-[8px] font-mono text-zinc-600 block mb-1">Tekrar</span><input type="number" inputMode="numeric" min="1" max="30" value={draft.reps} onChange={event => setDraft(prev => ({ ...prev, reps: event.target.value }))} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-2 text-[11px] font-mono text-cyan-400 outline-none focus:border-cyan-500" /></label>

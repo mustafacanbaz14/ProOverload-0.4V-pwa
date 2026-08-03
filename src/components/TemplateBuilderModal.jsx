@@ -5,6 +5,7 @@ import { previewTemplateVolume, estimateDuration } from '../utils/templates';
 import { generateId } from '../utils/helpers';
 import { estimateLiftingCalories } from '../utils/cardio';
 import ExerciseLibraryModal from './ExerciseLibraryModal';
+import PlanningGuide from './PlanningGuide';
 import TemplateAssistantCard from './TemplateAssistantCard';
 
 const DAY_NAMES = ['1. Gün', '2. Gün', '3. Gün', '4. Gün', '5. Gün', '6. Gün', '7. Gün'];
@@ -142,6 +143,8 @@ const TemplateBuilderModal = memo(({
       </div>
 
       <div className="flex-1 overflow-y-auto hide-scrollbar p-3 space-y-3 pb-safe">
+
+        <PlanningGuide mode="template" />
 
         {/* Gün özeti */}
         <div className="grid grid-cols-3 gap-2">

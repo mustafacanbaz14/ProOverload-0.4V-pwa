@@ -79,6 +79,8 @@ const MetricsView = memo(({
 }) => {
   const form = currentMetricsForm;
   const [guideType, setGuideType] = useState('tape');
+  const tapeGoalCount = Object.values(settings.goalMeasurements || {}).filter(value => parseNumber(value) > 0).length;
+  const skinfoldGoalCount = Object.values(settings.goalSkinfolds || {}).filter(value => parseNumber(value) > 0).length;
 
   const updateField = (field, value) =>
     setCurrentMetricsForm(prev => ({ ...prev, [field]: value }));
@@ -104,6 +106,12 @@ const MetricsView = memo(({
     ...prev,
     [collection]: { ...(prev[collection] || {}), [field]: value },
   }));
+
+  const quickGoal = (collection, field, current, delta) => {
+    const base = parseNumber(current);
+    if (!(base > 0)) return;
+    updateGoal(collection, field, Math.max(0, Math.round((base + delta) * 10) / 10));
+  };
 
   const toggleGuide = (type) => {
     if (isMeasurementGuideOpen && guideType === type) {
@@ -249,6 +257,10 @@ const MetricsView = memo(({
         )}
 
         <div className="border-t border-zinc-800 pt-3">
+          <div className="bg-cyan-950/15 border border-cyan-900/30 rounded-xl p-2.5 mb-3 flex justify-between gap-3">
+            <p className="text-[8px] font-mono text-zinc-500 leading-relaxed">Mavi kutu hedeftir. Hızlı −1 mm düğmesi mevcut ölçümden bir sonraki küçük durağı kurar; sonra değeri elle değiştirebilirsin.</p>
+            <span className="text-[9px] font-bold text-cyan-400 shrink-0">{skinfoldGoalCount} hedef</span>
+          </div>
           <div className="flex gap-2 mb-3">
             {['3', '7'].map(m => (
               <button
@@ -278,12 +290,16 @@ const MetricsView = memo(({
                   placeholder="mm"
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-zinc-200 font-mono text-xs text-center outline-none focus:border-cyan-600"
                 />
-                <input type="number" inputMode="decimal" step="0.5" min={0} max={100}
-                  value={settings.goalSkinfolds?.[site.key] || ''}
-                  onChange={(e) => updateGoal('goalSkinfolds', site.key, e.target.value)}
-                  onBlur={(e) => updateGoal('goalSkinfolds', site.key, e.target.value === '' ? '' : clampNumber(e.target.value, 0, 100))}
-                  placeholder="mm" aria-label={`${site.label} kaliper hedefi`}
-                  className="w-full bg-cyan-950/20 border border-cyan-900/50 rounded-lg p-2 text-cyan-400 font-mono text-xs text-center outline-none focus:border-cyan-500" />
+                <div className="space-y-1">
+                  <input type="number" inputMode="decimal" step="0.5" min={0} max={100}
+                    value={settings.goalSkinfolds?.[site.key] || ''}
+                    onChange={(e) => updateGoal('goalSkinfolds', site.key, e.target.value)}
+                    onBlur={(e) => updateGoal('goalSkinfolds', site.key, e.target.value === '' ? '' : clampNumber(e.target.value, 0, 100))}
+                    placeholder="mm" aria-label={`${site.label} kaliper hedefi`}
+                    className="w-full bg-cyan-950/20 border border-cyan-900/50 rounded-lg p-2 text-cyan-400 font-mono text-xs text-center outline-none focus:border-cyan-500" />
+                  <button type="button" onClick={() => quickGoal('goalSkinfolds', site.key, form.skinfolds?.[site.key], -1)}
+                    className="w-full text-[8px] font-mono text-cyan-500 border border-cyan-900/30 rounded py-0.5">şu an −1</button>
+                </div>
               </div>
               <GoalEtaLine current={form.skinfolds?.[site.key]} target={settings.goalSkinfolds?.[site.key]} trend={goalValues.skinfoldTrends?.[site.key]} unit="mm" />
               </div>
@@ -403,6 +419,11 @@ const MetricsView = memo(({
       >
         {isMeasurementGuideOpen && guideType === 'tape' && <MeasurementGuide type="tape" />}
 
+        <div className="bg-cyan-950/15 border border-cyan-900/30 rounded-xl p-2.5 flex justify-between gap-3">
+          <p className="text-[8px] font-mono text-zinc-500 leading-relaxed">Hedef kutusunu elle yaz veya mevcut ölçümden ±1 cm hızlı hedef oluştur. Bel gibi küçülmesini istediğin yerde −1, kas çevresinde +1 kullan.</p>
+          <span className="text-[9px] font-bold text-cyan-400 shrink-0">{tapeGoalCount} hedef</span>
+        </div>
+
         <div className="grid grid-cols-[1fr_62px_62px] gap-2 px-1 text-[8px] font-mono text-zinc-600 uppercase">
           <span>Bölge</span><span className="text-center">Şu an</span><span className="text-center">Hedef</span>
         </div>
@@ -420,12 +441,18 @@ const MetricsView = memo(({
                 placeholder="0"
                 className="w-14 bg-zinc-900 border border-zinc-800 rounded-lg py-1 font-mono text-xs text-center text-cyan-400 outline-none focus:border-cyan-600 transition-colors"
               />
-              <input type="number" inputMode="decimal" step="0.5" min={0} max={300}
-                value={settings.goalMeasurements?.[m.key] || ''}
-                onChange={(e) => updateGoal('goalMeasurements', m.key, e.target.value)}
-                onBlur={(e) => updateGoal('goalMeasurements', m.key, e.target.value === '' ? '' : clampNumber(e.target.value, 0, 300))}
-                placeholder="—" aria-label={`${m.label} hedefi`}
-                className="w-full bg-cyan-950/20 border border-cyan-900/50 rounded-lg py-1 font-mono text-xs text-center text-cyan-400 outline-none focus:border-cyan-500" />
+              <div className="space-y-1">
+                <input type="number" inputMode="decimal" step="0.5" min={0} max={300}
+                  value={settings.goalMeasurements?.[m.key] || ''}
+                  onChange={(e) => updateGoal('goalMeasurements', m.key, e.target.value)}
+                  onBlur={(e) => updateGoal('goalMeasurements', m.key, e.target.value === '' ? '' : clampNumber(e.target.value, 0, 300))}
+                  placeholder="—" aria-label={`${m.label} hedefi`}
+                  className="w-full bg-cyan-950/20 border border-cyan-900/50 rounded-lg py-1 font-mono text-xs text-center text-cyan-400 outline-none focus:border-cyan-500" />
+                <span className="grid grid-cols-2 gap-0.5">
+                  <button type="button" onClick={() => quickGoal('goalMeasurements', m.key, form.measurements?.[m.key], -1)} className="text-[8px] text-cyan-600 border border-cyan-900/30 rounded">−1</button>
+                  <button type="button" onClick={() => quickGoal('goalMeasurements', m.key, form.measurements?.[m.key], 1)} className="text-[8px] text-cyan-600 border border-cyan-900/30 rounded">+1</button>
+                </span>
+              </div>
             </div>
             <GoalEtaLine current={form.measurements?.[m.key]} target={settings.goalMeasurements?.[m.key]} trend={goalValues.measurementTrends?.[m.key]} unit="cm" />
             </div>

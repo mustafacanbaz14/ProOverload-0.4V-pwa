@@ -50,6 +50,7 @@ const NutritionView = memo(({
   maintenanceCalories = 0,
   neatOpts = {},
   onOpenEnergyDetail,
+  bodyContextForDate,
 }) => {
   const safeMeals = Array.isArray(currentNutritionForm.meals) ? currentNutritionForm.meals : [];
   const isDaily = currentNutritionForm.entryMode === 'daily';
@@ -76,12 +77,19 @@ const NutritionView = memo(({
   });
 
   const energyFor = (record) => {
+    if (record !== currentNutritionForm && record.energySnapshot?.total > 0) {
+      return record.energySnapshot;
+    }
+    const body = bodyContextForDate?.(record.date) || {
+      weight: record.weightAtTheTime || latestWeight,
+      bmr: record.bmrAtTheTime || parseNumber(computedComp?.bmr),
+    };
     const recordTotals = dailyTotals(record);
-    const workout = dayWorkoutCalories(workouts, record.date, latestWeight);
-    const recovery = dayMindCalories(wellness, record.date, latestWeight);
+    const workout = dayWorkoutCalories(workouts, record.date, body.weight);
+    const recovery = dayMindCalories(wellness, record.date, body.weight);
     return dayEnergyBreakdown({
-      maintenance: maintenanceCalories,
-      bmr: parseNumber(computedComp?.bmr),
+      maintenance: record.maintenanceAtTheTime || maintenanceCalories,
+      bmr: record.bmrAtTheTime || body.bmr,
       macros: recordTotals,
       lifting: workout.lifting,
       cardio: workout.cardio,
@@ -90,7 +98,7 @@ const NutritionView = memo(({
       manual: record.activeCaloriesOut,
       steps: record.steps,
       // Güne özel hareket çarpanı varsa genel ayarı ezer.
-      ...neatOptsForDay(neatOpts, record),
+      ...neatOptsForDay({ ...neatOpts, weightKg: body.weight }, record),
     });
   };
 

@@ -1,20 +1,76 @@
 import assert from 'node:assert/strict';
 import { computeReadiness } from '../src/utils/readiness.js';
-import { dayEnergyBreakdown, theoreticalWeek, estimateMacrosForTef, groupByWeek } from '../src/utils/energyModel.js';
+import { dayEnergyBreakdown, theoreticalWeek, estimateMacrosForTef, groupByWeek, buildEnergySeries } from '../src/utils/energyModel.js';
 import { calorieDashboard, deriveGoalSet } from '../src/utils/goals.js';
-import { mergeWellnessDay } from '../src/utils/wellness.js';
+import { mergeWellnessDay, computeSleepScore } from '../src/utils/wellness.js';
 import { migrateWeekPlans, removeTemplateFromPlans } from '../src/utils/planMigration.js';
-import { suggestNextTarget, mergeWorkout } from '../src/utils/helpers.js';
+import { suggestNextTarget, mergeWorkout, findMetricsForDate } from '../src/utils/helpers.js';
 import { dailyTotals, nutritionDayScore } from '../src/utils/nutritionStats.js';
 import { buildPlateauInsights, buildNutritionPerformanceInsight } from '../src/utils/insights.js';
-import { resolvePlannedCardioMinutes, isActiveRecoveryCardioDay, isActiveRecoveryEntry } from '../src/utils/cardio.js';
+import { resolvePlannedCardioMinutes, isActiveRecoveryCardioDay, isActiveRecoveryEntry, cardioEntryCalories, workoutCalories } from '../src/utils/cardio.js';
 import { groupIntoWeeks, groupWeeksIntoMonths } from '../src/utils/dates.js';
 import { deloadState } from '../src/utils/deload.js';
 import { buildCycleSummary, mergeCycleDay } from '../src/utils/cycle.js';
 import { analyzeTemplate } from '../src/utils/templateAssistant.js';
+import { sortExercisesForMuscle } from '../src/utils/exerciseSort.js';
 
 const tests = [];
 const test = (name, run) => tests.push({ name, run });
+
+test('kas filtresi yüzde 100 izolasyonu bileşik ve yardımcı hareketten önce sıralar', () => {
+  const map = {
+    Curl: { Biseps: 1, Önkol: 0.25 },
+    Chinup: { Kanat: 1, Biseps: 0.5 },
+    Row: { Biseps: 0.5, 'Orta Sırt': 1 },
+  };
+  const result = sortExercisesForMuscle(['Row', 'Chinup', 'Curl'], 'Biseps', name => map[name]);
+  assert.deepEqual(result, ['Curl', 'Chinup', 'Row']);
+});
+
+test('döngü tahmini başlangıç, bitiş ve gelecek üç dönemi üretir', () => {
+  const result = buildCycleSummary([
+    { date: '2026-06-01', bleeding: 'medium' },
+    { date: '2026-06-29', bleeding: 'medium' },
+    { date: '2026-07-27', bleeding: 'medium' },
+  ], '2026-08-03', { cycleLength: 28, periodLength: 5 });
+  assert.equal(result.nextPeriodStart, '2026-08-24');
+  assert.equal(result.nextPeriodEnd, '2026-08-28');
+  assert.equal(result.futurePeriods.length, 3);
+});
+
+test('saat girmeden 100 üzerinden hızlı uyku puanı kullanılabilir', () => {
+  const result = computeSleepScore({ quickScore: 75 });
+  assert.equal(result.score, 75);
+  assert.equal(result.quick, true);
+});
+
+test('kardiyo kaydındaki tarihsel kilo yeni kilodan etkilenmez', () => {
+  const entry = { type: 'zone2', minutes: 30, effort: 'moderate', weightAtTime: 70 };
+  assert.equal(cardioEntryCalories(entry, 100), cardioEntryCalories(entry, 70));
+});
+
+test('ağırlık antrenmanı kalorisi kayıt anındaki kiloyu kullanır', () => {
+  const workout = { duration: 3600, weightAtTime: 70, exercises: [] };
+  assert.deepEqual(workoutCalories(workout, 100), workoutCalories(workout, 70));
+});
+
+test('geçmiş gün için gelecekteki değil o tarihte bilinen son ölçüm seçilir', () => {
+  const metric = findMetricsForDate([
+    { date: '2026-07-01', weight: 70 },
+    { date: '2026-08-01', weight: 80 },
+  ], '2026-07-20', { weight: 90 });
+  assert.equal(Number(metric.weight), 70);
+});
+
+test('enerji serisi kayıt anındaki anlık görüntüyü korur', () => {
+  const snapshot = { total: 2400, isRestDay: true, parts: [] };
+  const series = buildEnergySeries([{
+    date: new Date().toISOString().slice(0, 10),
+    meals: [{ calories: 2000, protein: 100, carbs: 200, fats: 60 }],
+    energySnapshot: snapshot,
+  }], { maintenance: 4000, bmr: 2500 });
+  assert.equal(series[0].out, 2400);
+});
 
 test('yüksek eklem ağrısı Zirve tavsiyesini engeller', () => {
   const result = computeReadiness({ sleep: 10, stress: 1, soreness: 1, jointPain: 7, carbs: 10 });

@@ -144,7 +144,8 @@ export const cardioEntryCalories = (entry, weightKg) => {
   if (!act) return 0;
   const effort = entry?.effort ? findEffort(entry.effort) : null;
   const met = act.met * (effort ? effort.met : 1);
-  return estimateCardioCalories(met, weightKg, entry.minutes);
+  const historicalWeight = Number(entry?.weightAtTime) > 0 ? Number(entry.weightAtTime) : weightKg;
+  return estimateCardioCalories(met, historicalWeight, entry.minutes);
 };
 
 /**
@@ -201,6 +202,7 @@ export const cardioHistoryEntries = (workouts = [], activityKey = null) =>
   (Array.isArray(workouts) ? workouts : [])
     .flatMap(workout => (workout?.cardio || []).map(entry => ({
       ...entry,
+      weightAtTime: Number(entry.weightAtTime) > 0 ? entry.weightAtTime : workout.weightAtTime,
       date: workout.date,
       workoutId: workout.id,
     })))
@@ -294,10 +296,13 @@ export const evaluateCardioEntry = (entry, workouts = [], weightKg = 0) => {
 };
 
 /** Kardiyo arşivinin üst özetinde kullanılacak toplamlar ve en sık aktiviteler. */
-export const cardioArchiveSummary = (workouts = [], weightKg = 0) => {
+export const cardioArchiveSummary = (workouts = [], weightKg = 0, weightForDate = null) => {
   const entries = cardioHistoryEntries(workouts);
   const totalMinutes = entries.reduce((sum, entry) => sum + (Number(entry.minutes) || 0), 0);
-  const totalCalories = entries.reduce((sum, entry) => sum + cardioEntryCalories(entry, weightKg), 0);
+  const totalCalories = entries.reduce((sum, entry) => sum + cardioEntryCalories(
+    entry,
+    typeof weightForDate === 'function' ? weightForDate(entry.date) : weightKg,
+  ), 0);
   const groups = new Map();
   entries.forEach(entry => {
     const current = groups.get(entry.type) || { type: entry.type, count: 0, minutes: 0 };
@@ -330,8 +335,9 @@ export const estimateLiftingCalories = (minutes, weightKg) =>
  * gerekirse elle düzeltebilsin.
  */
 export const workoutCalories = (workout, weightKg) => {
-  const lifting = estimateLiftingCalories(workout?.duration || 0, weightKg);
-  const cardio = totalCardioCalories(workout?.cardio || [], weightKg);
+  const historicalWeight = Number(workout?.weightAtTime) > 0 ? Number(workout.weightAtTime) : weightKg;
+  const lifting = estimateLiftingCalories(workout?.duration || 0, historicalWeight);
+  const cardio = totalCardioCalories(workout?.cardio || [], historicalWeight);
   return { lifting, cardio, total: lifting + cardio };
 };
 

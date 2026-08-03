@@ -198,6 +198,22 @@ export const buildCoachActions = (ctx = {}) => {
 
   /* --- 3. öncelik: fırsat ve veri --- */
 
+  if (!sleep) {
+    ekle({
+      key: 'sleep-missing', priority: 3, tone: TONES.info, action: 'wellness',
+      title: 'Uyku puanını hızlıca kaydet',
+      detail: 'Saatleri bilmiyorsan bile 100 üzerinden genel puan gir. Koç toparlanma tavsiyesini bu sinyalle kişiselleştirir.',
+    });
+  }
+
+  if (gender === 'female' && cycle?.daysUntilNext > 0 && cycle.daysUntilNext <= 3 && !cycle.hasEntry) {
+    ekle({
+      key: 'cycle-upcoming', priority: 3, tone: TONES.info, action: 'cycle',
+      title: `Tahmini regl başlangıcına ${cycle.daysUntilNext} gün`,
+      detail: 'Takvim tek başına antrenmanı değiştirmez. Ağrı, enerji veya uyku değişirse günlük kayda gir; öneri belirtilere göre ayarlanır.',
+    });
+  }
+
   // Zirve hazır oluşluk + planlı antrenman = rekor denemesi için uygun gün.
   if (readiness?.ortalama >= 80 && planDay?.workouts?.length > 0 && !readiness.deloadOnerisi) {
     ekle({

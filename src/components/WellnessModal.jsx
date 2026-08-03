@@ -124,9 +124,11 @@ const WellnessModal = memo(({
                   <span className="text-[11px] font-mono text-zinc-500 block mt-0.5">/ 100 · {skor.zone.label}</span>
                 </div>
                 <div className="flex justify-center gap-4 text-[10px] font-mono text-zinc-400 mb-3">
-                  <span>Uyunan <strong className="text-zinc-100">{minutesToLabel(skor.asleep)}</strong></span>
-                  <span>Yatakta <strong className="text-zinc-100">{minutesToLabel(skor.inBed)}</strong></span>
-                  <span>Verim <strong className="text-zinc-100">%{skor.efficiency}</strong></span>
+                  {skor.quick ? <span>Öznel hızlı değerlendirme</span> : <>
+                    <span>Uyunan <strong className="text-zinc-100">{minutesToLabel(skor.asleep)}</strong></span>
+                    <span>Yatakta <strong className="text-zinc-100">{minutesToLabel(skor.inBed)}</strong></span>
+                    <span>Verim <strong className="text-zinc-100">%{skor.efficiency}</strong></span>
+                  </>}
                 </div>
                 {/* Puanın nereden geldiği: tek sayı yerine dökümü de gösteriliyor. */}
                 <div className="space-y-1.5">
@@ -161,7 +163,25 @@ const WellnessModal = memo(({
 
             {/* Girdi */}
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-3.5 space-y-3">
-              <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">O Gece</h4>
+              <div className="flex justify-between items-center gap-2">
+                <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Hızlı Puan</h4>
+                <strong className="text-sm font-mono text-purple-300">{uyku.quickScore || '—'}/100</strong>
+              </div>
+              <input type="range" min={0} max={100} step={5} value={uyku.quickScore || 0}
+                onChange={(e) => uykuGuncelle({ quickScore: Number(e.target.value) })}
+                className="w-full accent-purple-500" aria-label="Genel uyku puanı" />
+              <div className="grid grid-cols-5 gap-1.5">
+                {[40, 55, 70, 85, 95].map(value => (
+                  <button key={value} onClick={() => uykuGuncelle({ quickScore: value })}
+                    className={`py-1.5 rounded-lg border text-[9px] font-mono ${Number(uyku.quickScore) === value ? 'border-purple-600 bg-purple-950/30 text-purple-300' : 'border-zinc-800 bg-zinc-950 text-zinc-600'}`}>
+                    {value}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[8px] font-mono text-zinc-600">Saatleri bilmiyorsan genel hissini gir. Ayrıntılı saatler doluysa onların hesabı önceliklidir.</p>
+              <div className="border-t border-zinc-800 pt-3">
+                <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Ayrıntılı Uyku</h4>
+              </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <label className="space-y-1">

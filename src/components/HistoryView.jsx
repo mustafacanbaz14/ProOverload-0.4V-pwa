@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useState } from 'react';
+import React, { memo, useCallback, useMemo, useState } from 'react';
 import { Trash2, Calendar, Scale, Beef, Pencil, Copy, BookmarkPlus, HeartPulse, Search, Timer, Flame, Activity, Plus, Dumbbell, X, ChevronDown, FolderArchive } from 'lucide-react';
 import { calcTonnage, calcEffectiveSets, isWorkingSet, foldForSearch, getLocalDateString } from '../utils/helpers';
 import {
@@ -111,6 +111,7 @@ const HistoryView = memo(({
   wellness = [],
   maintenanceCalories = 0,
   onUpdateNutrition,
+  bodyContextForDate,
 }) => {
   const [query, setQuery] = useState('');
   const [addOpen, setAddOpen] = useState(false);
@@ -128,9 +129,13 @@ const HistoryView = memo(({
     foldForSearch(`${m.date} ${m.weight} ${m.bodyFat || ''}`).includes(q)), [metricsHistory, q]);
   const filteredNutrition = useMemo(() => !q ? nutritionHistory : nutritionHistory.filter(n =>
     foldForSearch(`${n.date} ${(n.meals || []).map(meal => meal.name).join(' ')}`).includes(q)), [nutritionHistory, q]);
+  const weightForDate = useCallback(
+    (date) => bodyContextForDate?.(date)?.weight || latestWeight,
+    [bodyContextForDate, latestWeight],
+  );
   const cardioSummary = useMemo(
-    () => cardioArchiveSummary(workouts, latestWeight),
-    [workouts, latestWeight]);
+    () => cardioArchiveSummary(workouts, latestWeight, weightForDate),
+    [workouts, latestWeight, weightForDate]);
 
   return (
     <div className="p-4 space-y-4 pb-nav h-full overflow-y-auto hide-scrollbar bg-black">
@@ -220,7 +225,7 @@ const HistoryView = memo(({
               const tonnage = calcTonnage(w.exercises);
               const effectiveSets = calcEffectiveSets(w.exercises);
               const cardio = w.cardio || [];
-              const cardioKcal = totalCardioCalories(cardio, latestWeight);
+              const cardioKcal = totalCardioCalories(cardio, weightForDate(w.date));
               return (
                 <div key={w.id} className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 space-y-3">
                   <div className="flex justify-between items-start border-b border-zinc-800 pb-2">
@@ -297,7 +302,7 @@ const HistoryView = memo(({
                       {cardio.map(c => {
                         // Planla arasındaki tempo farkı varsa gösterilir: haftalık
                         // dengeyi bozan çoğunlukla plandan sapan şiddet oluyor.
-                        const sapma = effortDelta(c, latestWeight);
+                        const sapma = effortDelta(c, weightForDate(w.date));
                         return (
                           <div key={c.id} className="text-[11px] font-mono text-zinc-300 bg-red-950/10 p-2 rounded-xl border border-red-900/25 space-y-1">
                             <div className="flex justify-between items-center">
@@ -305,7 +310,7 @@ const HistoryView = memo(({
                               <span className="text-zinc-400 text-[10px] shrink-0">
                                 {c.minutes} dk
                                 {c.effort && ` · ${findEffort(c.effort).fullLabel}`}
-                                {latestWeight > 0 && ` · ${cardioEntryCalories(c, latestWeight)} kcal`}
+                                {weightForDate(w.date) > 0 && ` · ${cardioEntryCalories(c, weightForDate(w.date))} kcal`}
                               </span>
                             </div>
                             {sapma && (
@@ -356,7 +361,7 @@ const HistoryView = memo(({
                 {[
                   [<HeartPulse key="sessions" size={11} />, 'Kayıt', cardioSummary.count],
                   [<Timer key="minutes" size={11} />, 'Toplam', `${cardioSummary.totalMinutes} dk`],
-                  [<Flame key="calories" size={11} />, 'Yakım', latestWeight > 0 ? `${cardioSummary.totalCalories} kcal` : '—'],
+                  [<Flame key="calories" size={11} />, 'Yakım', cardioSummary.totalCalories > 0 ? `${cardioSummary.totalCalories} kcal` : '—'],
                 ].map(([icon, label, value]) => (
                   <div key={label} className="bg-zinc-950/80 border border-zinc-800 rounded-xl py-2">
                     <span className="flex justify-center text-red-400 mb-0.5">{icon}</span>
@@ -380,9 +385,10 @@ const HistoryView = memo(({
           ) : <WeekGroups key="cardio" items={filteredCardio} expandAll={Boolean(q)}>{record => {
             const activity = findActivity(record.cardio.type);
             const effort = findEffort(record.cardio.effort);
-            const calories = cardioEntryCalories(record.cardio, latestWeight);
-            const deviation = effortDelta(record.cardio, latestWeight);
-            const evaluation = evaluateCardioEntry(record.cardio, workouts, latestWeight);
+            const historicalWeight = weightForDate(record.date);
+            const calories = cardioEntryCalories(record.cardio, historicalWeight);
+            const deviation = effortDelta(record.cardio, historicalWeight);
+            const evaluation = evaluateCardioEntry(record.cardio, workouts, historicalWeight);
             return (
               <div key={`${record.workoutId}-${record.cardio.id}`} className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 space-y-2.5">
                 <div className="flex justify-between items-start gap-2">
@@ -399,7 +405,7 @@ const HistoryView = memo(({
                   {[
                     ['Süre', `${record.cardio.minutes} dk`],
                     ['Tempo', effort?.label || 'Orta'],
-                    ['Yakım', latestWeight > 0 ? `${calories} kcal` : '—'],
+                    ['Yakım', historicalWeight > 0 ? `${calories} kcal` : '—'],
                   ].map(([label, value]) => <div key={label} className="bg-zinc-950 border border-zinc-800 rounded-xl py-2"><span className="text-[8px] font-mono text-zinc-600 uppercase block">{label}</span><strong className="text-[10px] font-mono text-zinc-200">{value}</strong></div>)}
                 </div>
                 {evaluation.stats.count > 1 && (
@@ -411,7 +417,7 @@ const HistoryView = memo(({
                     <p className="text-[9px] font-mono text-zinc-400 leading-relaxed">
                       Bu aktivitedeki son {evaluation.stats.count} kayıt ortalaman:
                       {' '}<strong className="text-zinc-200">{evaluation.stats.avgMinutes} dk</strong>
-                      {latestWeight > 0 && <> · <strong className="text-zinc-200">{evaluation.stats.avgCalories} kcal</strong></>}
+                      {historicalWeight > 0 && <> · <strong className="text-zinc-200">{evaluation.stats.avgCalories} kcal</strong></>}
                       . Bu kayıt süre olarak {evaluation.minuteDiff === 0 ? 'ortalamanla aynı' : `${Math.abs(evaluation.minuteDiff)} dk ${evaluation.minuteDiff > 0 ? 'uzun' : 'kısa'}`}
                       {evaluation.tone === 'harder' ? ' ve normalden daha yorucu.' : evaluation.tone === 'lighter' ? ' ve daha hafif.' : '.'}
                     </p>
@@ -505,12 +511,15 @@ const HistoryView = memo(({
                   {/* O günün enerji dengesi. Yakım antrenman kayıtlarından
                       otomatik gelir; elle eklenen kısım burada düzenlenebilir. */}
                   {(() => {
-                    const auto = dayWorkoutCalories(workouts, n.date, latestWeight);
-                    const zihin = dayMindCalories(wellness, n.date, latestWeight);
+                    const historicalWeight = weightForDate(n.date);
+                    const auto = dayWorkoutCalories(workouts, n.date, historicalWeight);
+                    const zihin = dayMindCalories(wellness, n.date, historicalWeight);
                     const manual = parseNumber(n.activeCaloriesOut);
-                    const burned = auto.total + zihin + manual;
-                    const balance = maintenanceCalories > 0
-                      ? Math.round(t.calories - burned - maintenanceCalories)
+                    const maintenance = parseNumber(n.maintenanceAtTheTime) || maintenanceCalories;
+                    const totalOut = parseNumber(n.energySnapshot?.total)
+                      || (maintenance > 0 ? maintenance + auto.total + zihin + manual : auto.total + zihin + manual);
+                    const balance = totalOut > 0
+                      ? Math.round(t.calories - totalOut)
                       : null;
                     const weeklyKg = balance !== null
                       ? Math.round((balance * 7 / 7700) * 100) / 100
@@ -535,8 +544,8 @@ const HistoryView = memo(({
                         </div>
 
                         <div className="flex justify-between text-[10px] font-mono text-zinc-500">
-                          <span>Yakılan (antrenman + kardiyo)</span>
-                          <span className="text-zinc-300">{auto.total} kcal</span>
+                          <span>Toplam günlük harcama</span>
+                          <span className="text-zinc-300">{totalOut} kcal</span>
                         </div>
 
                         <div className="flex justify-between items-center text-[10px] font-mono text-zinc-500">
@@ -561,7 +570,7 @@ const HistoryView = memo(({
 
                         {balance !== null ? (
                           <p className="text-[9px] font-mono text-zinc-600 leading-relaxed">
-                            {Math.round(t.calories)} alındı − {burned} yakıldı, korunum {maintenanceCalories} kcal.
+                            {Math.round(t.calories)} alındı − {totalOut} toplam harcandı{n.energySnapshot ? ' (kayıt anındaki hesap)' : ''}.
                             {weeklyKg !== 0 && (
                               <> Bu tempo sürseydi haftada {weeklyKg > 0 ? '+' : ''}{weeklyKg} kg.</>
                             )}

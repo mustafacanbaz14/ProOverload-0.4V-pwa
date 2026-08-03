@@ -82,7 +82,10 @@ const CycleView = memo(({
         <div className="grid grid-cols-2 gap-2">
           <div className="bg-zinc-950/80 border border-zinc-800 rounded-xl p-2.5">
             <span className="text-[8px] font-mono text-zinc-600 uppercase block">Sonraki regl tahmini</span>
-            <strong className="text-[11px] font-mono text-rose-300">{summary.nextPeriod ? formatDay(summary.nextPeriod, 'medium') : '—'}</strong>
+            <strong className="text-[11px] font-mono text-rose-300 block">
+              {summary.nextPeriodStart ? `${formatDay(summary.nextPeriodStart, 'short')} – ${formatDay(summary.nextPeriodEnd, 'medium')}` : '—'}
+            </strong>
+            {summary.daysUntilNext > 0 && <span className="text-[8px] font-mono text-zinc-600">yaklaşık {summary.daysUntilNext} gün sonra</span>}
           </div>
           <div className="bg-zinc-950/80 border border-zinc-800 rounded-xl p-2.5">
             <span className="text-[8px] font-mono text-zinc-600 uppercase block">Tahmin niteliği</span>
@@ -91,6 +94,11 @@ const CycleView = memo(({
             </strong>
           </div>
         </div>
+        {summary.nextPeriodWindow && (
+          <p className="text-[9px] font-mono text-rose-200/70">
+            Başlangıç penceresi: {formatDay(summary.nextPeriodWindow.earliest, 'short')} – {formatDay(summary.nextPeriodWindow.latest, 'medium')}
+          </p>
+        )}
         <p className="text-[9px] font-mono text-zinc-500 leading-relaxed flex gap-1.5">
           <Info size={11} className="text-rose-400 shrink-0 mt-0.5" />
           Faz bilgisi tanı veya kesin performans tahmini değildir. Tavsiyeler takvim fazından çok o gün kaydettiğin ağrı, enerji ve belirtilere dayanır.
@@ -110,6 +118,17 @@ const CycleView = memo(({
           <div>
             <input type="date" max={getLocalDateString()} value={selectedDate} onChange={event => setSelectedDate(event.target.value)} className={inputClass} />
             <span className="text-[9px] font-mono text-rose-400 block mt-1.5">{formatDay(selectedDate, 'long')}</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => update({ bleeding: 'medium', pain: entry.pain || 0 })}
+              className="py-2.5 rounded-xl border border-rose-800 bg-rose-950/25 text-[10px] font-bold text-rose-300">
+              Bugün regl başladı
+            </button>
+            <button onClick={() => update({ bleeding: 'none' })}
+              className="py-2.5 rounded-xl border border-zinc-800 bg-zinc-950 text-[10px] font-bold text-zinc-400">
+              Bugün bitti
+            </button>
           </div>
 
           <div>
@@ -151,6 +170,21 @@ const CycleView = memo(({
         <Advice icon={<HeartPulse size={12} className="text-red-400" />} title="Kardiyo" text={summary.advice.cardio} tone="border-red-900/35 bg-red-950/15" />
         <Advice icon={<Salad size={12} className="text-emerald-400" />} title="Beslenme" text={summary.advice.nutrition} tone="border-emerald-900/35 bg-emerald-950/15" />
       </div>
+
+      {summary.futurePeriods.length > 0 && (
+        <section className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+          <h3 className="text-[10px] font-bold text-zinc-300 uppercase tracking-wider mb-2">Önümüzdeki 3 Tahmin</h3>
+          <div className="space-y-1.5">
+            {summary.futurePeriods.map((period, index) => (
+              <div key={period.start} className="flex justify-between text-[9px] font-mono bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2">
+                <span className="text-zinc-600">{index + 1}. dönem</span>
+                <strong className="text-rose-300">{formatDay(period.start, 'short')} – {formatDay(period.end, 'medium')}</strong>
+              </div>
+            ))}
+          </div>
+          <p className="text-[8px] font-mono text-zinc-600 mt-2">Tahmindir; gerçek başlangıcı kaydettikçe kişisel ortalama güncellenir.</p>
+        </section>
+      )}
 
       {summary.warning && (
         <div className="bg-red-950/25 border border-red-900/50 rounded-2xl p-3 flex gap-2">
