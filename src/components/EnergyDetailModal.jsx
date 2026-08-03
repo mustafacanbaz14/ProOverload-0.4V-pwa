@@ -14,22 +14,6 @@ const TABS = [
 
 const kcal = (n) => `${n > 0 ? '+' : ''}${Math.round(n)}`;
 
-/**
- * Güne özel günlük hareket çarpanı seçenekleri.
- *
- * Serbest sayı girmek yerine hazır kademeler var: kullanıcı bir günü "daha
- * hareketliydi" diye işaretlerken 1.13 gibi bir sayı üretmiyor, "hareketli"
- * diyor. "Varsayılan" seçeneği güne özel değeri kaldırıp ayarlardakine döner.
- */
-const NEAT_PRESETS = [
-  { label: 'Varsayılan', value: null },
-  { label: 'Çok durgun ×0.75', value: 0.75 },
-  { label: 'Durgun ×0.9', value: 0.9 },
-  { label: 'Normal ×1', value: 1 },
-  { label: 'Hareketli ×1.15', value: 1.15 },
-  { label: 'Çok hareketli ×1.25', value: 1.25 },
-  { label: 'Ayakta iş ×1.4', value: 1.4 },
-];
 const dateShort = (d) => formatDay(d);
 
 /**
@@ -55,6 +39,7 @@ const EnergyDetailModal = memo(({
   cardioIsPlanned = false,
   avgDailyExercise = 0,
   estimatedMacros = {},
+  energyForRecord,
   maintenanceEstimated = false,
   // Güne özel NEAT çarpanını yazan geri çağrı; verilmezse kontrol gizlenir.
   onSetDayNeat,
@@ -67,13 +52,16 @@ const EnergyDetailModal = memo(({
   const bmr = parseNumber(computedComp?.bmr);
 
   const series = useMemo(
-    () => buildEnergySeries(nutritionHistory, { maintenance, bmr, dayCalories, days: 60, neatOpts, estimatedMacros }),
-    [nutritionHistory, maintenance, bmr, dayCalories, neatOpts, estimatedMacros]);
+    () => buildEnergySeries(nutritionHistory, {
+      maintenance, bmr, dayCalories, days: 60, neatOpts, estimatedMacros, energyForRecord,
+    }),
+    [nutritionHistory, maintenance, bmr, dayCalories, neatOpts, estimatedMacros, energyForRecord]);
 
   const weeks = useMemo(() => groupByWeek(series), [series]);
 
   const today = useMemo(() => {
     if (!todayForm) return null;
+    if (typeof energyForRecord === 'function') return energyForRecord(todayForm);
     const w = dayCalories ? dayCalories(todayForm.date) : { lifting: 0, cardio: 0 };
     return dayEnergyBreakdown({
       maintenance, bmr,
@@ -84,7 +72,7 @@ const EnergyDetailModal = memo(({
       steps: todayForm.steps,
       ...neatOptsForDay(neatOpts, todayForm),
     });
-  }, [todayForm, maintenance, bmr, dayCalories, neatOpts, estimatedMacros]);
+  }, [todayForm, maintenance, bmr, dayCalories, neatOpts, estimatedMacros, energyForRecord]);
 
   const plan = useMemo(
     () => theoreticalWeek(planDays, { maintenance, plannedCardioKcal, avgDailyExercise }),
@@ -345,6 +333,12 @@ const EnergyDetailModal = memo(({
                                     P {Math.round(d.macros.protein)} · K {Math.round(d.macros.carbs)} · Y {Math.round(d.macros.fats)}
                                   </span>
                                 </div>
+                                {d.breakdown.bodyContext?.metricDate && (
+                                  <div className="flex justify-between text-[9px] font-mono text-zinc-600">
+                                    <span>Vücut verisi</span>
+                                    <span>{dateShort(d.breakdown.bodyContext.metricDate)} · {Math.round(d.breakdown.bodyContext.weight * 10) / 10} kg</span>
+                                  </div>
+                                )}
 
                                 {/* Güne özel günlük hareket çarpanı.
                                     Bütün gün ayakta geçen bir gün ile masa başı
@@ -358,14 +352,18 @@ const EnergyDetailModal = memo(({
                                     neatManualOverride: d.neatManualOverride || '',
                                   };
                                   const cur = pendingNeats[d.date] !== undefined ? pendingNeats[d.date] : initialObj;
+                                  const hasOverride = Boolean(cur.neatModeOverride || parseNumber(cur.neatMultiplier) > 0);
                                   return (
                                     <div className="pt-2 border-t border-zinc-800 space-y-2">
                                       <div className="flex justify-between items-center">
                                         <span className="text-[10px] font-bold text-zinc-400">Güne Özel Hareket (NEAT)</span>
-                                        <span className="text-[9px] font-mono text-cyan-400">
-                                          ×{d.breakdown.neatMultiplier} ({d.breakdown.neatSource || 'genel'})
+                                        <span className={`text-[9px] font-mono ${hasOverride ? 'text-cyan-400' : 'text-zinc-500'}`}>
+                                          {hasOverride ? 'Bu güne özel' : `Genel · ×${defaultNeatMultiplier}`}
                                         </span>
                                       </div>
+                                      <p className="text-[8px] font-mono text-zinc-600 leading-relaxed">
+                                        Bu kontrol yalnız {dateShort(d.date)} tarihini değiştirir. Genel seçilirse Ayarlar’daki {neatOpts.neatMode || 'auto'} modu kullanılır.
+                                      </p>
 
                                       <div className="grid grid-cols-2 gap-1.5">
                                         <div>
@@ -374,7 +372,15 @@ const EnergyDetailModal = memo(({
                                             value={cur.neatModeOverride || ''}
                                             onChange={(e) => {
                                               const val = e.target.value;
-                                              setPendingNeats(prev => ({ ...prev, [d.date]: { ...cur, neatModeOverride: val } }));
+                                              setPendingNeats(prev => ({
+                                                ...prev,
+                                                [d.date]: {
+                                                  ...cur,
+                                                  neatModeOverride: val,
+                                                  activityLevelOverride: val === 'level' ? cur.activityLevelOverride : '',
+                                                  neatManualOverride: val === 'manual' ? cur.neatManualOverride : '',
+                                                },
+                                              }));
                                             }}
                                             className="w-full bg-zinc-900 border border-zinc-800 rounded px-1.5 py-1 text-[9px] font-mono text-zinc-200 outline-none"
                                           >
@@ -442,7 +448,24 @@ const EnergyDetailModal = memo(({
                                         </div>
                                       )}
 
-                                      <div className="flex justify-end pt-1">
+                                      <div className="flex justify-end gap-1.5 pt-1">
+                                        {hasOverride && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setPendingNeats(prev => ({
+                                                ...prev,
+                                                [d.date]: {
+                                                  neatModeOverride: '', activityLevelOverride: '',
+                                                  neatManualOverride: '', neatMultiplier: '',
+                                                },
+                                              }));
+                                            }}
+                                            className="border border-zinc-800 text-zinc-500 px-2.5 py-1 rounded text-[9px] font-bold"
+                                          >
+                                            Genele Dön
+                                          </button>
+                                        )}
                                         <button
                                           onClick={(e) => {
                                             e.stopPropagation();

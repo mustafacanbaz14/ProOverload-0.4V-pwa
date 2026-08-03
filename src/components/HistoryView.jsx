@@ -112,6 +112,7 @@ const HistoryView = memo(({
   maintenanceCalories = 0,
   onUpdateNutrition,
   bodyContextForDate,
+  energyForRecord,
 }) => {
   const [query, setQuery] = useState('');
   const [addOpen, setAddOpen] = useState(false);
@@ -310,7 +311,7 @@ const HistoryView = memo(({
                               <span className="text-zinc-400 text-[10px] shrink-0">
                                 {c.minutes} dk
                                 {c.effort && ` · ${findEffort(c.effort).fullLabel}`}
-                                {weightForDate(w.date) > 0 && ` · ${cardioEntryCalories(c, weightForDate(w.date))} kcal`}
+                                {weightForDate(w.date) > 0 && ` · ${cardioEntryCalories(c, weightForDate(w.date), true)} kcal`}
                               </span>
                             </div>
                             {sapma && (
@@ -386,9 +387,9 @@ const HistoryView = memo(({
             const activity = findActivity(record.cardio.type);
             const effort = findEffort(record.cardio.effort);
             const historicalWeight = weightForDate(record.date);
-            const calories = cardioEntryCalories(record.cardio, historicalWeight);
+            const calories = cardioEntryCalories(record.cardio, historicalWeight, true);
             const deviation = effortDelta(record.cardio, historicalWeight);
-            const evaluation = evaluateCardioEntry(record.cardio, workouts, historicalWeight);
+            const evaluation = evaluateCardioEntry(record.cardio, workouts, historicalWeight, true);
             return (
               <div key={`${record.workoutId}-${record.cardio.id}`} className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 space-y-2.5">
                 <div className="flex justify-between items-start gap-2">
@@ -511,12 +512,14 @@ const HistoryView = memo(({
                   {/* O günün enerji dengesi. Yakım antrenman kayıtlarından
                       otomatik gelir; elle eklenen kısım burada düzenlenebilir. */}
                   {(() => {
-                    const historicalWeight = weightForDate(n.date);
+                    const bodyAtDate = bodyContextForDate?.(n.date) || {};
+                    const historicalWeight = bodyAtDate.weight || weightForDate(n.date);
                     const auto = dayWorkoutCalories(workouts, n.date, historicalWeight);
                     const zihin = dayMindCalories(wellness, n.date, historicalWeight);
                     const manual = parseNumber(n.activeCaloriesOut);
                     const maintenance = parseNumber(n.maintenanceAtTheTime) || maintenanceCalories;
-                    const totalOut = parseNumber(n.energySnapshot?.total)
+                    const recalculated = typeof energyForRecord === 'function' ? energyForRecord(n) : null;
+                    const totalOut = parseNumber(recalculated?.total)
                       || (maintenance > 0 ? maintenance + auto.total + zihin + manual : auto.total + zihin + manual);
                     const balance = totalOut > 0
                       ? Math.round(t.calories - totalOut)
@@ -548,6 +551,13 @@ const HistoryView = memo(({
                           <span className="text-zinc-300">{totalOut} kcal</span>
                         </div>
 
+                        {bodyAtDate.metricDate && (
+                          <div className="flex justify-between text-[9px] font-mono text-zinc-600">
+                            <span>Vücut verisi</span>
+                            <span>{formatDay(bodyAtDate.metricDate)} · {Math.round(historicalWeight * 10) / 10} kg</span>
+                          </div>
+                        )}
+
                         <div className="flex justify-between items-center text-[10px] font-mono text-zinc-500">
                           <span>Elle eklenen</span>
                           <span className="flex items-center gap-1.5">
@@ -570,7 +580,7 @@ const HistoryView = memo(({
 
                         {balance !== null ? (
                           <p className="text-[9px] font-mono text-zinc-600 leading-relaxed">
-                            {Math.round(t.calories)} alındı − {totalOut} toplam harcandı{n.energySnapshot ? ' (kayıt anındaki hesap)' : ''}.
+                            {Math.round(t.calories)} alındı − {totalOut} toplam harcandı. Genel ayar ve o tarihteki son ölçüm kullanıldı.
                             {weeklyKg !== 0 && (
                               <> Bu tempo sürseydi haftada {weeklyKg > 0 ? '+' : ''}{weeklyKg} kg.</>
                             )}

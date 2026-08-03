@@ -38,7 +38,8 @@ import {
   foldForSearch, parseNumber, mergeMetrics, mergeNutrition,
   isWorkingSet, calcEffectiveSets, buildPersonalRecords, loadPersistedState,
   computeComposition, sortByDateDesc, suggestNextTarget, mergeSettings,
-  mergeWorkout, mergeTemplate, isWarmupSet, estimate1RM, findMetricsForDate
+  mergeWorkout, mergeTemplate, isWarmupSet, estimate1RM, findMetricsForDate,
+  resetDayNeatOverride,
 } from './utils/helpers';
 
 import Navbar from './components/Navbar';
@@ -863,8 +864,14 @@ export default function App() {
     const body = bodyContextForDate(date);
     const exercise = dayCaloriesFor(date);
     const macros = dailyTotals(currentNutritionForm);
+    const currentBmr = parseNumber(computedComp?.bmr);
+    const historicalMaintenanceFallback = maintenanceCalories > 0 && currentBmr > 0 && body.bmr > 0
+      ? Math.round(maintenanceCalories * body.bmr / currentBmr)
+      : maintenanceCalories;
+    const maintenanceAtDate = parseNumber(currentNutritionForm.maintenanceAtTheTime)
+      || historicalMaintenanceFallback;
     const energySnapshot = dayEnergyBreakdown({
-      maintenance: maintenanceCalories,
+      maintenance: maintenanceAtDate,
       bmr: body.bmr,
       macros,
       estimatedMacros: estimatedTefMacros,
@@ -880,7 +887,7 @@ export default function App() {
       ...currentNutritionForm,
       weightAtTheTime: body.weight,
       bmrAtTheTime: body.bmr,
-      maintenanceAtTheTime: maintenanceCalories,
+      maintenanceAtTheTime: maintenanceAtDate,
       energySnapshot,
     };
     setNutritionHistory(prev => {
@@ -1216,7 +1223,12 @@ export default function App() {
       setRecentFoods(data.recentFoods.filter(f => f && typeof f.name === 'string').slice(0, 8));
     }
     if (Array.isArray(data.metricsHistory || data.m)) setMetricsHistory((data.metricsHistory || data.m).map(mergeMetrics));
-    if (Array.isArray(data.nutritionHistory || data.n)) setNutritionHistory((data.nutritionHistory || data.n).map(mergeNutrition));
+    if (Array.isArray(data.nutritionHistory || data.n)) {
+      const importedSettings = data.settings || data.s || {};
+      const resetImportedDayNeat = Number(importedSettings.dayNeatModelVersion) < 1;
+      setNutritionHistory((data.nutritionHistory || data.n)
+        .map(entry => mergeNutrition(resetImportedDayNeat ? resetDayNeatOverride(entry) : entry)));
+    }
     if (Array.isArray(data.wellness)) {
       setWellness(data.wellness
         .map(day => mergeWellnessDay(day, generateId))
@@ -1284,8 +1296,11 @@ export default function App() {
   // Geçmiş bir beslenme kaydının tek alanını günceller (yakılan kalori gibi).
   // Kaydın tamamını forma yüklemeye gerek kalmıyor.
   const handleUpdateNutritionField = useCallback((id, patch) => {
-    const changesEnergy = Object.prototype.hasOwnProperty.call(patch, 'activeCaloriesOut')
-      || Object.prototype.hasOwnProperty.call(patch, 'neatMultiplier');
+    const energyFields = [
+      'activeCaloriesOut', 'steps', 'neatModeOverride', 'activityLevelOverride',
+      'neatManualOverride', 'neatMultiplier',
+    ];
+    const changesEnergy = energyFields.some(field => Object.prototype.hasOwnProperty.call(patch, field));
     const normalizedPatch = changesEnergy ? { ...patch, energySnapshot: null } : patch;
     setNutritionHistory(prev => prev.map(n => n.id === id ? { ...n, ...normalizedPatch } : n));
     // Düzenlenen gün açıkta duran form ile aynıysa form da güncellenmeli,
@@ -1305,7 +1320,19 @@ export default function App() {
    * zorunda kalmasın.
    */
   const handleSetDayNeat = useCallback((date, updates) => {
-    const patch = typeof updates === 'object' && updates !== null ? updates : { neatMultiplier: updates };
+    const rawPatch = typeof updates === 'object' && updates !== null ? updates : { neatMultiplier: updates };
+    const mode = ['auto', 'level', 'steps', 'manual'].includes(rawPatch.neatModeOverride)
+      ? rawPatch.neatModeOverride
+      : '';
+    // Tek-gün kaydı yalnız açıkça seçilmiş alanları taşır. "Genel"e dönünce
+    // önceki manuel kcal/seviye artık gizlice kayıtta kalmaz.
+    const patch = {
+      neatModeOverride: mode,
+      activityLevelOverride: mode === 'level' ? (rawPatch.activityLevelOverride || '') : '',
+      neatManualOverride: mode === 'manual' ? (rawPatch.neatManualOverride || '') : '',
+      neatMultiplier: parseNumber(rawPatch.neatMultiplier) > 0 ? parseNumber(rawPatch.neatMultiplier) : '',
+      energySnapshot: null,
+    };
     setNutritionHistory(prev => {
       const idx = prev.findIndex(n => n.date === date);
       let next;
@@ -1361,9 +1388,12 @@ export default function App() {
     const composition = computeComposition(metric || currentMetricsForm);
     return {
       metric,
+      metricDate: metric?.date || '',
       weight: parseNumber(metric?.weight) || latestWeight,
       bmr: parseNumber(composition?.bmr) || parseNumber(computedComp?.bmr),
       bodyFat: parseNumber(composition?.activeBF),
+      ffm: parseNumber(composition?.ffm),
+      ffmi: parseNumber(composition?.ffmi),
     };
   }, [metricsHistory, currentMetricsForm, latestWeight, computedComp]);
 
@@ -1422,6 +1452,44 @@ export default function App() {
     neatMultiplier: settings.neatMultiplier,
   }), [avgDailyExercise, settings.neatMode, settings.activityLevel,
     settings.neatManual, latestWeight, settings.neatMultiplier]);
+
+  /**
+   * Geçmiş enerji hesabının tek doğruluk kaynağı:
+   * tarihsel ölçüm + o kaydın dönem korunum değeri + genel NEAT ayarı +
+   * yalnız o kayda açıkça yazılmış istisna.
+   */
+  const energyForNutritionRecord = useCallback((record) => {
+    const safeRecord = record || mergeNutrition({ date: getLocalDateString() });
+    const body = bodyContextForDate(safeRecord.date);
+    const exercise = dayCaloriesFor(safeRecord.date);
+    const macros = dailyTotals(safeRecord);
+    const currentBmr = parseNumber(computedComp?.bmr);
+    const historicalMaintenanceFallback = maintenanceCalories > 0 && currentBmr > 0 && body.bmr > 0
+      ? Math.round(maintenanceCalories * body.bmr / currentBmr)
+      : maintenanceCalories;
+    const breakdown = dayEnergyBreakdown({
+      maintenance: parseNumber(safeRecord.maintenanceAtTheTime) || historicalMaintenanceFallback,
+      bmr: body.bmr,
+      macros,
+      estimatedMacros: estimatedTefMacros,
+      lifting: exercise.lifting,
+      cardio: exercise.cardio,
+      activeRecovery: exercise.activeRecovery,
+      recovery: exercise.mind,
+      manual: safeRecord.activeCaloriesOut,
+      steps: safeRecord.steps,
+      ...neatOptsForDay({ ...neatOpts, weightKg: body.weight }, safeRecord),
+    });
+    return {
+      ...breakdown,
+      bodyContext: {
+        metricDate: body.metricDate,
+        weight: body.weight,
+        bmr: body.bmr,
+        bodyFat: body.bodyFat,
+      },
+    };
+  }, [bodyContextForDate, dayCaloriesFor, maintenanceCalories, computedComp, estimatedTefMacros, neatOpts]);
 
   // Teorik hesaplar AKTİF programı kullanır: kullanıcı birden fazla program
   // tutabiliyor ama ana ekranda görünen hafta yıldızladığı olan.
@@ -1902,6 +1970,7 @@ export default function App() {
               wellness={wellness}
               maintenanceCalories={maintenanceCalories}
               neatOpts={neatOpts}
+              energyForRecord={energyForNutritionRecord}
               onOpenEnergyDetail={() => setIsEnergyDetailOpen(true)}
               bodyContextForDate={bodyContextForDate}
             />
@@ -1985,6 +2054,7 @@ export default function App() {
               maintenanceCalories={maintenanceCalories}
               onUpdateNutrition={handleUpdateNutritionField}
               bodyContextForDate={bodyContextForDate}
+              energyForRecord={energyForNutritionRecord}
             />
           )}
 
@@ -2287,6 +2357,7 @@ export default function App() {
           cardioIsPlanned={weekPlanResult.totalCardioKcal > 0}
           avgDailyExercise={avgDailyExercise}
           estimatedMacros={estimatedTefMacros}
+          energyForRecord={energyForNutritionRecord}
           maintenanceEstimated={!(adaptiveTDEE?.tdee > 0)}
           onSetDayNeat={handleSetDayNeat}
           defaultNeatMultiplier={settings.neatMultiplier || 1}

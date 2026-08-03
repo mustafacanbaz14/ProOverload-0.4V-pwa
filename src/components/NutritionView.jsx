@@ -13,7 +13,7 @@ import CalorieBalanceCard from './CalorieBalanceCard';
 import DisclosureCard from './DisclosureCard';
 import { formatDay, weekdayName } from '../utils/dates';
 import { dayMindCalories } from '../utils/wellness';
-import { dayEnergyBreakdown, neatOptsForDay } from '../utils/energyModel';
+import { dayEnergyBreakdown, hasDayNeatOverride, neatOptsForDay } from '../utils/energyModel';
 
 const MacroTile = ({ label, value, numericValue, target, color, bar }) => {
   const ratio = target > 0 ? Math.min(100, Math.round((parseNumber(numericValue) / target) * 100)) : null;
@@ -51,6 +51,7 @@ const NutritionView = memo(({
   neatOpts = {},
   onOpenEnergyDetail,
   bodyContextForDate,
+  energyForRecord,
 }) => {
   const safeMeals = Array.isArray(currentNutritionForm.meals) ? currentNutritionForm.meals : [];
   const isDaily = currentNutritionForm.entryMode === 'daily';
@@ -60,7 +61,11 @@ const NutritionView = memo(({
 
   const dailyMeal = safeMeals[0] || {};
   const totals = dailyTotals(currentNutritionForm);
-  const ffm = parseNumber(computedComp?.ffm) || 60;
+  const selectedBody = bodyContextForDate?.(currentNutritionForm.date) || {};
+  const selectedWeight = parseNumber(selectedBody.weight) || latestWeight;
+  const selectedMaintenance = parseNumber(currentNutritionForm.maintenanceAtTheTime)
+    || maintenanceCalories;
+  const ffm = parseNumber(selectedBody.ffm) || parseNumber(computedComp?.ffm) || 60;
   const targetProteinMultiplier = settings.nutritionGoal === 'bulk'
     ? (settings.proteinPerFfmBulk || 2.2)
     : (settings.proteinPerFfmCut || 2.6);
@@ -70,16 +75,14 @@ const NutritionView = memo(({
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .slice(0, 7), [nutritionHistory]);
 
-  const recommended = recommendedCalories(maintenanceCalories, settings.nutritionGoal, {
-    weightKg: latestWeight,
-    bodyFatPct: parseNumber(computedComp?.activeBF),
+  const recommended = recommendedCalories(selectedMaintenance, settings.nutritionGoal, {
+    weightKg: selectedWeight,
+    bodyFatPct: parseNumber(selectedBody.bodyFat) || parseNumber(computedComp?.activeBF),
     rate: settings.paceRate,
   });
 
   const energyFor = (record) => {
-    if (record !== currentNutritionForm && record.energySnapshot?.total > 0) {
-      return record.energySnapshot;
-    }
+    if (typeof energyForRecord === 'function') return energyForRecord(record);
     const body = bodyContextForDate?.(record.date) || {
       weight: record.weightAtTheTime || latestWeight,
       bmr: record.bmrAtTheTime || parseNumber(computedComp?.bmr),
@@ -108,7 +111,7 @@ const NutritionView = memo(({
     intake: totals.calories,
     burnedAuto: automaticExercise,
     burnedManual: currentNutritionForm.activeCaloriesOut,
-    maintenance: maintenanceCalories,
+    maintenance: selectedMaintenance,
     targetIntake: recommended?.target,
     totalOut: currentEnergy.total,
     weekDays: recent7Days.map(record => ({
@@ -133,7 +136,7 @@ const NutritionView = memo(({
     targetCalories: calorieData?.adjustedTarget || recommended?.target,
     targetProtein,
     waterMl: currentNutritionForm.waterMl,
-    weightKg: latestWeight,
+    weightKg: selectedWeight,
   });
 
   const yesterdayRecord = useMemo(() => {
@@ -200,6 +203,23 @@ const NutritionView = memo(({
       })),
     }));
   };
+
+  const dayHasNeatOverride = hasDayNeatOverride(currentNutritionForm);
+  const resetDayNeat = () => setCurrentNutritionForm(prev => ({
+    ...prev,
+    neatModeOverride: '',
+    activityLevelOverride: '',
+    neatManualOverride: '',
+    neatMultiplier: '',
+    energySnapshot: null,
+  }));
+  const setDayNeatMode = (value) => setCurrentNutritionForm(prev => ({
+    ...prev,
+    neatModeOverride: value,
+    activityLevelOverride: value === 'level' ? prev.activityLevelOverride : '',
+    neatManualOverride: value === 'manual' ? prev.neatManualOverride : '',
+    energySnapshot: null,
+  }));
 
   const targetCalories = calorieData?.adjustedTarget || recommended?.target || 0;
   const remaining = targetCalories > 0 ? targetCalories - totals.calories : null;
@@ -353,9 +373,18 @@ const NutritionView = memo(({
             <span className="flex items-center gap-2 text-[10px] font-bold text-zinc-400">
               <Footprints size={14} className="text-emerald-400" /> Hareket Modu & Çarpanı
             </span>
+            <span className={`text-[8px] font-bold uppercase rounded-md border px-1.5 py-0.5 ${dayHasNeatOverride ? 'text-cyan-400 border-cyan-900/60 bg-cyan-950/20' : 'text-zinc-600 border-zinc-800'}`}>
+              {dayHasNeatOverride ? 'Bu güne özel' : 'Genel ayar'}
+            </span>
+          </div>
+          <p className="text-[8px] font-mono text-zinc-600 leading-relaxed">
+            Yalnız {formatDay(currentNutritionForm.date)} tarihini değiştirir. Boş seçenekler Ayarlar’daki {settings.neatMode || 'auto'} modu ve ×{settings.neatMultiplier || 1} çarpanını kullanır.
+          </p>
+          <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-900">
+            <span className="text-[9px] font-bold text-zinc-500">Günlük mod</span>
             <select
               value={currentNutritionForm.neatModeOverride || ''}
-              onChange={(e) => setCurrentNutritionForm(prev => ({ ...prev, neatModeOverride: e.target.value }))}
+              onChange={(e) => setDayNeatMode(e.target.value)}
               className="bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 font-mono text-zinc-300 text-[10px] outline-none focus:border-emerald-500"
             >
               <option value="">Genel Modu Kullan</option>
@@ -371,7 +400,7 @@ const NutritionView = memo(({
               <span className="text-[9px] font-bold text-zinc-500">Seviye</span>
               <select
                 value={currentNutritionForm.activityLevelOverride || 'light'}
-                onChange={(e) => setCurrentNutritionForm(prev => ({ ...prev, activityLevelOverride: e.target.value }))}
+                onChange={(e) => setCurrentNutritionForm(prev => ({ ...prev, activityLevelOverride: e.target.value, energySnapshot: null }))}
                 className="bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 font-mono text-emerald-400 text-[10px] outline-none"
               >
                 <option value="sedentary">Masa Başı (×0.15)</option>
@@ -390,7 +419,7 @@ const NutritionView = memo(({
                 min={0}
                 max={5000}
                 value={currentNutritionForm.neatManualOverride || ''}
-                onChange={(e) => setCurrentNutritionForm(prev => ({ ...prev, neatManualOverride: e.target.value }))}
+                onChange={(e) => setCurrentNutritionForm(prev => ({ ...prev, neatManualOverride: e.target.value, energySnapshot: null }))}
                 placeholder="Örn: 400"
                 className="w-24 bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 text-center font-mono text-emerald-400 text-[10px] outline-none"
               />
@@ -401,7 +430,7 @@ const NutritionView = memo(({
             <span className="text-[9px] font-bold text-zinc-500">Çarpan (Ekstra)</span>
             <select
               value={currentNutritionForm.neatMultiplier || ''}
-              onChange={(e) => setCurrentNutritionForm(prev => ({ ...prev, neatMultiplier: e.target.value ? Number(e.target.value) : '' }))}
+              onChange={(e) => setCurrentNutritionForm(prev => ({ ...prev, neatMultiplier: e.target.value ? Number(e.target.value) : '', energySnapshot: null }))}
               className="bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 font-mono text-zinc-300 text-[10px] outline-none focus:border-emerald-500"
             >
               <option value="">Genel Çarpan Kullan</option>
@@ -413,6 +442,12 @@ const NutritionView = memo(({
               <option value="1.4">Ayakta iş (×1.4)</option>
             </select>
           </div>
+          {dayHasNeatOverride && (
+            <button type="button" onClick={resetDayNeat}
+              className="w-full py-1.5 rounded-lg border border-zinc-800 text-[9px] font-bold text-zinc-500 active:text-cyan-400 active:border-cyan-800">
+              Bu Günü Genel Ayara Döndür
+            </button>
+          )}
         </div>
 
         {isDaily ? (

@@ -244,13 +244,16 @@ export const dayEnergyBreakdown = ({
 export const neatOptsForDay = (neatOpts = {}, record = {}) => {
   if (!record) return neatOpts;
   const res = { ...neatOpts };
-  if (record.neatModeOverride) {
-    res.neatMode = record.neatModeOverride;
-  }
-  if (record.activityLevelOverride) {
+  const mode = ['auto', 'level', 'steps', 'manual'].includes(record.neatModeOverride)
+    ? record.neatModeOverride
+    : '';
+  if (mode) res.neatMode = mode;
+  // Alt alanlar yalnız kendi günlük modu seçildiyse geçerlidir. Aksi halde
+  // kayıtta kalmış eski bir "manual/level" değeri Genel Modu sessizce ezemez.
+  if (mode === 'level' && record.activityLevelOverride) {
     res.activityLevel = record.activityLevelOverride;
   }
-  if (parseNumber(record.neatManualOverride) > 0) {
+  if (mode === 'manual' && parseNumber(record.neatManualOverride) > 0) {
     res.neatManual = parseNumber(record.neatManualOverride);
   }
   const gunluk = parseNumber(record.neatMultiplier);
@@ -259,6 +262,11 @@ export const neatOptsForDay = (neatOpts = {}, record = {}) => {
   }
   return res;
 };
+
+export const hasDayNeatOverride = (record = {}) => Boolean(
+  record.neatModeOverride
+  || parseNumber(record.neatMultiplier) > 0,
+);
 
 /**
  * Gün gün seri — tablo ve trend için.
@@ -274,6 +282,9 @@ export const buildEnergySeries = (nutritionHistory = [], {
   days = 30,
   neatOpts = {},        // dayEnergyBreakdown'a geçirilen NEAT ayarları
   estimatedMacros = {},
+  // Uygulama katmanı tarihsel kilo/BMR bağlamını tek yerde çözer. Verilirse
+  // kayıt anlık görüntüsü yerine bu güncel ve tarih-doğru hesap kullanılır.
+  energyForRecord,
 } = {}) => {
   const cutoff = new Date();
   cutoff.setHours(0, 0, 0, 0);
@@ -284,7 +295,9 @@ export const buildEnergySeries = (nutritionHistory = [], {
     .map(n => {
       const macros = dailyTotals(n);
       const w = dayCalories ? dayCalories(n.date) : { lifting: 0, cardio: 0 };
-      const calculated = dayEnergyBreakdown({
+      const calculated = typeof energyForRecord === 'function'
+        ? energyForRecord(n)
+        : dayEnergyBreakdown({
         maintenance,
         bmr,
         macros,
@@ -299,9 +312,10 @@ export const buildEnergySeries = (nutritionHistory = [], {
         // Güne özel çarpan varsa genel ayarı ezer.
         ...neatOptsForDay(neatOpts, n),
       });
-      // Yeni kayıtlar kaydedildikleri günün vücut ve enerji bağlamını saklar.
-      // Eski kayıtlar yukarıdaki geriye uyumlu hesap yolunu kullanır.
-      const b = n.energySnapshot?.total > 0 ? n.energySnapshot : calculated;
+      // energySnapshot eski sürümlerde genel ayar ve güncel vücut verisini
+      // dondurabiliyordu. Görüntüleme daima tarihsel ölçüm + mevcut genel ayar +
+      // yalnız bu kaydın açık istisnasından yeniden hesaplanır.
+      const b = calculated;
       return {
         date: n.date,
         intake: Math.round(macros.calories),

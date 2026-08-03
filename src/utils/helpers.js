@@ -134,6 +134,24 @@ export const mergeMetrics = (data) => ({
   }
 });
 
+export const DAY_NEAT_OVERRIDE_FIELDS = [
+  'neatModeOverride', 'activityLevelOverride', 'neatManualOverride', 'neatMultiplier',
+];
+
+/**
+ * v2.5.2–2.5.4 arasında yanlışlıkla geçmişe yayılan günlük NEAT istisnalarını
+ * temizler. Beslenme ve adım verisine dokunmaz; yalnız seçili güne ait olması
+ * gereken alanları ve bunlarla hesaplanmış eski anlık görüntüyü sıfırlar.
+ */
+export const resetDayNeatOverride = (data = {}) => ({
+  ...data,
+  neatModeOverride: '',
+  activityLevelOverride: '',
+  neatManualOverride: '',
+  neatMultiplier: '',
+  energySnapshot: null,
+});
+
 export const mergeNutrition = (data) => ({
   id: data?.id || generateId(),
   date: data?.date || getLocalDateString(),
@@ -450,11 +468,16 @@ export const loadPersistedState = () => {
       : mergeMetrics({ ...latest, id: generateId(), date: todayStr });
   }
 
-  const nutritionRaw = loadWithFallback(keys('nutrition'), []);
-  const nutritionHistory = Array.isArray(nutritionRaw) ? nutritionRaw.map(mergeNutrition) : [];
-  const todayNutrition = nutritionHistory.find(n => n.date === todayStr);
-
   const savedSettings = loadWithFallback(keys('settings'), {}) || {};
+  const resetLegacyDayNeat = Number(savedSettings.dayNeatModelVersion) < 1;
+  const nutritionRaw = loadWithFallback(keys('nutrition'), []);
+  const nutritionHistory = Array.isArray(nutritionRaw)
+    ? nutritionRaw.map(entry => mergeNutrition(resetLegacyDayNeat ? resetDayNeatOverride(entry) : entry))
+    : [];
+  const todayNutrition = nutritionHistory.find(n => n.date === todayStr);
+  const migratedSettings = resetLegacyDayNeat
+    ? { ...savedSettings, dayNeatModelVersion: 1 }
+    : savedSettings;
 
   return {
     workouts: loadWithFallback(keys('workouts'), []),
@@ -481,7 +504,7 @@ export const loadPersistedState = () => {
     currentMetricsForm,
     nutritionHistory,
     currentNutritionForm: todayNutrition ? mergeNutrition(todayNutrition) : mergeNutrition({ date: todayStr }),
-    settings: mergeSettings(savedSettings),
+    settings: mergeSettings(migratedSettings),
     lastBackupDate: typeof localStorage !== 'undefined' ? localStorage.getItem('po_last_backup') : null
   };
 };

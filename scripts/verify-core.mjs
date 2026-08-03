@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { computeReadiness } from '../src/utils/readiness.js';
-import { dayEnergyBreakdown, theoreticalWeek, estimateMacrosForTef, groupByWeek, buildEnergySeries } from '../src/utils/energyModel.js';
+import { dayEnergyBreakdown, theoreticalWeek, estimateMacrosForTef, groupByWeek, buildEnergySeries, neatOptsForDay } from '../src/utils/energyModel.js';
 import { calorieDashboard, deriveGoalSet } from '../src/utils/goals.js';
 import { mergeWellnessDay, computeSleepScore } from '../src/utils/wellness.js';
 import { migrateWeekPlans, removeTemplateFromPlans } from '../src/utils/planMigration.js';
-import { suggestNextTarget, mergeWorkout, findMetricsForDate } from '../src/utils/helpers.js';
+import { suggestNextTarget, mergeWorkout, findMetricsForDate, resetDayNeatOverride } from '../src/utils/helpers.js';
 import { dailyTotals, nutritionDayScore } from '../src/utils/nutritionStats.js';
 import { buildPlateauInsights, buildNutritionPerformanceInsight } from '../src/utils/insights.js';
-import { resolvePlannedCardioMinutes, isActiveRecoveryCardioDay, isActiveRecoveryEntry, cardioEntryCalories, workoutCalories } from '../src/utils/cardio.js';
+import { resolvePlannedCardioMinutes, isActiveRecoveryCardioDay, isActiveRecoveryEntry, cardioEntryCalories, workoutCalories, dayWorkoutCalories } from '../src/utils/cardio.js';
 import { groupIntoWeeks, groupWeeksIntoMonths } from '../src/utils/dates.js';
 import { deloadState } from '../src/utils/deload.js';
 import { buildCycleSummary, mergeCycleDay } from '../src/utils/cycle.js';
@@ -54,6 +54,14 @@ test('ağırlık antrenmanı kalorisi kayıt anındaki kiloyu kullanır', () => 
   assert.deepEqual(workoutCalories(workout, 100), workoutCalories(workout, 70));
 });
 
+test('gün toplamı kayıt snapshotı yerine o tarihin çözülmüş kilosunu kullanır', () => {
+  const workout = { date: '2026-07-20', duration: 60, weightAtTime: 100, exercises: [] };
+  assert.deepEqual(
+    dayWorkoutCalories([workout], '2026-07-20', 70),
+    { ...workoutCalories({ ...workout, weightAtTime: 70 }, 70), activeRecovery: false },
+  );
+});
+
 test('geçmiş gün için gelecekteki değil o tarihte bilinen son ölçüm seçilir', () => {
   const metric = findMetricsForDate([
     { date: '2026-07-01', weight: 70 },
@@ -62,14 +70,47 @@ test('geçmiş gün için gelecekteki değil o tarihte bilinen son ölçüm seç
   assert.equal(Number(metric.weight), 70);
 });
 
-test('enerji serisi kayıt anındaki anlık görüntüyü korur', () => {
+test('enerji serisi eski snapshot yerine tarih-doğru hesaplayıcıyı kullanır', () => {
   const snapshot = { total: 2400, isRestDay: true, parts: [] };
+  const recalculated = dayEnergyBreakdown({ bmr: 1700, neatMode: 'manual', neatManual: 300 });
   const series = buildEnergySeries([{
     date: new Date().toISOString().slice(0, 10),
     meals: [{ calories: 2000, protein: 100, carbs: 200, fats: 60 }],
     energySnapshot: snapshot,
-  }], { maintenance: 4000, bmr: 2500 });
-  assert.equal(series[0].out, 2400);
+  }], { maintenance: 4000, bmr: 2500, energyForRecord: () => recalculated });
+  assert.equal(series[0].out, recalculated.total);
+  assert.notEqual(series[0].out, snapshot.total);
+});
+
+test('genel mod seçiliyken kayıtta kalmış alt NEAT alanları ayarı ezmez', () => {
+  const base = { neatMode: 'manual', neatManual: 350, activityLevel: 'light', neatMultiplier: 1 };
+  const result = neatOptsForDay(base, {
+    neatModeOverride: '', activityLevelOverride: 'high', neatManualOverride: 1200,
+  });
+  assert.deepEqual(result, base);
+});
+
+test('günlük NEAT istisnası komşu tarihin genel ayarını değiştirmez', () => {
+  const base = { neatMode: 'level', activityLevel: 'light', neatMultiplier: 0.9 };
+  const special = neatOptsForDay(base, { date: '2026-07-20', neatMultiplier: 1.4 });
+  const normal = neatOptsForDay(base, { date: '2026-07-21' });
+  assert.equal(special.neatMultiplier, 1.4);
+  assert.deepEqual(normal, base);
+});
+
+test('günlük NEAT sıfırlama yalnız istisna alanlarını ve eski snapshotı temizler', () => {
+  const result = resetDayNeatOverride({
+    date: '2026-07-20', caloriesIn: 2200, steps: 8000,
+    neatModeOverride: 'manual', neatManualOverride: 900, neatMultiplier: 1.4,
+    energySnapshot: { total: 4000 },
+  });
+  assert.equal(result.date, '2026-07-20');
+  assert.equal(result.caloriesIn, 2200);
+  assert.equal(result.steps, 8000);
+  assert.equal(result.neatModeOverride, '');
+  assert.equal(result.neatManualOverride, '');
+  assert.equal(result.neatMultiplier, '');
+  assert.equal(result.energySnapshot, null);
 });
 
 test('yüksek eklem ağrısı Zirve tavsiyesini engeller', () => {

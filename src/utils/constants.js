@@ -73,7 +73,10 @@ export const DEFAULT_SETTINGS = {
   // İlk kullanım turu yalnızca yeni ve boş veri havuzunda otomatik açılır.
   onboardingComplete: false,
   // NEAT için kullanıcı çarpanı: otomatik/seviye hesabını ölçekler.
-  neatMultiplier: 1
+  neatMultiplier: 1,
+  // v2.5.5'te hatalı biçimde geçmişe yayılan günlük NEAT alanları bir kez
+  // temizlenir. Sonraki sürümlerde kullanıcının bilinçli tek-gün istisnaları korunur.
+  dayNeatModelVersion: 1,
 };
 
 export const DELETE_LABELS = {
@@ -567,28 +570,28 @@ export const VOLUME_STATUS = {
   over: { label: 'Tavan üstü', chip: 'text-red-400 border-red-900/40 bg-red-950/40', bar: 'bg-red-500', text: 'text-red-400', hex: '#ef4444' },
 };
 
-export const APP_VERSION = '2.5.4';
+export const APP_VERSION = '2.5.5';
 
 export const LATEST_RELEASE_NOTES = {
-  version: '2.5.4',
-  title: 'Neler Yeni? (v2.5.4)',
-  date: '2026-08-04',
+  version: '2.5.5',
+  title: 'Neler Yeni? (v2.5.5)',
+  date: '2026-08-03',
   items: [
     {
-      title: 'Otomatik Güncelleme Bildirimi',
-      desc: 'Uygulama güncellendiğinde yenilikler ilk açılışta otomatik gösterilir.'
+      title: 'Geçmiş Enerji Hesabı Düzeltildi',
+      desc: 'Her gün artık o tarihte bilinen son kilo ve vücut ölçümünü kullanır; daha sonraki ölçümler geçmişi değiştirmez.'
     },
     {
-      title: 'Güncelleme Geçmişi',
-      desc: 'Ayarlar sayfasının en altından son güncelleme notlarını dilediğiniz zaman tekrar açabilirsiniz.'
+      title: 'Günlük NEAT Gerçekten Tek Güne Özel',
+      desc: 'Bir tarihte seçilen hareket modu veya çarpanı yalnız o günü etkiler. Boş bırakılan günler Ayarlar bölümündeki genel tercihi kullanır.'
     },
     {
-      title: 'Güne Özel NEAT Yönetimi',
-      desc: 'Geçmiş veya bugün için günlük hareket modunu (Otomatik, Seviye, Adım, Elle) ve çarpanını gün bazlı özelleştirin.'
+      title: 'Eski Yanlış İstisnalar Sıfırlandı',
+      desc: 'Önceki sürümün geçmişe yaydığı günlük NEAT alanları bir kez temizlendi ve geçmiş standart genel ayara döndürüldü.'
     },
     {
-      title: 'Hassas Uyku Puanı Girişi',
-      desc: 'Uyku puanı slider hassasiyeti 1 puanlık hassasiyete kavuşturuldu.'
+      title: 'Daha Açık Günlük Kontrol',
+      desc: 'Beslenme ve Kalori Detayı ekranları hangi değerin genel, hangisinin yalnız seçili güne özel olduğunu açıkça gösterir.'
     }
   ]
 };

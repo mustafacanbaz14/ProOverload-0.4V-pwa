@@ -139,12 +139,14 @@ export const estimateCardioCalories = (met, weightKg, minutes) => {
  * kayıtlarda tempo alanı yok — o durumda çarpan 1 olan "orta" kullanılır, yani
  * geçmiş kayıtların kalorisi değişmez.
  */
-export const cardioEntryCalories = (entry, weightKg) => {
+export const cardioEntryCalories = (entry, weightKg, preferProvidedWeight = false) => {
   const act = findActivity(entry?.type);
   if (!act) return 0;
   const effort = entry?.effort ? findEffort(entry.effort) : null;
   const met = act.met * (effort ? effort.met : 1);
-  const historicalWeight = Number(entry?.weightAtTime) > 0 ? Number(entry.weightAtTime) : weightKg;
+  const historicalWeight = preferProvidedWeight && Number(weightKg) > 0
+    ? Number(weightKg)
+    : Number(entry?.weightAtTime) > 0 ? Number(entry.weightAtTime) : weightKg;
   return estimateCardioCalories(met, historicalWeight, entry.minutes);
 };
 
@@ -283,10 +285,10 @@ export const isActiveRecoveryCardioDay = (strengthSessionCount = 0, entries = []
   && entries.every(isActiveRecoveryEntry);
 
 /** Arşiv kartında tek kaydı aynı aktivitenin kişisel ortalamasıyla kıyaslar. */
-export const evaluateCardioEntry = (entry, workouts = [], weightKg = 0) => {
+export const evaluateCardioEntry = (entry, workouts = [], weightKg = 0, preferProvidedWeight = false) => {
   const stats = cardioHistoryStats(workouts, entry?.type, weightKg);
   const minutes = Number(entry?.minutes) || 0;
-  const calories = cardioEntryCalories(entry, weightKg);
+  const calories = cardioEntryCalories(entry, weightKg, preferProvidedWeight);
   const minuteDiff = stats.avgMinutes ? minutes - stats.avgMinutes : 0;
   const calorieDiff = stats.avgCalories ? calories - stats.avgCalories : 0;
   const fatigue = cardioFatigueLoad(entry);
@@ -302,6 +304,7 @@ export const cardioArchiveSummary = (workouts = [], weightKg = 0, weightForDate 
   const totalCalories = entries.reduce((sum, entry) => sum + cardioEntryCalories(
     entry,
     typeof weightForDate === 'function' ? weightForDate(entry.date) : weightKg,
+    typeof weightForDate === 'function',
   ), 0);
   const groups = new Map();
   entries.forEach(entry => {
@@ -334,10 +337,14 @@ export const estimateLiftingCalories = (minutes, weightKg) =>
  * bölümünü ölçüyor. Yine de ayrı ayrı döndürülüyor ki kullanıcı ikisini görüp
  * gerekirse elle düzeltebilsin.
  */
-export const workoutCalories = (workout, weightKg) => {
-  const historicalWeight = Number(workout?.weightAtTime) > 0 ? Number(workout.weightAtTime) : weightKg;
+export const workoutCalories = (workout, weightKg, preferProvidedWeight = false) => {
+  const historicalWeight = preferProvidedWeight && Number(weightKg) > 0
+    ? Number(weightKg)
+    : Number(workout?.weightAtTime) > 0 ? Number(workout.weightAtTime) : weightKg;
   const lifting = estimateLiftingCalories(workout?.duration || 0, historicalWeight);
-  const cardio = totalCardioCalories(workout?.cardio || [], historicalWeight);
+  const cardio = (workout?.cardio || []).reduce(
+    (sum, entry) => sum + cardioEntryCalories(entry, historicalWeight, preferProvidedWeight), 0,
+  );
   return { lifting, cardio, total: lifting + cardio };
 };
 
@@ -345,7 +352,9 @@ export const workoutCalories = (workout, weightKg) => {
 export const dayWorkoutCalories = (workouts = [], dateStr, weightKg) => {
   const same = workouts.filter(w => w.date === dateStr);
   const totals = same.reduce((acc, w) => {
-    const c = workoutCalories(w, weightKg);
+    // App bu tarihe ait ölçüm aralığından çözdüğü kiloyu verir; kayıt içindeki
+    // eski snapshot daha yeni/düzeltilmiş tarihsel ölçümü ezmemelidir.
+    const c = workoutCalories(w, weightKg, Number(weightKg) > 0);
     return { lifting: acc.lifting + c.lifting, cardio: acc.cardio + c.cardio, total: acc.total + c.total };
   }, { lifting: 0, cardio: 0, total: 0 });
   const strengthSessionCount = same.filter(workout => (workout.exercises || []).length > 0).length;
