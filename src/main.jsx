@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
 import './index.css'
 import App from './App.jsx'
+import AppErrorBoundary from './components/AppErrorBoundary.jsx'
 import { STORAGE_VERSION } from './utils/constants.js'
 import { deferAppUpdate } from './pwaUpdate.js'
 
@@ -45,6 +46,8 @@ const updateSW = registerSW({
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <AppErrorBoundary>
+      <App />
+    </AppErrorBoundary>
   </StrictMode>,
 )

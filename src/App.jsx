@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   Plus, Save, Activity, X, Search, Trash2, AlertCircle, Settings, BrainCircuit, Star, Database
 } from 'lucide-react';
@@ -16,8 +16,6 @@ import { removeTemplateFromPlans } from './utils/planMigration';
 import { buildPersonalVolumeGuidance } from './utils/personalization';
 import { buildCoachActions } from './utils/coach';
 import { deloadState, shouldSuggestDeload, emptyDeload } from './utils/deload';
-import DeloadModal from './components/DeloadModal';
-import SubstituteModal from './components/SubstituteModal';
 import { buildPlateauInsights } from './utils/insights';
 import { analyzeDayConflicts } from './utils/interference';
 import { averageDailyExercise, dayEnergyBreakdown, ACTIVITY_LEVELS, estimateMacrosForTef, thermicEffect, neatOptsForDay } from './utils/energyModel';
@@ -47,31 +45,46 @@ import HomeView from './components/HomeView';
 import ActiveWorkoutView from './components/ActiveWorkoutView';
 import HistoryView from './components/HistoryView';
 import NutritionView from './components/NutritionView';
-import SettingsModal from './components/SettingsModal';
-import QRCodeModal from './components/QRCodeModal';
-import FoodSearchModal from './components/FoodSearchModal';
-import MetricsComparisonModal from './components/MetricsComparisonModal';
-import ReportCardModal from './components/ReportCardModal';
-import MuscleDetailModal from './components/MuscleDetailModal';
-import PlateCalculatorModal from './components/PlateCalculatorModal';
-import TemplatePreviewModal from './components/TemplatePreviewModal';
-import ExerciseEditorModal from './components/ExerciseEditorModal';
-import ExerciseLibraryModal from './components/ExerciseLibraryModal';
-import TemplateBuilderModal from './components/TemplateBuilderModal';
-import CardioModal from './components/CardioModal';
-import EnergyDetailModal from './components/EnergyDetailModal';
-import ToolsModal from './components/ToolsModal';
-import WellnessModal from './components/WellnessModal';
-import PRCelebration from './components/PRCelebration';
-import WeeklyPlanModal from './components/WeeklyPlanModal';
 import TrainingView from './components/TrainingView';
 import ProgressHubView from './components/ProgressHubView';
-import GlobalSearchModal from './components/GlobalSearchModal';
-import OnboardingModal from './components/OnboardingModal';
-import ReleaseNotesModal from './components/ReleaseNotesModal';
+import QuickCaptureModal from './components/QuickCaptureModal';
 import { formatDay, formatDayRelative } from './utils/dates';
 import { emptyWellnessDay, mergeWellnessDay, dayMindCalories, computeSleepScore } from './utils/wellness';
 import { buildCycleSummary, emptyCycleDay, mergeCycleDay } from './utils/cycle';
+
+// Ana ekran için gerekli olmayan büyük pencereler ilk açılışta çalıştırılmaz.
+// Kullanıcı ilgili aracı açtığında ayrı parça indirilir ve değerlendirilir.
+const DeloadModal = lazy(() => import('./components/DeloadModal'));
+const SubstituteModal = lazy(() => import('./components/SubstituteModal'));
+const SettingsModal = lazy(() => import('./components/SettingsModal'));
+const QRCodeModal = lazy(() => import('./components/QRCodeModal'));
+const FoodSearchModal = lazy(() => import('./components/FoodSearchModal'));
+const MetricsComparisonModal = lazy(() => import('./components/MetricsComparisonModal'));
+const ReportCardModal = lazy(() => import('./components/ReportCardModal'));
+const MuscleDetailModal = lazy(() => import('./components/MuscleDetailModal'));
+const PlateCalculatorModal = lazy(() => import('./components/PlateCalculatorModal'));
+const TemplatePreviewModal = lazy(() => import('./components/TemplatePreviewModal'));
+const ExerciseEditorModal = lazy(() => import('./components/ExerciseEditorModal'));
+const ExerciseLibraryModal = lazy(() => import('./components/ExerciseLibraryModal'));
+const TemplateBuilderModal = lazy(() => import('./components/TemplateBuilderModal'));
+const CardioModal = lazy(() => import('./components/CardioModal'));
+const EnergyDetailModal = lazy(() => import('./components/EnergyDetailModal'));
+const ToolsModal = lazy(() => import('./components/ToolsModal'));
+const WellnessModal = lazy(() => import('./components/WellnessModal'));
+const PRCelebration = lazy(() => import('./components/PRCelebration'));
+const WeeklyPlanModal = lazy(() => import('./components/WeeklyPlanModal'));
+const GlobalSearchModal = lazy(() => import('./components/GlobalSearchModal'));
+const OnboardingModal = lazy(() => import('./components/OnboardingModal'));
+const ReleaseNotesModal = lazy(() => import('./components/ReleaseNotesModal'));
+
+const ModalLoadingFallback = () => (
+  <div className="fixed inset-0 z-[119] bg-black/70 backdrop-blur-sm flex items-center justify-center" role="status" aria-label="Ekran yükleniyor">
+    <div className="rounded-2xl border border-zinc-800 bg-zinc-950 px-5 py-4 text-center shadow-2xl">
+      <span className="w-7 h-7 rounded-full border-2 border-zinc-700 border-t-cyan-400 animate-spin block mx-auto" />
+      <span className="text-[10px] font-mono text-zinc-400 block mt-2">Ekran hazırlanıyor…</span>
+    </div>
+  </div>
+);
 
 export default function App() {
   const [initial] = useState(loadPersistedState);
@@ -116,6 +129,7 @@ export default function App() {
   // Yerine hareket aranan giriş: { name, exerciseId }
   const [substituteFor, setSubstituteFor] = useState(null);
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
+  const [isQuickCaptureOpen, setIsQuickCaptureOpen] = useState(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(() =>
     !initial.settings.onboardingComplete
     && initial.workouts.length === 0
@@ -170,6 +184,21 @@ export default function App() {
   const [lockScreenOn, setLockScreenOn] = useState(false);
 
   const [todayTime] = useState(() => Date.now());
+
+  const quickCaptureStatus = useMemo(() => {
+    const date = getLocalDateString();
+    const todayWorkouts = workouts.filter(record => record.date === date);
+    const todayWellness = wellness.find(record => record.date === date);
+    const sleep = todayWellness?.sleep || {};
+    return {
+      workout: Boolean(activeWorkout?.date === date || todayWorkouts.some(record => (record.exercises || []).length > 0)),
+      cardio: todayWorkouts.some(record => (record.cardio || []).length > 0),
+      nutrition: nutritionHistory.some(record => record.date === date),
+      metrics: metricsHistory.some(record => record.date === date),
+      sleep: Boolean(sleep.bedTime || sleep.wakeTime || parseNumber(sleep.quickScore) > 0),
+      mind: Boolean(todayWellness?.mind?.length),
+    };
+  }, [activeWorkout, workouts, nutritionHistory, metricsHistory, wellness]);
 
   const activeWorkoutRef = useRef(activeWorkout);
   const restRef = useRef(rest);
@@ -1374,6 +1403,21 @@ export default function App() {
     handleChangeView(next);
   }, [handleChangeView]);
 
+  const handleQuickCapture = useCallback((key) => {
+    const today = getLocalDateString();
+    const action = {
+      workout: () => handleStartRequest(),
+      nutrition: () => { handleChangeView('nutrition'); setIsFoodSearchOpen(true); },
+      cardio: () => { setCardioContext(null); setIsCardioOpen(true); },
+      metrics: () => handleAddHistoricalMetric(today),
+      sleep: () => { setWellnessTab('sleep'); setIsWellnessOpen(true); },
+      mind: () => { setWellnessTab('mind'); setIsWellnessOpen(true); },
+      energy: () => setIsEnergyDetailOpen(true),
+      plan: () => setIsWeekPlanOpen(true),
+    }[key];
+    action?.();
+  }, [handleStartRequest, handleChangeView, handleAddHistoricalMetric]);
+
   // --- KARDİYO ---
 
   // Kalori tahmini vücut ağırlığına dayanır; en son girilen ölçüm kullanılır.
@@ -1869,6 +1913,13 @@ export default function App() {
             <span className="text-[9px] font-mono text-zinc-600 self-center">v{pkg.version}</span>
           </div>
           <div className="flex items-center">
+            <button
+              onClick={() => setIsQuickCaptureOpen(true)}
+              aria-label="Hızlı kayıt aç"
+              className="mx-1 w-9 h-9 rounded-xl bg-cyan-600 text-white flex items-center justify-center shadow-lg shadow-cyan-950/40 active:scale-95 transition-transform"
+            >
+              <Plus size={18} />
+            </button>
             <button onClick={() => setIsGlobalSearchOpen(true)} aria-label="Uygulamada ara" className="px-3 py-3.5 text-zinc-400 hover:text-cyan-400 active:scale-95 transition-all">
               <Search size={18} />
             </button>
@@ -2095,7 +2146,15 @@ export default function App() {
           <Navbar view={view} setView={handleChangeView} />
         )}
 
-        <GlobalSearchModal
+        <QuickCaptureModal
+          isOpen={isQuickCaptureOpen}
+          onClose={() => setIsQuickCaptureOpen(false)}
+          onSelect={handleQuickCapture}
+          status={quickCaptureStatus}
+        />
+
+        <Suspense fallback={<ModalLoadingFallback />}>
+        {isGlobalSearchOpen && <GlobalSearchModal
           isOpen={isGlobalSearchOpen}
           onClose={() => setIsGlobalSearchOpen(false)}
           exercises={allExercisesNames}
@@ -2114,19 +2173,19 @@ export default function App() {
             }[key];
             action?.();
           }}
-        />
+        />}
 
-        <OnboardingModal
+        {isOnboardingOpen && <OnboardingModal
           isOpen={isOnboardingOpen}
           settings={settings}
           onFinish={(patch) => {
             setSettings(prev => ({ ...prev, ...patch }));
             setIsOnboardingOpen(false);
           }}
-        />
+        />}
 
         {/* SETTINGS MODAL */}
-        <SettingsModal
+        {isSettingsModalOpen && <SettingsModal
           isOpen={isSettingsModalOpen}
           onClose={() => setIsSettingsModalOpen(false)}
           settings={settings}
@@ -2140,24 +2199,24 @@ export default function App() {
           onOpenOnboarding={() => setIsOnboardingOpen(true)}
           onOpenReleaseNotes={() => setIsReleaseNotesOpen(true)}
           profileGender={profileGender}
-        />
+        />}
 
         {/* RELEASE NOTES MODAL */}
-        <ReleaseNotesModal
+        {isReleaseNotesOpen && <ReleaseNotesModal
           isOpen={isReleaseNotesOpen}
           onClose={() => setIsReleaseNotesOpen(false)}
-        />
+        />}
 
         {/* QR CODE MODAL */}
-        <QRCodeModal
+        {isQRModalOpen && <QRCodeModal
           isOpen={isQRModalOpen}
           onClose={() => setIsQRModalOpen(false)}
           fullData={{ schemaVersion: 3, version: pkg.version, workouts, templates, customExercises, customFoods, recentFoods, metricsHistory, nutritionHistory, wellness, cycleHistory, settings }}
           onImportData={handleImportData}
-        />
+        />}
 
         {/* FOOD SEARCH MODAL */}
-        <FoodSearchModal
+        {isFoodSearchOpen && <FoodSearchModal
           isOpen={isFoodSearchOpen}
           onClose={() => setIsFoodSearchOpen(false)}
           customFoods={customFoods}
@@ -2192,17 +2251,17 @@ export default function App() {
             }
             showToast(`${meal.name} öğüne eklendi.`);
           }}
-        />
+        />}
 
         {/* METRICS COMPARISON MODAL */}
-        <MetricsComparisonModal
+        {isComparisonOpen && <MetricsComparisonModal
           isOpen={isComparisonOpen}
           onClose={() => setIsComparisonOpen(false)}
           metricsHistory={metricsHistory}
-        />
+        />}
 
         {/* TEMPLATE PREVIEW */}
-        <TemplatePreviewModal
+        {previewTemplate && <TemplatePreviewModal
           isOpen={Boolean(previewTemplate)}
           onClose={() => setPreviewTemplate(null)}
           template={previewTemplate}
@@ -2212,10 +2271,10 @@ export default function App() {
           weightKg={latestWeight}
           gender={profileGender}
           onStart={(t) => handleStartRequest(t)}
-        />
+        />}
 
         {/* EXERCISE MAPPING EDITOR */}
-        <ExerciseEditorModal
+        {editorExercise && <ExerciseEditorModal
           key={editorExercise || 'none'}
           isOpen={Boolean(editorExercise)}
           onClose={() => setEditorExercise(null)}
@@ -2225,10 +2284,10 @@ export default function App() {
           isOverridden={customExercises.some(ex => (typeof ex === 'object' ? ex.name : ex) === editorExercise)}
           onSave={(data) => handleSaveExerciseMapping(editorExercise, data)}
           onReset={() => handleResetExerciseMapping(editorExercise)}
-        />
+        />}
 
         {/* HAREKET KÜTÜPHANESİ */}
-        <ExerciseLibraryModal
+        {isLibraryOpen && <ExerciseLibraryModal
           isOpen={isLibraryOpen}
           onClose={() => setIsLibraryOpen(false)}
           allExerciseNames={allExercisesNames}
@@ -2240,10 +2299,10 @@ export default function App() {
           onDeleteExercise={(name) => setDeleteConfirm({ isOpen: true, type: 'exercise', id: name })}
           onToggleHidden={handleTogglePickerVisibility}
           onAddNew={() => { setPickerReturnsToLibrary(true); setIsLibraryOpen(false); setIsExerciseModalOpen(true); setIsAddingCustom(true); }}
-        />
+        />}
 
         {/* PROGRAM OLUŞTURUCU */}
-        <TemplateBuilderModal
+        {isBuilderOpen && <TemplateBuilderModal
           key={editingTemplate?.id || 'new'}
           isOpen={isBuilderOpen}
           onClose={() => { setIsBuilderOpen(false); setEditingTemplate(null); }}
@@ -2261,10 +2320,10 @@ export default function App() {
             performedNames,
             hiddenNames: pickerHiddenNames,
           }}
-        />
+        />}
 
         {/* HAFTALIK PROGRAM */}
-        <WeeklyPlanModal
+        {isWeekPlanOpen && <WeeklyPlanModal
           isOpen={isWeekPlanOpen}
           onClose={() => setIsWeekPlanOpen(false)}
           plans={settings.weekPlans || []}
@@ -2278,19 +2337,19 @@ export default function App() {
           weightKg={latestWeight}
           workouts={workouts}
           gender={profileGender}
-        />
+        />}
 
         {/* DELOAD */}
-        <DeloadModal
+        {isDeloadOpen && <DeloadModal
           isOpen={isDeloadOpen}
           onClose={() => setIsDeloadOpen(false)}
           deload={settings.deload || emptyDeload()}
           onChange={(next) => setSettings(prev => ({ ...prev, deload: next }))}
           suggestion={deloadSuggestion}
-        />
+        />}
 
         {/* HAREKET İKAMESİ */}
-        <SubstituteModal
+        {substituteFor && <SubstituteModal
           isOpen={Boolean(substituteFor)}
           onClose={() => setSubstituteFor(null)}
           exerciseName={substituteFor?.name || ''}
@@ -2300,13 +2359,13 @@ export default function App() {
           onPick={(name) => {
             if (substituteFor?.exerciseId) handleSubstituteExercise(substituteFor.exerciseId, name);
           }}
-        />
+        />}
 
         {/* REKOR KUTLAMASI */}
-        <PRCelebration record={prCelebration} onDone={() => setPrCelebration(null)} />
+        {prCelebration && <PRCelebration record={prCelebration} onDone={() => setPrCelebration(null)} />}
 
         {/* UYKU / MEDİTASYON & ESNEME */}
-        <WellnessModal
+        {isWellnessOpen && <WellnessModal
           key={wellnessTab}
           initialTab={wellnessTab}
           isOpen={isWellnessOpen}
@@ -2315,10 +2374,10 @@ export default function App() {
           todayStr={getLocalDateString()}
           weightKg={latestWeight}
           onUpdateDay={handleUpdateWellnessDay}
-        />
+        />}
 
         {/* ARAÇLAR */}
-        <ToolsModal
+        {isToolsOpen && <ToolsModal
           isOpen={isToolsOpen}
           onClose={() => setIsToolsOpen(false)}
           showCycle={profileGender === 'female'}
@@ -2340,10 +2399,10 @@ export default function App() {
             }[key];
             ac?.();
           }}
-        />
+        />}
 
         {/* KALORİ DETAYI */}
-        <EnergyDetailModal
+        {isEnergyDetailOpen && <EnergyDetailModal
           isOpen={isEnergyDetailOpen}
           onClose={() => setIsEnergyDetailOpen(false)}
           nutritionHistory={sortedNutrition}
@@ -2361,10 +2420,10 @@ export default function App() {
           maintenanceEstimated={!(adaptiveTDEE?.tdee > 0)}
           onSetDayNeat={handleSetDayNeat}
           defaultNeatMultiplier={settings.neatMultiplier || 1}
-        />
+        />}
 
         {/* KARDİYO */}
-        <CardioModal
+        {isCardioOpen && <CardioModal
           key={`${cardioContext?.workoutId || 'new'}-${cardioContext?.entry?.id || cardioContext?.date || 'today'}`}
           isOpen={isCardioOpen}
           onClose={() => { setIsCardioOpen(false); setCardioContext(null); }}
@@ -2378,32 +2437,33 @@ export default function App() {
           planned={!cardioContext || cardioContext.date === getLocalDateString() ? todayPlannedCardio : []}
           initialDate={cardioContext?.date || getLocalDateString()}
           editingEntry={cardioContext?.entry || null}
-        />
+        />}
 
         {/* PLATE CALCULATOR */}
-        <PlateCalculatorModal
+        {plateCalc && <PlateCalculatorModal
           isOpen={Boolean(plateCalc)}
           onClose={() => setPlateCalc(null)}
           initialWeight={plateCalc?.weight || 0}
-        />
+        />}
 
         {/* MUSCLE DETAIL MODAL */}
-        <MuscleDetailModal
+        {detailMuscle && <MuscleDetailModal
           isOpen={Boolean(detailMuscle)}
           onClose={() => setDetailMuscle(null)}
           muscle={detailMuscle}
           total={detailMuscle ? (dashboardStats.muscleVolume[detailMuscle] || 0) : 0}
           breakdown={detailMuscle ? (muscleBreakdown[detailMuscle] || []) : []}
           experienceLevel={settings.experienceLevel}
-        />
+        />}
 
         {/* REPORT CARD MODAL */}
-        <ReportCardModal
+        {isReportCardOpen && <ReportCardModal
           isOpen={isReportCardOpen}
           onClose={() => setIsReportCardOpen(false)}
           workouts={workouts}
           personalRecords={personalRecords}
-        />
+        />}
+        </Suspense>
 
         {/* PRE-WORKOUT READINESS MODAL */}
         {preWorkoutModal && (

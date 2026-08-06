@@ -13,9 +13,23 @@ import { deloadState } from '../src/utils/deload.js';
 import { buildCycleSummary, mergeCycleDay } from '../src/utils/cycle.js';
 import { analyzeTemplate } from '../src/utils/templateAssistant.js';
 import { sortExercisesForMuscle } from '../src/utils/exerciseSort.js';
+import { buildEmergencyBackup } from '../src/utils/emergencyBackup.js';
 
 const tests = [];
 const test = (name, run) => tests.push({ name, run });
+
+test('acil yedek en yeni kayıt yoksa eski depolama sürümüne düşer', () => {
+  const values = new Map([
+    ['po_workouts_v16', JSON.stringify([{ id: 'legacy-workout' }])],
+    ['po_metrics_v17', '{bozuk-json'],
+    ['po_metrics_v15', JSON.stringify([{ id: 'safe-metric' }])],
+  ]);
+  const backup = buildEmergencyBackup({ getItem: key => values.get(key) ?? null }, '2026-08-06T12:00:00.000Z');
+  assert.equal(backup.version, '3.0.0');
+  assert.equal(backup.workouts[0].id, 'legacy-workout');
+  assert.equal(backup.metricsHistory[0].id, 'safe-metric');
+  assert.equal(backup.emergencyRecovery, true);
+});
 
 test('kas filtresi yüzde 100 izolasyonu bileşik ve yardımcı hareketten önce sıralar', () => {
   const map = {
